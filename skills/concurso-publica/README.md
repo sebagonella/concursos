@@ -14,4 +14,4 @@ python scripts/site_collector.py --concurso-dir <.../CONCURSOS/SEDES_2026> --out
 python scripts/site_builder.py --concurso-dir <.../CONCURSOS/SEDES_2026> --out out/site
 python -m http.server -d out/site 8000     # conferir localmente
 ```
-Versão atual: **0.4.2**.
+Versão atual: **0.6.0** (site servido na raiz em `concursos.casa:8088`; leitura do padrão de pastas atual da `concurso-aprofunda`).

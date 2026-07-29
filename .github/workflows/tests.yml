@@ -19,7 +19,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
       - name: Instalar dependências Python (opcionais)
-        run: pip install reportlab
+        run: pip install reportlab pyyaml   # pyyaml: usado no step que valida o docker-compose
 
       - name: Rodar smoke tests de todas as skills
         run: bash scripts/test-all.sh
