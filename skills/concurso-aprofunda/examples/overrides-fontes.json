@@ -1,0 +1,7 @@
+{
+  "_comentario": "Overrides de slug de fonte para o migrar_aprofundamentos.py. Chave = nome da fonte exatamente como aparece no frontmatter (localizacao_livro sem o ' — págs.', ou fonte_norma). Valor = slug curto. Use quando a derivacao automatica nao acerta: obra com dois autores (pega o ultimo, queremos o primeiro), arquivo sem autor no nome, ou documento sem numero de norma.",
+
+  "Administracao-de-Marketing-Kotler-e-Keller-14ed-2012.pdf": "kotler",
+  "Conhecimentos_Bancarios.pdf": "abreu",
+  "Código de Ética do Banco do Brasil (2025–2026)": "cod-etica-bb"
+}

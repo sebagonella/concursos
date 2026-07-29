@@ -1,0 +1,123 @@
+# Configuração padrão da skill concurso-prep
+# Os valores aqui são defaults — podem ser sobrescritos por parâmetros da skill
+
+# Caminhos do vault
+vault:
+  # Pasta onde concursos são organizados (relativa ao vault root)
+  concursos_root: "30_AREAS/CARREIRA/CONCURSOS"
+  # Pasta de inbox onde editais ficam (relativa ao vault root)
+  inbox_root: "99_INBOX/OUTROS"
+  # Pasta de logs
+  logs_dir: ".logs"
+
+# Comportamento padrão
+defaults:
+  modo: oficial            # oficial | previsto
+  horas_dia: 4
+  no_download: false
+  force_overwrite: false
+  retry_downloads: 3
+  download_timeout_seconds: 30
+  formatos_lei: "md,pdf"   # item 9: leis salvas em Markdown E PDF (csv: md,pdf)
+  logs_por_concurso: true  # item 15: .logs/{ORGAO}_{ANO}/ em vez de .logs/ global
+
+# Modo previsto (concurso esperado, sem edital publicado)
+previsto:
+  sufixo_pasta: "_PREVISTO"
+  banner: "⚠️ CONTEÚDO PROVISÓRIO — baseado no edital anterior. Sujeito a alteração quando o edital oficial for publicado."
+  # Quando o ano esperado não é informado, usar ano corrente + 1
+  ano_esperado_offset: 1
+  # Blocos relativos (sem datas)
+  blocos:
+    - nome: "Bloco 1 — Fundação"
+      foco: "matérias-base de maior peso e incidência histórica"
+    - nome: "Bloco 2 — Aprofundamento"
+      foco: "específicas do cargo + matérias densas"
+    - nome: "Bloco 3 — Consolidação"
+      foco: "revisão + questões + simulados livres"
+
+# Reconciliação (quando o edital oficial sai)
+reconciliacao:
+  sufixo_v1: "_V1-PREVISTO"     # versão prevista, arquivada
+  sufixo_v2: "_V2-OFICIAL"      # versão oficial, ativa
+  limiar_similaridade: 0.72     # acima disso = "alterado"; abaixo = removido/novo
+  migrar_progresso_automatico: true   # copia "Meu resumo" e checkboxes de tópicos idênticos
+  arquivo_diff: "00-DIFF-PREVISTO-VS-OFICIAL.md"
+
+# Cronograma adaptativo
+cronograma:
+  # Distribuição em % por fase, conforme tempo restante
+  fases:
+    longo:   # > 180 dias
+      threshold_dias: 180
+      fases: ["Fundação", "Aprofundamento", "Reta Final", "Preparação Final"]
+      distribuicao: [0.35, 0.35, 0.20, 0.10]
+    medio:   # 90-180 dias
+      threshold_dias: 90
+      fases: ["Fundação", "Aprofundamento", "Reta Final"]
+      distribuicao: [0.40, 0.40, 0.20]
+    curto:   # 30-90 dias
+      threshold_dias: 30
+      fases: ["Revisão Acelerada", "Simulados Intensivos"]
+      distribuicao: [0.60, 0.40]
+    emergencia:  # < 30 dias
+      threshold_dias: 0
+      fases: ["Modo Emergência"]
+      distribuicao: [1.0]
+
+# Metas quantitativas
+metas:
+  questoes_por_dia_minimo: 50
+  simulados_completos_minimo: 6
+  treinos_discursiva_minimo: 6
+
+# Fontes oficiais para download de leis
+fontes_leis:
+  federal:
+    - "planalto.gov.br"
+    - "in.gov.br"
+  distrito_federal:
+    - "sinj.df.gov.br"
+    - "cl.df.gov.br"
+  conselhos:
+    - "cnas.gov.br"  # Assistência Social
+    - "cfp.org.br"   # Psicologia
+    - "cfess.org.br" # Serviço Social
+
+# Item 12: whitelist de domínios confiáveis para baixar PROVAS e EDITAIS anteriores.
+# Downloads de fora desta lista geram alerta (não bloqueio total, mas registrado em log).
+fontes_provas_editais:
+  bancas:
+    - "quadrix.org.br"
+    - "cebraspe.org.br"
+    - "cespe.unb.br"
+    - "fcc.com.br"
+    - "fgv.br"
+    - "cesgranrio.org.br"
+    - "ibfc.org.br"
+    - "vunesp.com.br"
+  agregadores:
+    - "pciconcursos.com.br"
+    - "qconcursos.com"
+  oficiais:
+    - "gov.br"
+    - "in.gov.br"
+  # Comportamento quando a URL está fora da whitelist:
+  # alertar | bloquear  (default: alertar, registrando em .logs/{concurso}/downloads-suspeitos.md)
+  fora_da_whitelist: "alertar"
+
+# Sinergia: critérios para considerar um concurso similar
+sinergia:
+  materias_em_comum_minimo: 3
+  anos_historico: 5
+  provas_baixar_max: 3
+
+# Histórico: por quantos anos pesquisar
+historico:
+  anos_historico: 15
+
+# Validação
+validacao:
+  ignorar_placeholders_em_blocos_codigo: true
+  exigir_pdf_valido: true
+  tolerancia_questoes_pct: 5  # diferença aceitável entre soma estimada e total da prova

@@ -1,0 +1,56 @@
+{
+  "livro": "livro_portugues.pdf",
+  "materia": "Língua Portuguesa",
+  "extracao": "pdf-texto",
+  "total_paginas": 13,
+  "toc_entradas": 5,
+  "localizacoes": {
+    "Concordância verbal": {
+      "paginas": [
+        3,
+        4
+      ],
+      "confianca": "alta",
+      "metodo": "toc",
+      "titulo_no_livro": "Concordância Verbal",
+      "score": 1.0
+    },
+    "Regência verbal": {
+      "paginas": [
+        7,
+        8
+      ],
+      "confianca": "alta",
+      "metodo": "toc",
+      "titulo_no_livro": "Regência Verbal e Nominal",
+      "score": 0.875
+    },
+    "Crase": {
+      "paginas": [
+        9,
+        10
+      ],
+      "confianca": "alta",
+      "metodo": "toc",
+      "titulo_no_livro": "Crase",
+      "score": 1.0
+    },
+    "Colocação pronominal": {
+      "paginas": [
+        11,
+        13
+      ],
+      "confianca": "alta",
+      "metodo": "toc",
+      "titulo_no_livro": "Colocação Pronominal",
+      "score": 1.0
+    },
+    "Pontuação": {
+      "confianca": "nao_encontrado",
+      "metodo": null
+    }
+  },
+  "pendencias": [
+    "NÃO LOCALIZADO: Pontuação"
+  ]
+}

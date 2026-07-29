@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Saídas de teste / trabalho local
+/tmp/
+*.log
+.DS_Store
+
+# Conteúdo gerado no vault NÃO pertence a este repo
+# (o repo guarda as SKILLS, não o material produzido por elas)
+vault/
+out/
+*.zip
+
+# Versões antigas e pacotes de entrega (artefatos locais, não fonte)
+old/
+deploy-*/
+site-model-*.json
+
+# Instalação local das skills: .claude/skills e .claude/agents são CÓPIAS que o
+# scripts/install.sh gera a partir de skills/. A fonte é skills/ — versionar as
+# duas duplicaria tudo e abriria espaço para divergirem.
+# O .claude/CLAUDE.md (integração com o vault) é fonte e continua versionado.
+.claude/skills/
+.claude/agents/
+
+# Config local de deploy (host, usuário, caminhos da máquina)
+deploy/deploy.env
+
+# Editores
+.vscode/
+.idea/

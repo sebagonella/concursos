@@ -1,0 +1,18 @@
+{
+  "orgao": "SEDES", "ano": 2026, "modo": "oficial",
+  "vagas_ac": 23, "vagas_total": 188, "salario": "R$ 6.071,09",
+  "datas_chave": {"prova_data": "2026-09-06"},
+  "estrutura_prova": {"objetiva": {"total_questoes": 120}, "discursiva": {"tipo": "estudo de caso"}},
+  "materias": [
+    {"nome": "Administração Geral", "topicos": [
+      "Planejamento estratégico, tático e operacional",
+      "Análise SWOT, BSC e mapa estratégico",
+      "Gestão da qualidade e ferramentas"
+    ]},
+    {"nome": "AFO", "topicos": [
+      "Lei 4.320/1964 e estágios da despesa",
+      "PPA, LDO e LOA",
+      "Lei de Responsabilidade Fiscal (LC 101/2000)"
+    ]}
+  ]
+}

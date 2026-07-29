@@ -1,0 +1,75 @@
+# 14_concursos — Contexto para Claude Code
+
+## Vault Obsidian
+- **Vault:** /home/sebagonella/work/cloud/1_insync-gdrive-sebastiao.gonella/02_SYNC-ALIVE/01_COFRES/02_NOTEBOOKS/02_OBSIDIAN/0_sebagonella2
+- **Nota do projeto:** 20_PROJETOS/PROFISSIONAL/14_concursos/_PROJETO.md
+- **Sessoes:** 20_PROJETOS/PROFISSIONAL/14_concursos/SESSOES/
+- **Decisoes:** 20_PROJETOS/PROFISSIONAL/14_concursos/DECISOES/
+- **Pesquisas:** 20_PROJETOS/PROFISSIONAL/14_concursos/PESQUISAS/
+- **Tarefas:** 20_PROJETOS/PROFISSIONAL/14_concursos/TAREFAS/
+
+## Ao iniciar (/session-start)
+1. Leia _PROJETO.md via MCP
+2. Leia a sessao mais recente em SESSOES/
+3. Confirme o objetivo da sessao
+
+## Ao finalizar (/session-end slug)
+1. Crie nota de sessao em SESSOES/
+2. Atualize daily note automaticamente
+
+## Stack tecnica
+- Repositorio: /home/sebagonella/work/local/02_SOLUTIONS/14_concursos
+- Python 3 (skills e scripts, quase so stdlib), Bash (install/test/deploy),
+  Docker + nginx:alpine (servir o site), Markdown/Obsidian como saida.
+- Dependencias externas sao **opcionais** (reportlab, OCR) — degradacao graciosa.
+
+## Comandos
+
+```bash
+bash scripts/install.sh                       # instala/atualiza TODAS as skills (global, ~/.claude/)
+bash scripts/install.sh --only <skill>        # instala so uma
+bash scripts/install.sh --local               # instala no .claude/ do diretorio atual
+bash scripts/install.sh --uninstall           # desinstala
+bash scripts/test-all.sh                      # roda os testes de todas as skills
+
+./deploy/deploy.sh --setup                          # 1a vez no servidor domestico
+./deploy/deploy.sh --concurso-dir <.../SEDES_2026>  # atualizacoes
+./deploy/deploy.sh --concurso-dir <...> --dry-run   # conferir antes
+```
+
+> Apos instalar/atualizar, **reinicie a sessao do Claude Code** — as skills sao
+> carregadas no inicio da sessao e a versao anterior pode ficar em cache.
+
+## Regras do projeto
+
+Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
+
+- **Slugs em UPPERCASE** para pastas de concurso e cargo (`SEDES_2026`,
+  `EDAS-ADMINISTRACAO`, `_COMUM`). O validador checa isso.
+- **Metadata em `.meta.json`** (nao YAML), com o conteudo programatico integral
+  (`materias[].topicos` — o motor de diff depende) e o `edital_hash` (SHA-256).
+- **Nunca sobrescrever versao anterior** numa reconciliacao: `V1-PREVISTO` →
+  `V2-OFICIAL` → `V3-RETIFICADO`, lado a lado, preservando o progresso.
+- **Direitos autorais (Modelo 2)**: a Etapa 2 nao extrai texto integral de livros
+  protegidos — so localizacao (paginas) e trechos curtos citados. Resumo sempre
+  original, escrito do zero. Nao relaxar.
+- **Flashcards do Obsidian**: no formato multi-linha o `??` fica **sozinho na
+  propria linha**; colado na resposta o plugin Spaced Repetition nao le o cartao.
+- **Nunca fingir precisao**: localizacao com baixa confianca ou nao encontrada
+  vira pendencia explicita para conferencia humana. Nao inventar pagina.
+- **O site e derivado, o vault e a fonte**: `concurso-publica` nunca escreve no
+  vault; o progresso exibido e so leitura.
+- **Cores so via variaveis de tema** no CSS (nada de hex fixo para cor de texto);
+  toda variavel precisa existir nos dois temas — ha teste que barra isso.
+- **Deploy e sincronizacao**: bind mount + rsync, sem rebuild nem restart. Nao
+  introduzir passos de build no deploy.
+- **Preservar trabalho do usuario**: re-execucoes nao apagam resumos, flashcards
+  ou progresso; scripts que sobrescrevem artefatos fazem backup.
+
+Ao evoluir uma skill: **plano antes de implementar** (o dono do repo aprova
+planos e listas de gaps antes de qualquer codigo), teste que reproduz cada bug
+corrigido, SemVer no frontmatter do `SKILL.md` + entrada no `CHANGELOG.md`, e
+higiene de pacote (sem `__pycache__`, sem orfaos) antes de fechar versao.
+
+> Regras completas, estrutura de pastas e contexto de dominio: `CLAUDE.md` da
+> raiz do repositorio — esta secao e um resumo, aquele arquivo e a fonte.

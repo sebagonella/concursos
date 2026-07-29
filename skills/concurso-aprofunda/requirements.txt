@@ -1,0 +1,12 @@
+# Dependências da skill concurso-aprofunda
+# ----------------------------------------------------------------------------
+# TODAS são OPCIONAIS — os scripts degradam com aviso quando faltam:
+#   - sem pytest    -> os testes rodam standalone (python scripts/tests/test_smoke.py)
+#
+# Dependências de SISTEMA (não instaláveis por pip):
+#   poppler-utils  -> pdftotext/pdftoppm, para ler livros em PDF   (recomendado)
+#   tesseract-ocr  -> OCR de livros escaneados                     (opcional)
+#     Linux: sudo apt install poppler-utils tesseract-ocr tesseract-ocr-por
+#     macOS: brew install poppler tesseract
+
+pytest>=8.0        # opcional: rodar a suíte com pytest em vez do modo standalone

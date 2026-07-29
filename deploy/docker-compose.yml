@@ -1,0 +1,67 @@
+# docker-compose.yml - container do site de estudo (concursos.casa:8088)
+#
+# Estratégia de deploy: o site é montado por BIND MOUNT (./site:/srv/site:ro),
+# não copiado para dentro da imagem. Assim, atualizar o site é só sincronizar
+# arquivos — sem rebuild de imagem, sem restart do container.
+#
+# Uso no servidor:
+#   docker compose up -d          # sobe (só na primeira vez / após mudar config)
+#   docker compose ps             # status
+#   docker compose logs -f        # logs
+#   docker compose down           # derruba
+
+services:
+  concursos:
+    image: nginx:alpine
+    container_name: concursos-site
+    restart: unless-stopped
+
+    ports:
+      # host:container — o site responde diretamente em concursos.casa:8088.
+      # 8088 é a porta publicada no host; 80 é a porta interna do nginx.
+      - "8088:80"
+
+    volumes:
+      - ./site:/srv/site:ro                          # conteúdo do site (read-only)
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro        # configuração
+
+    # ---------------------------------------------------------------------
+    # Limites de recurso — dimensionados para ~3 usuários simultâneos.
+    #
+    # Servir arquivos estáticos é I/O, não CPU: o nginx usa sendfile, então
+    # até streaming de vídeo praticamente não consome processador.
+    # Consumo real esperado: ~10-20 MB de RAM em repouso, ~40-60 MB em pico.
+    # Os limites abaixo têm folga proposital (~2x o pico), para o container
+    # nunca ser o gargalo nem incomodar os outros apps do servidor.
+    # ---------------------------------------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"        # meio núcleo — folgado; o uso real fica bem abaixo
+          memory: 128M        # teto; o pico esperado é ~60M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+
+    # Fallback para `docker compose` sem swarm (deploy.resources pode ser ignorado
+    # em algumas versões): estes campos valem no compose v2 standalone.
+    cpus: 0.50
+    mem_limit: 128m
+    mem_reservation: 32m
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    # Endurecimento básico: o container só lê arquivos e serve HTTP
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"        # evita log crescendo sem limite no disco de casa
+        max-file: "3"

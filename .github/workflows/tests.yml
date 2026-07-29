@@ -1,0 +1,65 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências do sistema
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
+      - name: Instalar dependências Python (opcionais)
+        run: pip install reportlab
+
+      - name: Rodar smoke tests de todas as skills
+        run: bash scripts/test-all.sh
+
+      - name: Validar sintaxe dos scripts shell
+        run: |
+          for f in scripts/*.sh; do bash -n "$f"; done
+
+      - name: Higiene do pacote (sem caches nem nomes estranhos)
+        run: |
+          ! find skills -name "__pycache__" | grep . || (echo "cache commitado" && exit 1)
+          ! find . -name '*{*' -o -name '*}*' | grep . || (echo "nome invalido" && exit 1)
+
+      - name: Validar docker-compose e shell do deploy
+        run: |
+          python -c "import yaml; yaml.safe_load(open('deploy/docker-compose.yml'))"
+          bash -n deploy/deploy.sh
+
+      - name: Consistência de versões (SKILL.md / README / CHANGELOG)
+        run: |
+          erro=0
+          for d in skills/*/; do
+            n=$(basename "$d")
+            v=$(grep -m1 '^version:' "$d/SKILL.md" | sed 's/version: *//')
+            rv=$(grep -o 'Versão atual: \*\*[0-9.]*' "$d/README.md" | grep -o '[0-9.]*$')
+            ch=$(grep -m1 -o '\[[0-9.]*\]' "$d/CHANGELOG.md" | tr -d '[]')
+            if [ "$v" != "$rv" ] || [ "$v" != "$ch" ]; then
+              echo "::error::$n versões divergentes: SKILL=$v README=$rv CHANGELOG=$ch"
+              erro=1
+            fi
+          done
+          exit $erro
+
+      - name: Toda skill citada na documentação principal
+        run: |
+          erro=0
+          for d in skills/*/; do
+            n=$(basename "$d")
+            for f in README.md CLAUDE.md docs/ARQUITETURA.md; do
+              grep -q "$n" "$f" || { echo "::error::$n ausente em $f"; erro=1; }
+            done
+          done
+          exit $erro

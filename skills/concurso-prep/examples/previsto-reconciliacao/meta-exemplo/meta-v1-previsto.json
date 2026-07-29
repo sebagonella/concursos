@@ -1,0 +1,17 @@
+{
+  "orgao": "SEDES", "ano": 2026, "modo": "previsto",
+  "vagas_ac": 3, "vagas_total": 50, "salario": "R$ 3.599,70",
+  "datas_chave": {"prova_data": null},
+  "estrutura_prova": {"objetiva": {"total_questoes": 100}, "discursiva": null},
+  "materias": [
+    {"nome": "Administração Geral", "topicos": [
+      "Planejamento estratégico, tático e operacional",
+      "Análise SWOT e BSC",
+      "Gestão da qualidade e ferramentas"
+    ]},
+    {"nome": "AFO", "topicos": [
+      "Lei 4.320/1964 e estágios da despesa",
+      "PPA, LDO e LOA"
+    ]}
+  ]
+}

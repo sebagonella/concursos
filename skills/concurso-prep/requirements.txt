@@ -1,0 +1,18 @@
+# Dependências da skill concurso-prep
+# ----------------------------------------------------------------------------
+# TODAS são OPCIONAIS. Os scripts degradam com elegância quando faltam:
+#   - sem reportlab  -> fetch_lei.py ainda gera .md, mas não o .pdf (exit 2)
+#   - sem weasyprint -> fetch_lei.py cai no reportlab (PDF a partir do texto)
+#   - sem pyyaml     -> use .meta.json (nativo). .meta.yml legado fica indisponível.
+#   - sem python-docx-> editais .docx não são processados (PDF/MD funcionam)
+#
+# Instalação recomendada (mínimo funcional para leis em MD+PDF):
+#   pip install reportlab
+#
+# Instalação completa:
+#   pip install -r requirements.txt
+
+reportlab>=4.0        # geração de PDF (fallback sempre disponível p/ item 9)
+weasyprint>=60        # geração de PDF com fidelidade HTML (preferido; opcional)
+pyyaml>=6.0           # leitura de .meta.yml legado (novos usam .meta.json)
+python-docx>=1.1      # extração de editais em .docx

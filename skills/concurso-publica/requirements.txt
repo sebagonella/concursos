@@ -1,0 +1,10 @@
+# Dependências da skill concurso-publica
+# ----------------------------------------------------------------------------
+# A geração do site NÃO tem dependências externas: o conversor Markdown->HTML
+# (md2html.py) é próprio, justamente para o site funcionar offline sem CDN.
+#
+# Dependências de SISTEMA para servir o site (opcionais):
+#   rsync   -> deploy para o servidor doméstico  (deploy/deploy.sh)
+#   docker  -> container que serve o site        (deploy/docker-compose.yml)
+
+pytest>=8.0        # opcional: rodar a suíte com pytest em vez do modo standalone
