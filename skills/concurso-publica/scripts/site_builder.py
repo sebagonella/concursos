@@ -30,6 +30,7 @@ AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
 
 import md2html  # noqa: E402
+from aprofundamento_id import FONTE_PROPRIA  # noqa: E402
 from site_collector import coletar_concurso, CATALOGO_MIDIAS, PRIORIDADES  # noqa: E402
 
 ASSETS = AQUI.parent / "assets"
@@ -340,6 +341,10 @@ def rotulo_aprof(ap: dict) -> str:
     """
     nivel = ROTULO_NIVEL.get(ap.get("nivel", ""), ap.get("nivel", ""))
     slugs = ap.get("fontes_id") or []
+    # `proprio` é token de PATH, não nome de fonte: title-case o transformaria em
+    # "Proprio", que não descreve nada e ainda por cima sem acento
+    if slugs == [FONTE_PROPRIA]:
+        return f"Material próprio · {nivel}"
     if slugs:
         bonito = " + ".join(s.replace("-", " ").title() for s in slugs)
         return f"{bonito} · {nivel}"
@@ -682,7 +687,7 @@ def selos_aprofundamento(assunto: dict) -> str:
     return f'<div class="selos-aprof">{"".join(partes)}</div>'
 
 
-def card_assunto(a: dict, href: str) -> str:
+def card_assunto(a: dict, href: str, selo_topico: dict | None = None) -> str:
     # Uma linha de contexto discreta: onde está no livro e de qual fonte veio. Selo
     # é para estado (nível, o que já foi gerado); texto é para dado.
     ctx = []
@@ -692,9 +697,31 @@ def card_assunto(a: dict, href: str) -> str:
     if len(fontes) == 1:
         ctx.append(fontes[0])
     pag = f'<span class="meta">{esc(" · ".join(ctx))}</span>' if ctx else ""
+    # o que EXISTE neste assunto — contagem e presença, nunca julgamento
+    s = a.get("sinais") or {}
+    sin = []
+    if s.get("n_cards"):
+        sin.append(f'{s["n_cards"]} cards')
+    if s and not s.get("tem_ancoras"):
+        sin.append("sem trechos-âncora")
+    sinais = f'<span class="sinais">{esc(" · ".join(sin))}</span>' if sin else ""
+    # Em grade corrida o tópico não tem cabeçalho para chamar de seu, então vem
+    # no card — a informação do edital não se perde por causa do layout.
+    top = ""
+    if selo_topico:
+        # Quando o assunto nasceu 1:1 do tópico — que é a regra em edital plano —
+        # o título do tópico é o título do card. Repetir os dois é ruído; sobra
+        # só o número, que é o que localiza no plano.
+        rot = f'tópico {selo_topico["numero"]}'
+        if _norm_txt(selo_topico["titulo"]) != _norm_txt(a["titulo"]):
+            rot += f' · {selo_topico["titulo"][:38]}'
+        top = (f'<span class="selo-topico" title="{esc(selo_topico["titulo"])}">'
+               f'{esc(rot)}</span>')
     return f"""<a class="item" href="{esc(href)}">
+  {top}
   <h3>{esc(a["titulo"])}</h3>
   {pag}
+  {sinais}
   {selos_aprofundamento(a)}
   {selos_midia(a, so_presentes=True)}
   {gabarito(a["progresso"], max_bolhas=8)}
@@ -731,8 +758,142 @@ def _norm_txt(s: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
 
 
+# Ícone e rótulo de reserva de cada seção do tópico. O rótulo exibido é sempre o
+# LITERAL do vault (`Pegadinhas da Quadrix neste tópico` nomeia a banca, e isso é
+# informação); estes só entram quando o vault não deu rótulo nenhum.
+SECOES_TOPICO = {
+    "topicos_edital": ("📜", "Tópicos do edital"),
+    "subtopicos":     ("",   "Subtópicos derivados"),
+    "material":       ("📚", "Material recomendado"),
+    "pegadinhas":     ("⚠️", "Pegadinhas da banca"),
+    "meta":           ("🎯", "Meta"),
+    "extra":          ("📌", "Complemento"),
+}
+
+# Acima disto, o detalhe do tópico nasce recolhido. As matérias do SEDES têm 5 a 7
+# tópicos e cabem abertas; as do BB têm 14, 17 e 24 — cinco seções × 24 tópicos numa
+# página só é um paredão em que nada se acha.
+TOPICOS_PARA_RECOLHER = 8
+
+
+def blocos_de(topico: dict) -> list[dict]:
+    """Blocos do tópico, tolerando o modelo antigo.
+
+    `--modelo site-model.json` é contrato público: um arquivo salvo com a 0.7.x
+    não pode quebrar o build. Lá o campo era `secoes` (dict chave->markdown), sem
+    rótulo, sem sufixo e sem contagem — degrada para um bloco por chave.
+    """
+    if topico.get("blocos") is not None:
+        return topico["blocos"]
+    return [{"chave": k, "rotulo": SECOES_TOPICO.get(k, ("", k))[1],
+             "sufixo": "", "markdown": v, "itens": [], "n_itens": 0}
+            for k, v in (topico.get("secoes") or {}).items() if v]
+
+
+def subtopicos_de(topico: dict) -> list[dict]:
+    """Subtópicos do tópico. No modelo antigo eram `list[str]`, sem estado nem grupo."""
+    return [s if isinstance(s, dict) else {"texto": s, "feito": None, "grupo": ""}
+            for s in (topico.get("subtopicos") or [])]
+
+
+def rotulo_do_bloco(bloco: dict) -> str:
+    icone, reserva = SECOES_TOPICO.get(bloco["chave"], ("📌", "Complemento"))
+    texto = bloco.get("rotulo") or reserva
+    return f"{icone} {texto}".strip()
+
+
+def lista_subtopicos(topico: dict) -> str:
+    """O checklist derivado, agrupado pelo bloco de origem.
+
+    Fica FORA da dobra: é o que transforma o título do tópico em plano de estudo, e
+    é por ele que se passa o olho. O grupo aparece porque `— LEI 8.662/1993
+    (DECORAR ARTIGOS)` diz de que aquele checklist é; sem ele, quatro listas
+    distintas viravam uma só, sem assunto.
+    """
+    subs = subtopicos_de(topico)
+    if not subs:
+        return ""
+    partes, grupo_aberto, lista_aberta = [], None, False
+    for s in subs:
+        if s.get("grupo") != grupo_aberto:
+            if lista_aberta:
+                partes.append("</ul>")
+            grupo_aberto = s.get("grupo")
+            if grupo_aberto:
+                partes.append(f'<p class="grupo-sub">{esc(grupo_aberto)}</p>')
+            partes.append('<ul class="tarefas">')
+            lista_aberta = True
+        if s.get("feito") is None:
+            # bullet simples dentro do bloco de subtópicos: não é item marcável, e
+            # dar-lhe uma bolha o fazia parecer checkbox em aberto — a lista passava
+            # a mostrar mais itens do que o contador do rodapé conta. 2 tópicos do
+            # vault caem aqui (`Estrutura de Dados`, `fundamentos-assistencia-social`).
+            partes.append(f'<li class="livre"><span>{esc(s["texto"])}</span></li>')
+        else:
+            marca = "feito" if s["feito"] else "aberto"
+            partes.append(f'<li class="tarefa {marca}">'
+                          f'<span class="bolha" aria-hidden="true"></span>'
+                          f'<span>{esc(s["texto"])}</span></li>')
+    if lista_aberta:
+        partes.append("</ul>")
+    return f'<div class="subtopicos">{"".join(partes)}</div>'
+
+
+def pistas_do_topico(blocos: list[dict]) -> str:
+    """O que o `<summary>` conta com o detalhe FECHADO.
+
+    Uma dobra muda ("mostrar mais") obriga a abrir 24 tópicos para descobrir onde
+    está o que interessa. Contando, ela já informa — e a decisão de abrir passa a
+    ser do estudante.
+    """
+    pistas = []
+    for b in blocos:
+        if b["chave"] in ("topicos_edital", "subtopicos") or not b["markdown"]:
+            continue
+        icone = SECOES_TOPICO.get(b["chave"], ("📌", ""))[0]
+        n = b.get("n_itens") or 0
+        if b["chave"] == "pegadinhas" and n:
+            texto = f"{n} pegadinha{'s' if n > 1 else ''}"
+        elif b["chave"] == "material" and n:
+            texto = f"{n} materiais" if n > 1 else "1 material"
+        elif b["chave"] == "meta":
+            texto = "meta"
+        else:
+            texto = b.get("rotulo") or "complemento"
+        pistas.append(f'<span class="pista">{esc(icone)} {esc(texto)}</span>')
+    return f'<span class="pistas">{"".join(pistas)}</span>' if pistas else ""
+
+
+def secoes_do_topico(topico: dict, blocos: list[dict], resolver) -> str:
+    """Material, pegadinhas, meta e os complementos — em markdown convertido.
+
+    Passa por `md2html.converter` de propósito: é o que faz a tabela do mnemônico
+    virar tabela, o negrito da lei aparecer e o wikilink do material virar link. O
+    `prefixo_id` evita que o mesmo H4 em dois tópicos gere `id` duplicado.
+    """
+    fora = ("topicos_edital", "subtopicos")
+    partes = []
+    for b in blocos:
+        if b["chave"] in fora or not b["markdown"].strip():
+            continue
+        ident = (f't{topico["numero"]}-{b["chave"]}' if b["chave"] != "extra"
+                 else f't{topico["numero"]}-{md2html.slug_ancora(b["rotulo"])}')
+        corpo = md2html.converter(b["markdown"], wikilink_resolver=resolver,
+                                  prefixo_id=f't{topico["numero"]}-')
+        partes.append(f'<section class="secao-topico" data-secao="{esc(b["chave"])}">'
+                      f'<h4 id="{esc(ident)}">{esc(rotulo_do_bloco(b))}</h4>'
+                      f'{corpo}</section>')
+    return "".join(partes)
+
+
 def bloco_plano(materia: dict, rotas: "Rotas", rota: str) -> str:
     """A aba **Plano**: o que o edital exige, tópico por tópico.
+
+    Três camadas por tópico, e a divisão não é estética: o **literal do edital** e o
+    **checklist de subtópicos** ficam sempre à vista — o primeiro é a autoridade
+    (uma linha), o segundo é a superfície de varredura. Material, pegadinhas, meta e
+    complementos vão para um `<details>` nativo: `<details>` porque funciona sem
+    JavaScript, imprime e é o que faz o Ctrl+F do Chrome abrir o tópico certo.
 
     O progresso do mapa é exibido separado do aprofundamento. Os 24 mapas do vault
     somam 2.220 checkboxes, nenhum marcado — jogá-los na mesma barra faria o
@@ -742,48 +903,246 @@ def bloco_plano(materia: dict, rotas: "Rotas", rota: str) -> str:
     mapa = materia.get("mapa")
     if not mapa:
         return ""
+    resolver = rotas.resolvedor(rota)
+    aberto = mapa["n_topicos"] <= TOPICOS_PARA_RECOLHER
     itens = []
     for t in mapa["topicos"]:
+        n = t["numero"]
+        blocos = blocos_de(t)
         alvos = assuntos_do_topico(t, materia)
         link = ""
         if alvos:
-            hrefs = []
-            for slug in alvos:
-                hrefs.append(f'<a href="{esc(relativo(rota_irma(rota, slug), rota))}"'
-                             f'>estudar</a>')
-            link = f'<span class="ir">{" · ".join(hrefs)}</span>' if hrefs else ""
-        subs = "".join(f"<li>{esc(s)}</li>" for s in t["subtopicos"])
-        prio = (f'<span class="selo-aprof nivel-{t["prioridade"]}">'
+            hrefs = [f'<a href="{esc(relativo(rota_irma(rota, slug), rota))}">estudar</a>'
+                     for slug in alvos]
+            link = f'<span class="ir">{" · ".join(hrefs)}</span>'
+        prio = (f'<span class="selo-prio prio-{t["prioridade"]}">'
                 f'{esc(ROTULOS_PRIORIDADE[t["prioridade"]][0])}</span>'
                 if t.get("prioridade") in ROTULOS_PRIORIDADE else "")
+
+        edital = "".join(
+            f'<div class="literal-edital">'
+            f'{md2html.converter(b["markdown"], wikilink_resolver=resolver, prefixo_id=f"t{n}-")}'
+            f'</div>'
+            for b in blocos if b["chave"] == "topicos_edital" and b["markdown"].strip())
+
+        secoes = secoes_do_topico(t, blocos, resolver)
+        detalhe = ""
+        if secoes:
+            detalhe = (f'<details class="mais-topico"{" open" if aberto else ""}>'
+                       f'<summary><span class="rot">Detalhes do tópico</span>'
+                       f'{pistas_do_topico(blocos)}</summary>'
+                       f'<div class="secoes-topico">{secoes}</div></details>')
+
         pg = t["progresso"]
         itens.append(f"""<li class="topico">
   <div class="linha">
-    <span class="num">{t["numero"]}</span>
-    <h3 id="t{t["numero"]}">{esc(t["titulo"])}</h3>
+    <span class="num">{n}</span>
+    <h3 id="t{n}">{esc(t["titulo"])}</h3>
     {prio}{link}
   </div>
-  {f'<ul class="subtopicos">{subs}</ul>' if subs else ''}
+  {edital}
+  {lista_subtopicos(t)}
+  {detalhe}
   {f'<span class="meta">{pg["feitos"]}/{pg["total"]} itens do plano</span>' if pg["total"] else ''}
 </li>""")
 
     aux = "".join(
         f'<section class="papel" style="margin-top:1rem">'
         f'<h2 id="{esc(md2html.slug_ancora(a["titulo"]))}">{esc(a["titulo"])}</h2>'
-        f'{md2html.converter(a["corpo"], wikilink_resolver=rotas.resolvedor(rota))}'
+        f'{md2html.converter(a["corpo"], wikilink_resolver=resolver)}'
         f'</section>'
         for a in mapa["auxiliares"] if a["corpo"].strip())
 
     prog = mapa["progresso"]
     resumo = (f'{mapa["n_topicos"]} tópicos do edital · '
               f'{prog["feitos"]}/{prog["total"]} itens do plano')
+    # o plano pode vir do escopo vizinho: dizer de onde é honesto e evita a
+    # impressão de que o cargo tem um mapa próprio que não tem
+    origem = ""
+    if materia.get("mapa_em"):
+        origem = (f'<p class="meta origem-plano">Plano do edital de '
+                  f'{esc(nome_escopo(materia["mapa_em"]["escopo_nome"]))} — '
+                  f'esta matéria é compartilhada.</p>')
+    expandir = ('<button class="expandir" type="button" data-expandir="abrir">'
+                'Expandir tudo</button>') if not aberto else ""
     return f"""<div class="visao plano ativo" data-visao="plano">
   <section class="papel">
-    <p class="meta">{esc(resumo)}</p>
+    <div class="cabeca-plano"><p class="meta">{esc(resumo)}</p>{expandir}</div>
+    {origem}
     <ol class="lista-topicos">{"".join(itens)}</ol>
   </section>
+  {bloco_material_por_topico(materia, resolver)}
   {aux}
 </div>"""
+
+
+TIPO_MATERIAL = (
+    ("livro",    "📕", re.compile(r"^(livro|livro/lei|livro \(didático\)|livro/ebook)\b", re.I)),
+    ("video",    "▶",  re.compile(r"^(youtube|v[ií]deo|canal)\b", re.I)),
+    ("questoes", "✎",  re.compile(r"^(quest[oõ]es|banco de quest[oõ]es)\b", re.I)),
+    ("norma",    "⚖",  re.compile(r"^(lei|norma|norma-fonte|lei fonte|refer[eê]ncia legal|"
+                                  r"fonte prim[aá]ria|documenta[cç][aã]o|documento)\b", re.I)),
+)
+
+
+def tipo_do_material(texto: str) -> tuple[str, str]:
+    """Classifica o item pelo rótulo que o mapa já usa (`Livro:`, `Questões:`…).
+
+    Rótulo desconhecido NÃO vira palpite: fica como `outro`, com marcador neutro.
+    São ~40 dos 458 itens do vault — normas e documentos que o autor acrescentou
+    fora da tripla do template, e que não podem sumir só por não casarem.
+    """
+    for chave, icone, padrao in TIPO_MATERIAL:
+        if padrao.match(texto.strip()):
+            return chave, icone
+    return "outro", "·"
+
+
+def bloco_material_por_topico(materia: dict, resolver=None) -> str:
+    """Todo o material recomendado da matéria, na ordem do edital.
+
+    **Derivado**, não redigitado: os itens já estão em `### Material recomendado`
+    de cada tópico do mapa. Antes só dava para vê-los abrindo um `<details>` por
+    tópico; a bibliografia de `04-MATERIAIS/` é a outra metade, agrupada por
+    matéria, e as duas não se falavam.
+    """
+    mapa = materia.get("mapa")
+    if not mapa:
+        return ""
+    secoes, total = [], 0
+    for t in mapa["topicos"]:
+        itens = [i for b in (t.get("blocos") or []) if b["chave"] == "material"
+                 for i in (b.get("itens") or [])]
+        if not itens:
+            continue
+        lis = []
+        for i in itens:
+            texto = i["texto"]
+            _, icone = tipo_do_material(texto)
+            lis.append(f'<li><span class="ic" aria-hidden="true">{icone}</span>'
+                       f'{md2html._inline(esc(texto), resolver)}</li>')
+            total += 1
+        secoes.append(f'<section class="mat-topico">'
+                      f'<h3><span class="num">{t["numero"]}</span>'
+                      f'{esc(t["titulo"])}</h3><ul>{"".join(lis)}</ul></section>')
+    if not secoes:
+        return ""
+    return f"""<section class="papel material-topicos">
+  <h2 id="material-por-topico">Material por tópico</h2>
+  <p class="meta">{total} itens, na ordem do edital · a bibliografia da matéria
+     fica em <strong>Materiais</strong>, no menu do concurso</p>
+  {"".join(secoes)}
+</section>"""
+
+
+def bloco_cobertura_edital(materia: dict) -> str:
+    """Quanto do edital já tem aprofundamento, e o que falta — por nome.
+
+    Duas medidas separadas e ambas verificáveis: a **cobertura** é contagem de
+    tópicos; a **profundidade** é o que existe (detalhado, mídia). Não há nota
+    sintética: os sinais que a comporiam estão saturados no vault, e uma nota
+    constante disfarçada de métrica é o oposto do que este site se propõe.
+
+    Matéria em 0% mostra 0% — esconder faria a lacuna sumir justamente onde ela
+    é maior.
+    """
+    cb = materia.get("cobertura") or {}
+    if not cb.get("n_topicos"):
+        return ""
+    pct = cb["pct"]
+    faltam = cb["topicos_sem"]
+    lista = ""
+    if faltam:
+        itens = "".join(f'<li><span class="num">{t["numero"]}</span>{esc(t["titulo"])}</li>'
+                        for t in faltam)
+        lista = (f'<details class="lacunas"><summary>{len(faltam)} tópico(s) ainda '
+                 f'sem aprofundamento</summary><ul>{itens}</ul></details>')
+    prof = []
+    if cb["n_detalhado"]:
+        prof.append(f'{cb["n_detalhado"]} em nível detalhado')
+    if cb["n_com_midia"]:
+        prof.append(f'{cb["n_com_midia"]} com mídia')
+    return f"""<section class="papel cobertura-edital">
+  <h2 id="cobertura-do-edital">Cobertura do edital</h2>
+  <div class="barra-cobertura" role="img"
+       aria-label="{cb["n_cobertos"]} de {cb["n_topicos"]} tópicos">
+    <span style="width:{pct}%"></span>
+  </div>
+  <p class="meta">{cb["n_cobertos"]}/{cb["n_topicos"]} tópicos ({pct}%)
+     {f'· {" · ".join(prof)}' if prof else ''}</p>
+  {lista}
+</section>"""
+
+
+def agrupar_por_topico(materia: dict, href_de) -> str:
+    """Os assuntos aprofundados na ordem do plano do edital.
+
+    Usa o `topico_id` **gravado** no frontmatter pela Etapa 2, nunca inferência
+    por slug — a regra continua a mesma de `assuntos_do_topico`. A diferença é
+    que agora existe dado: a skill que criou o assunto sabia de qual tópico ele
+    veio, e passou a registrar.
+
+    Assunto sem vínculo vai para um balde próprio, visível. Escondê-lo faria a
+    matéria parecer menor do que é; e o balde cheio é justamente o sinal de que
+    falta rodar o backfill.
+    """
+    mapa = materia.get("mapa")
+    if not mapa:
+        return ""
+    por_topico: dict[str, list] = {}
+    for a in materia["assuntos"]:
+        for tid in (a.get("topico_id") or []):
+            por_topico.setdefault(tid, []).append(a)
+    if not por_topico:
+        return ""
+
+    # Agrupar só quando agrupar de fato junta alguma coisa.
+    #
+    # O tópico vem do edital, verbatim — não é nosso para engordar. Mas edital
+    # plano existe: o do BB tem 24 itens numa matéria só, e cada assunto nasceu
+    # 1:1 de um item. Nesse caso "agrupar" produz 15 cabeçalhos pesados para 15
+    # cards, que é mais moldura que conteúdo. Quando o agrupamento não reduz
+    # nada, a ordem do edital vira uma grade única e o tópico vira selo no card:
+    # a mesma informação, sem a moldura.
+    com_assunto = [t for t in mapa["topicos"] if por_topico.get(t["slug"])]
+    n_ass = len({a["slug"] for doss in por_topico.values() for a in doss})
+    agrupa = bool(com_assunto) and len(com_assunto) <= max(1, n_ass * 0.6)
+
+    secoes = []
+    if agrupa:
+        for t in com_assunto:
+            doss = por_topico[t["slug"]]
+            cards = "".join(card_assunto(a, href_de(a)) for a in doss)
+            secoes.append(f"""<section class="grupo-topico">
+  <header><span class="num">{t["numero"]}</span><h2>{esc(t["titulo"])}</h2>
+  <span class="quantos">{len(doss)} assuntos</span></header>
+  <div class="grade">{cards}</div>
+</section>""")
+    else:
+        vistos, cards = set(), []
+        for t in com_assunto:
+            for a in por_topico[t["slug"]]:
+                if a["slug"] in vistos:
+                    continue
+                vistos.add(a["slug"])
+                cards.append(card_assunto(a, href_de(a), selo_topico=t))
+        secoes.append(f"""<section class="grupo-topico corrido">
+  <header><h2>Na ordem do edital</h2>
+  <span class="quantos">{len(cards)} assuntos</span></header>
+  <div class="grade">{"".join(cards)}</div>
+</section>""")
+
+    vinculados = {a["slug"] for doss in por_topico.values() for a in doss}
+    soltos = [a for a in materia["assuntos"] if a["slug"] not in vinculados]
+    if soltos:
+        cards = "".join(card_assunto(a, href_de(a)) for a in soltos)
+        secoes.append(f"""<section class="grupo-topico sem-topico">
+  <header><h2>Ainda sem tópico</h2>
+  <span class="quantos">{len(soltos)} assuntos</span></header>
+  <p class="explica">Aprofundados antes de o vínculo com o plano existir.</p>
+  <div class="grade">{cards}</div>
+</section>""")
+    return "".join(secoes)
 
 
 def bloco_cobertura(materia: dict, rotas: "Rotas", rota: str) -> str:
@@ -850,6 +1209,8 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
   <div class="grade">{cards}</div>
 </section>""")
 
+    grupos_topico = agrupar_por_topico(materia, href_de)
+
     # "Como a banca cobra esta matéria" — antes dos assuntos
     bloco_banca = ""
     if materia.get("doc_banca"):
@@ -876,6 +1237,7 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
 
     plano = bloco_plano(materia, rotas, rota)
     cobertura = bloco_cobertura(materia, rotas, rota)
+    cob_edital = bloco_cobertura_edital(materia)
 
     # Uma matéria, duas visões: Plano (o mapa do edital) e Estudo (os assuntos
     # aprofundados). São ângulos diferentes do MESMO recorte — separá-los em duas
@@ -891,11 +1253,27 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
                    '<button class="aba" data-visao-alvo="estudo" type="button">'
                    'Estudo</button></div>')
 
+    # Dois eixos de leitura para o mesmo conjunto: pela ordem do edital (o que a
+    # prova cobra) e por prioridade (por onde começar). Só aparece quando os dois
+    # eixos existem — oferecer um agrupamento vazio seria pior que não oferecer.
+    eixo = ""
+    corpo_estudo = "".join(grupos)
+    if grupos_topico and grupos:
+        eixo = ('<div class="seletor-aprof seletor-eixo" role="tablist"'
+                ' aria-label="Agrupar por">'
+                '<span class="rotulo">Agrupar por</span>'
+                '<button class="aba ativa" data-eixo-alvo="topico" type="button">'
+                'Tópico do edital</button>'
+                '<button class="aba" data-eixo-alvo="prioridade" type="button">'
+                'Prioridade</button></div>')
+        corpo_estudo = (f'<div class="eixo ativo" data-eixo="topico">{grupos_topico}</div>'
+                        f'<div class="eixo" data-eixo="prioridade">{"".join(grupos)}</div>')
+
     estudo = ""
     if tem_estudo:
         ativo = " ativo" if not plano else ""
         estudo = (f'<div class="visao{ativo}" data-visao="estudo">'
-                  f'{bloco_banca}{"".join(grupos)}{docs}{cobertura}</div>')
+                  f'{bloco_banca}{cob_edital}{eixo}{corpo_estudo}{docs}{cobertura}</div>')
     elif cobertura:
         estudo = cobertura
 
@@ -915,7 +1293,7 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
   {seletor}
 </div>
 {plano}
-{estudo if (plano and tem_estudo) else (estudo or bloco_banca + "".join(grupos) + docs)}"""
+{estudo if (plano and tem_estudo) else (estudo or bloco_banca + cob_edital + eixo + corpo_estudo + docs)}"""
     trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a>'
               f' › {esc(materia["nome"])}')
     return pagina(f'{materia["nome"]} — {nome_legivel(concurso)}', trilha, corpo, rota)
@@ -995,9 +1373,21 @@ def pagina_escopo(escopo: dict, concurso: str, rotas: "Rotas", rota: str,
                 partes.append(f'{mat["mapa"]["n_topicos"]} tópicos do edital')
             if mat.get("aprofundamento_em"):
                 partes.append("aprofundado no comum")
+            # a fração de cobertura já no hub: é a pergunta que se faz ao escolher
+            # a matéria — "quanto disto já está pronto?"
+            cb = mat.get("cobertura") or {}
+            cob = ""
+            if cb.get("n_topicos"):
+                cob = (f'<div class="barra-cobertura pequena"'
+                       f' role="img" aria-label="{cb["n_cobertos"]} de '
+                       f'{cb["n_topicos"]} tópicos aprofundados">'
+                       f'<span style="width:{cb["pct"]}%"></span></div>'
+                       f'<div class="meta">{cb["n_cobertos"]}/{cb["n_topicos"]} '
+                       f'tópicos aprofundados ({cb["pct"]}%)</div>')
             cards.append(f"""<a class="item" href="{esc(href)}">
   <h3>{esc(mat["nome"])}</h3>
   <div class="meta">{esc(" · ".join(partes))}</div>
+  {cob}
 </a>""")
         n_top = sum(m["mapa"]["n_topicos"] for m in escopo["materias"] if m.get("mapa"))
         quantos = [f'{len(escopo["materias"])} matérias']
