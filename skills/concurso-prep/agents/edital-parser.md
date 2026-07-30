@@ -71,6 +71,13 @@ Procurar item "DOS OBJETOS DE AVALIAÇÃO" ou "CONHECIMENTOS":
 
 Para cada matéria identificada:
 - Nome da matéria
+- **`materia_id`**: slug estável e CURTO da matéria (minúsculas, sem acento, hífens).
+  Derive do núcleo do nome, não do nome inteiro: "Fundamentos, Organização, Gestão e
+  Marcos Operacionais do SUAS" → `fundamentos-suas`. É o identificador que liga o mapa
+  ao aprofundamento e ao site; sem ele, o join volta a ser por nome de pasta, que já
+  falhou em 5 das 9 matérias do vault real.
+- **`cargos`**: lista dos cargos que cobram esta matéria (use os nomes de cargo do
+  edital). É o que decide se o mapa vai para `_COMUM` ou para a pasta do cargo.
 - Tipo: `gerais` ou `especificos_comuns` ou `especificos_cargo`
 - Subitem do edital (ex: "20.2.2.1")
 - Lista de tópicos literais (preservar texto do edital exatamente)

@@ -107,6 +107,139 @@ def test_validate_estrutura_ok():
         assert out["total_problemas"] == 0, out
 
 
+def _montar_vault_com_materias(base: Path, com_mapa=True, materia_id=True):
+    """Vault mínimo em que o `.meta.json` DECLARA as matérias — é o cruzamento
+    que faltava: o validador nunca lia `materias[]`."""
+    b = _montar_vault(base)
+    meta = json.loads((b / ".meta.json").read_text(encoding="utf-8"))
+    meta["materias"] = [{"nome": "Língua Portuguesa", "topicos": ["a"]}]
+    meta["materias_por_cargo"] = {
+        "EDAS": [{"nome": "Serviço Social", "topicos": ["b"]}]}
+    (b / ".meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    fm_id = "materia_id: lingua-portuguesa\n" if materia_id else ""
+    (b / "EDAS/03-MAPAS-MATERIAS/01-lingua-portuguesa.md").write_text(
+        f"---\n{fm_id}---\n# Mapa\n**Estimativa**: 40 questoes\n", encoding="utf-8")
+    if com_mapa:
+        fm2 = "materia_id: servico-social\n" if materia_id else ""
+        (b / "EDAS/03-MAPAS-MATERIAS/06-servico-social.md").write_text(
+            f"---\n{fm2}---\n# Mapa\n**Estimativa**: 60 questoes\n", encoding="utf-8")
+    return b
+
+
+def test_validate_acusa_materia_sem_mapa():
+    """O check que não existia. `check_soma_questoes` era estruturalmente cego a
+    isto: soma os mapas que EXISTEM e aborta com INFO quando não acha nenhum, de
+    modo que zero mapas gerados passava como OK."""
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_vault_com_materias(Path(d), com_mapa=False)
+        out = json.loads(_run_validate(b).stdout)
+        cob = out["resultados"]["cobertura_mapas"]
+        assert any(i.startswith("FALTA") and "Serviço Social" in i for i in cob), cob
+        assert out["total_problemas"] > 0
+
+
+def test_validate_ok_quando_toda_materia_tem_mapa():
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_vault_com_materias(Path(d))
+        cob = json.loads(_run_validate(b).stdout)["resultados"]["cobertura_mapas"]
+        assert not [i for i in cob if not i.startswith("INFO")], cob
+
+
+def test_validate_le_materias_por_cargo_tambem():
+    """Nenhum dos dois lugares é completo sozinho: no SEDES `materias[]` só traz
+    as de um cargo; no BB não há `materias_por_cargo` e faltam 3 matérias."""
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_vault_com_materias(Path(d))
+        meta = json.loads((b / ".meta.json").read_text(encoding="utf-8"))
+        assert len(vo.materias_do_meta(meta)) == 2   # 1 de cada lugar
+
+
+def test_validate_sugere_candidato_por_palavra_nao_por_prefixo():
+    """`fundamentos-suas` é o mapa certo de "Fundamentos, Organização, Gestão e
+    Marcos Operacionais do SUAS" — compartilham só "suas". E prefixo casava
+    lixo: sugeria `conhecimentos-df-…` para "Conhecimentos Específicos"."""
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_vault_com_materias(Path(d), materia_id=False)
+        meta = json.loads((b / ".meta.json").read_text(encoding="utf-8"))
+        meta["materias"] = [
+            {"nome": "Fundamentos, Organização, Gestão e Marcos Operacionais do SUAS"},
+            {"nome": "Conhecimentos Específicos — Agente Social"},
+        ]
+        meta.pop("materias_por_cargo")
+        (b / ".meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        (b / "EDAS/03-MAPAS-MATERIAS/04-fundamentos-suas.md").write_text(
+            "---\n---\n# M\n", encoding="utf-8")
+        cob = vo.check_cobertura_mapas(b, meta)
+        suas = [i for i in cob if "SUAS" in i]
+        assert suas and suas[0].startswith("AVISO"), suas
+        assert "fundamentos-suas" in suas[0]
+        agente = [i for i in cob if "Agente Social" in i]
+        assert agente and agente[0].startswith("FALTA"), agente
+
+
+def _montar_concurso_com_duplicatas(base: Path, iguais=True):
+    """Dois cargos com o MESMO mapa — o defeito que a 1.4.0 corrige na origem."""
+    b = base / "BB_2027"
+    corpo = "---\nmateria: \"Português\"\n---\n# Mapa\n\n## 1. Crase\n\n- [ ] regra\n"
+    for cargo in ("AGENTE-COMERCIAL", "AGENTE-DE-TECNOLOGIA"):
+        d = b / cargo / "03-MAPAS-MATERIAS"
+        d.mkdir(parents=True)
+        txt = corpo if iguais else corpo + f"\n<!-- {cargo} -->\n" * 40
+        (d / "01-lingua-portuguesa.md").write_text(txt, encoding="utf-8")
+    # só um cargo cobra esta: não pode ser tocada
+    (b / "AGENTE-COMERCIAL/03-MAPAS-MATERIAS/08-vendas.md").write_text(
+        corpo, encoding="utf-8")
+    (b / "_COMUM").mkdir(parents=True, exist_ok=True)
+    (b / "00-INDICE.md").write_text(
+        "- [[AGENTE-COMERCIAL/03-MAPAS-MATERIAS/01-lingua-portuguesa|Português]]\n",
+        encoding="utf-8")
+    return b
+
+
+def _rodar_consolidar(b, *extra):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "consolidar_mapas_comuns.py"),
+         "--concurso-dir", str(b)] + list(extra), capture_output=True, text=True)
+
+
+def test_consolidar_dry_run_nao_move():
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_concurso_com_duplicatas(Path(d))
+        out = _rodar_consolidar(b)
+        assert out.returncode == 0, out.stderr
+        assert (b / "AGENTE-COMERCIAL/03-MAPAS-MATERIAS/01-lingua-portuguesa.md").exists()
+        assert not (b / "_COMUM/03-MAPAS-COMUNS").exists()
+
+
+def test_consolidar_junta_duplicata_e_conserta_o_wikilink():
+    """Mover sem reescrever o wikilink deixa o vault cheio de link quebrado —
+    os índices apontam para o mapa pelo caminho completo."""
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_concurso_com_duplicatas(Path(d))
+        out = _rodar_consolidar(b, "--aplicar")
+        assert out.returncode == 0, out.stderr
+        assert (b / "_COMUM/03-MAPAS-COMUNS/01-lingua-portuguesa.md").exists()
+        for cargo in ("AGENTE-COMERCIAL", "AGENTE-DE-TECNOLOGIA"):
+            assert not (b / cargo / "03-MAPAS-MATERIAS/01-lingua-portuguesa.md").exists()
+        # matéria de um cargo só fica onde está
+        assert (b / "AGENTE-COMERCIAL/03-MAPAS-MATERIAS/08-vendas.md").exists()
+        idx = (b / "00-INDICE.md").read_text(encoding="utf-8")
+        assert "_COMUM/03-MAPAS-COMUNS/01-lingua-portuguesa" in idx
+        assert "AGENTE-COMERCIAL/03-MAPAS-MATERIAS/01-lingua" not in idx
+
+
+def test_consolidar_recusa_quando_os_gemeos_divergem():
+    """Conteúdos diferentes podem ser matérias diferentes com o mesmo nome de
+    arquivo. Escolher um no palpite apagaria trabalho — vira pendência."""
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_concurso_com_duplicatas(Path(d), iguais=False)
+        out = _rodar_consolidar(b, "--aplicar")
+        assert out.returncode == 2
+        assert "divergem" in out.stderr
+        assert (b / "AGENTE-COMERCIAL/03-MAPAS-MATERIAS/01-lingua-portuguesa.md").exists()
+        assert (b / "AGENTE-DE-TECNOLOGIA/03-MAPAS-MATERIAS/01-lingua-portuguesa.md").exists()
+
+
 def test_validate_soma_divergente():
     with tempfile.TemporaryDirectory() as d:
         b = _montar_vault(Path(d), total_q=100, est1=40, est2=30)  # soma 70 != 100

@@ -1,4 +1,9 @@
 ---
+tipo: mapa-materia
+materia: "{{MATERIA_NOME}}"
+materia_id: {{MATERIA_ID}}
+cargos: [{{CARGOS}}]
+subitem_edital: "{{SUBITEM_EDITAL}}"
 tags:
   - concurso/{{ORGAO_SLUG}}/{{ANO}}
   - materia/{{MATERIA_SLUG}}

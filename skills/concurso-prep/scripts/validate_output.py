@@ -20,6 +20,7 @@ import argparse
 import json
 import re
 import sys
+import unicodedata
 from datetime import date, datetime
 from pathlib import Path
 
@@ -89,6 +90,111 @@ def check_structure(root: Path) -> list[str]:
     for path in required:
         if not (root / path).exists():
             issues.append(f"FALTA: {path}")
+    return issues
+
+
+def materias_do_meta(meta: dict) -> list[dict]:
+    """Todas as matérias do concurso, de `materias[]` e de `materias_por_cargo`.
+
+    Os dois lugares existem e nenhum é completo sozinho: no SEDES, `materias[]`
+    só traz as do AGENTE-SOCIAL e o resto vive em `materias_por_cargo`; no BB
+    não há `materias_por_cargo` e faltam 3 matérias inteiras. Ler só um dos dois
+    é o que fazia a checagem passar por cima do buraco.
+    """
+    achadas, vistos = [], set()
+    fontes = list(meta.get("materias") or [])
+    for lista in (meta.get("materias_por_cargo") or {}).values():
+        fontes.extend(lista or [])
+    for m in fontes:
+        if not isinstance(m, dict):
+            continue
+        nome = (m.get("nome") or "").strip()
+        chave = (m.get("materia_id") or slug_simples(nome))
+        if not chave or chave in vistos:
+            continue
+        vistos.add(chave)
+        achadas.append({"nome": nome, "materia_id": chave})
+    return achadas
+
+
+def slug_simples(texto: str) -> str:
+    t = unicodedata.normalize("NFKD", texto or "")
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    return re.sub(r"[^a-z0-9]+", "-", t).strip("-")
+
+
+# palavras que não distinguem uma matéria de outra
+_VAZIAS = {"de", "do", "da", "dos", "das", "e", "em", "no", "na", "para", "a", "o",
+           "conhecimentos", "especificos", "fundamentos", "nocoes", "geral", "gerais"}
+
+
+def tokens_uteis(slug: str) -> set[str]:
+    return {t for t in slug.split("-") if len(t) > 2 and t not in _VAZIAS}
+
+
+def check_cobertura_mapas(root: Path, meta: dict) -> list[str]:
+    """Toda matéria do edital tem mapa de estudo?
+
+    Este check não existia, e é por isso que o buraco passou: a Etapa 5 gera um
+    mapa por matéria, mas se um subagent falha (2 retries e segue) nada depois
+    confere. Pior: `check_soma_questoes` é estruturalmente cego a isso — ele
+    soma os mapas que EXISTEM, e aborta com INFO quando não acha nenhum, de modo
+    que zero mapas gerados passava como OK.
+    """
+    materias = materias_do_meta(meta)
+    if not materias:
+        return ["INFO: .meta.json sem materias[]; pulando cobertura de mapas"]
+
+    achados = {}
+    for pasta in ("03-MAPAS-MATERIAS", "03-MAPAS-COMUNS"):
+        for md in root.glob(f"*/{pasta}/*.md"):
+            if re.match(r"^(00-INDICE|99-Status)", md.stem, re.IGNORECASE):
+                continue
+            fm = {}
+            try:
+                txt = md.read_text(encoding="utf-8")
+                m = re.match(r"^---\s*\n(.*?)\n---\s*\n", txt, re.DOTALL)
+                if m:
+                    for linha in m.group(1).split("\n"):
+                        if ":" in linha:
+                            k, _, v = linha.partition(":")
+                            fm[k.strip()] = v.strip().strip('"').strip("'")
+            except OSError:
+                pass
+            mid = fm.get("materia_id") or slug_simples(
+                re.sub(r"^\d{2}[-_ ]+", "", md.stem))
+            achados[mid] = md
+
+    issues = []
+    for mat in materias:
+        if mat["materia_id"] in achados:
+            continue
+        # Candidato por sobreposição de PALAVRAS, não por prefixo: o nome do
+        # edital é longo ("Conhecimentos Específicos — Agente Social") e o do
+        # arquivo é curto, então prefixo casava lixo — sugeria
+        # `conhecimentos-df-legislacao-primeiros-socorros` para "Conhecimentos
+        # Específicos", só porque os dois começam com "conhecimentos".
+        # Duas palavras em comum, OU o nome curto do arquivo inteiramente contido
+        # no nome longo do edital — `fundamentos-suas` compartilha só "suas" com
+        # "Fundamentos, Organização, Gestão e Marcos Operacionais do SUAS", e é
+        # o mapa certo.
+        alvo = tokens_uteis(mat["materia_id"])
+        parecidos = [k for k in achados
+                     if len(alvo & tokens_uteis(k)) >= 2
+                     or (tokens_uteis(k) and tokens_uteis(k) <= alvo)]
+        if parecidos:
+            issues.append(f"AVISO: matéria {mat['nome']!r} não tem mapa com "
+                          f"`materia_id: {mat['materia_id']}` — há candidato por "
+                          f"nome parecido ({', '.join(parecidos)}); grave o "
+                          f"`materia_id` no frontmatter do mapa")
+        else:
+            issues.append(f"FALTA: matéria {mat['nome']!r} do edital não tem mapa "
+                          f"de estudo em nenhum escopo")
+
+    orfaos = [k for k in achados if k not in {m["materia_id"] for m in materias}]
+    for o in sorted(orfaos):
+        issues.append(f"INFO: mapa {achados[o].name!r} não corresponde a nenhuma "
+                      f"matéria do .meta.json")
     return issues
 
 
@@ -272,6 +378,7 @@ def main():
         "placeholders": check_placeholders(args.path),
         "wikilinks": check_wikilinks(args.path),
         "soma_questoes": check_soma_questoes(args.path, meta, args.tolerancia),
+        "cobertura_mapas": check_cobertura_mapas(args.path, meta),
         "pdfs": check_pdfs(args.path),
     }
     if meta.get("_erro"):
