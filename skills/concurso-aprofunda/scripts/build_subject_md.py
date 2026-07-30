@@ -61,7 +61,24 @@ def preencher_template(tpl: str, ctx: dict) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mapa", type=Path, required=True)
+    ap.add_argument("--mapa", type=Path, default=None,
+                    help="mapa-localizacao.json do book_index. Dispensável com "
+                         "--proprio, que não tem livro para localizar.")
+    ap.add_argument("--assuntos", type=Path, default=None,
+                    help="arquivo com um assunto por linha. Entrada de --proprio, "
+                         "que não passa por localização em livro.")
+    ap.add_argument("--proprio", action="store_true",
+                    help="material escrito do zero, sem fonte externa. Gera "
+                         "{nivel}--proprio e usa o template sem páginas/citações.")
+    ap.add_argument("--materia", default="",
+                    help="nome da matéria. Vem do mapa quando há --mapa; com "
+                         "--assuntos precisa ser informado.")
+    ap.add_argument("--materia-id", default="",
+                    help="slug estável da matéria, o join com o mapa do edital")
+    ap.add_argument("--topico-id", default="",
+                    help="slug do tópico do mapa a que estes assuntos pertencem")
+    ap.add_argument("--topico", default="",
+                    help="título legível do tópico, para conferência humana")
     ap.add_argument("--out-dir", type=Path, required=True)
     ap.add_argument("--concurso", default="")
     ap.add_argument("--template", type=Path, default=PADRAO_TEMPLATE)
@@ -82,48 +99,93 @@ def main():
                     help='JSON {"Assunto": "alta|media|base"} para classificar os assuntos')
     ap.add_argument("--prioridade-default", default="media",
                     choices=["alta", "media", "base"])
+    ap.add_argument("--forcar", action="store_true",
+                    help="regerar por cima de arcabouço já existente. Faz backup\n"
+                         ".md.bak antes — o .md guarda o resumo escrito à mão.")
     ap.add_argument("--so-encontrados", action="store_true",
                     help="não gerar arcabouço para assuntos não localizados")
     args = ap.parse_args()
 
-    mapa = json.loads(args.mapa.read_text(encoding="utf-8"))
+    if not args.mapa and not args.assuntos:
+        sys.exit("erro: informe --mapa (localização em livro) ou --assuntos "
+                 "(lista direta, usada com --proprio).")
+
+    if args.mapa:
+        mapa = json.loads(args.mapa.read_text(encoding="utf-8"))
+    else:
+        # Sem livro não há localização. O mapa sintético traz confiança
+        # "sem_fonte" — e NÃO "nao_encontrado": um material deliberadamente sem
+        # livro não pode se disfarçar de falha de localização, que é o que a
+        # regra de honestidade proíbe.
+        # Aceita TXT (um assunto por linha) e o MESMO JSON que o book_index.py
+        # consome (`{"materia", "assuntos": [...]}`). Os dois scripts liam
+        # formatos diferentes para a mesma lista, o que obrigava a converter à
+        # mão entre uma etapa e a seguinte.
+        bruto = args.assuntos.read_text(encoding="utf-8").strip()
+        materia_json = ""
+        if bruto.startswith("{"):
+            spec = json.loads(bruto)
+            assuntos = spec.get("assuntos", [])
+            materia_json = spec.get("materia", "")
+        else:
+            assuntos = [l.strip() for l in bruto.split("\n") if l.strip()]
+        mapa = {"materia": materia_json, "livro": "",
+                "localizacoes": {a: {"confianca": "sem_fonte"} for a in assuntos}}
+
     prioridades = {}
     if args.prioridades and args.prioridades.exists():
         prioridades = json.loads(args.prioridades.read_text(encoding="utf-8"))
+
     tpl_path = args.template
-    if args.nivel == "detalhado" and args.template == PADRAO_TEMPLATE:
-        alt = PADRAO_TEMPLATE.parent / "assunto-detalhado.md.tpl"
+    if args.template == PADRAO_TEMPLATE:
+        nome = {(False, "padrao"):    "assunto.md.tpl",
+                (False, "detalhado"): "assunto-detalhado.md.tpl",
+                (True,  "padrao"):    "assunto-proprio.md.tpl",
+                (True,  "detalhado"): "assunto-proprio-detalhado.md.tpl"}[
+                    (bool(args.proprio), args.nivel)]
+        alt = PADRAO_TEMPLATE.parent / nome
         if alt.exists():
             tpl_path = alt
     tpl = tpl_path.read_text(encoding="utf-8")
-    materia = mapa.get("materia", "")
+    materia = args.materia or mapa.get("materia", "")
     livro = mapa.get("livro", "")
 
-    fontes = [f.strip() for f in args.fontes.split(",") if f.strip()]
-    if not fontes:
-        fontes = [livro] if livro else ["fonte"]
-    fontes_slug = [s.strip() for s in args.fontes_slug.split(",") if s.strip()]
-    if fontes_slug and len(fontes_slug) != len(fontes):
-        sys.exit(f"erro: --fontes-slug tem {len(fontes_slug)} item(ns) e --fontes tem "
-                 f"{len(fontes)}; devem casar em número e ordem.")
-    aprof_id = id_aprofundamento(fontes, args.nivel, fontes_slug or None)
-
-    # não gravar path ruim no vault: avisa e pede slug explícito
     avisos = []
-    if not fontes_slug:
-        for f in fontes:
-            s = slug_fonte(f)
-            if slug_suspeito(s):
-                avisos.append(
-                    f"slug '{s}' derivado de {f!r} não identifica a fonte — "
-                    f"rode de novo com --fontes-slug")
+    if args.proprio:
+        fontes, fontes_slug = [], []
+        aprof_id = id_aprofundamento([], args.nivel, proprio=True)
+    else:
+        fontes = [f.strip() for f in args.fontes.split(",") if f.strip()]
+        if not fontes:
+            fontes = [livro] if livro else ["fonte"]
+        fontes_slug = [s.strip() for s in args.fontes_slug.split(",") if s.strip()]
+        if fontes_slug and len(fontes_slug) != len(fontes):
+            sys.exit(f"erro: --fontes-slug tem {len(fontes_slug)} item(ns) e --fontes tem "
+                     f"{len(fontes)}; devem casar em número e ordem.")
+        aprof_id = id_aprofundamento(fontes, args.nivel, fontes_slug or None)
+
+        # não gravar path ruim no vault: avisa e pede slug explícito
+        if not fontes_slug:
+            for f in fontes:
+                s = slug_fonte(f)
+                if slug_suspeito(s):
+                    avisos.append(
+                        f"slug '{s}' derivado de {f!r} não identifica a fonte — "
+                        f"rode de novo com --fontes-slug")
+
+    if not args.topico_id:
+        avisos.append("sem --topico-id: o assunto nasce sem vínculo com o tópico do "
+                      "edital, e o site não vai conseguir agrupá-lo por tópico")
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     gerados, pulados, a_preencher = [], [], []
+    ja_existiam, forcados = [], []
 
     for assunto, loc in mapa.get("localizacoes", {}).items():
         conf = loc.get("confianca", "nao_encontrado")
-        if conf == "nao_encontrado":
+        if conf == "sem_fonte":
+            paginas, metodo, aviso = "", "", ""
+        elif conf == "nao_encontrado":
             if args.so_encontrados:
                 pulados.append(assunto)
                 continue
@@ -157,12 +219,21 @@ def main():
             "PRIORIDADE": prioridades.get(assunto, args.prioridade_default),
             "METODO_LOCALIZACAO": metodo,
             "AVISO_CONFERIR": aviso,
-            "TAG_MATERIA": slug(materia),
+            # tag da matéria some quando não há matéria, em vez de deixar um item
+            # vazio no meio da lista YAML (`[a, , b]`)
+            "TAG_MATERIA": f", {slug(materia)}" if slug(materia) else "",
             "TAG_ASSUNTO": sassunto,
             "SLUG_ASSUNTO": base,
             "APROFUNDAMENTO": aprof_id,
             "NIVEL": args.nivel,
             "FONTES": ", ".join(fontes) if fontes else livro,
+            # O vínculo com o plano do edital, montado como YAML aqui e não no
+            # template: sem tópico o campo tem de sair `[]`, não `[""]` — lista
+            # vazia é "ainda não vinculado", e uma lista com string vazia é lixo
+            # que o leitor teria de aprender a ignorar.
+            "MATERIA_ID": args.materia_id or slug(materia),
+            "TOPICO_ID": f"[{args.topico_id}]" if args.topico_id else "[]",
+            "TOPICO": f'["{args.topico}"]' if args.topico else "[]",
             # placeholders que o AGENTE preenche (Modelo 2):
             "RELEVANCIA_CONCURSO": "{RELEVANCIA_CONCURSO}",
             "RESUMO": "{RESUMO}",
@@ -174,12 +245,29 @@ def main():
             "DIVERGENCIAS": "{DIVERGENCIAS}",
             "SUBTOPICOS": "{SUBTOPICOS}",
             "CITACOES": "{CITACOES}",
+            "ONDE_CONFERIR": "{ONDE_CONFERIR}",
             "PEGADINHAS": "{PEGADINHAS}",
             "RELACIONADOS": "{RELACIONADOS}",
             "NORMA": "{NORMA}",
         }
         conteudo = preencher_template(tpl, ctx)
         destino = subdir / f"{base}.md"
+
+        # NÃO sobrescrever conteúdo já preenchido.
+        #
+        # Este arquivo é onde mora o resumo escrito à mão — o ativo mais caro do
+        # vault. Até aqui o script gravava por cima sem perguntar, então rodar a
+        # matéria de novo trocava o texto pronto por um arcabouço com os
+        # {PLACEHOLDER} de volta. O risco explode no modo seletivo (aprofundar um
+        # tópico por vez), que é justamente reexecutar a mesma matéria várias
+        # vezes. Regenerar de propósito exige --forcar, e mesmo assim com backup.
+        if destino.exists() and not args.forcar:
+            ja_existiam.append(str(destino))
+            continue
+        if destino.exists():
+            destino.with_suffix(".md.bak").write_text(
+                destino.read_text(encoding="utf-8"), encoding="utf-8")
+            forcados.append(str(destino))
         destino.write_text(conteudo, encoding="utf-8")
         gerados.append(str(destino))
 
@@ -193,6 +281,9 @@ def main():
         "materia": materia, "livro": livro,
         "aprofundamento": aprof_id, "nivel": args.nivel, "fontes": fontes,
         "gerados": len(gerados), "pulados": pulados,
+        # separados de propósito: "pulado" é assunto sem localização no livro;
+        # "ja_existia" é arcabouço preservado — dizer só "pulou" confundiria os dois
+        "ja_existiam": ja_existiam, "forcados": forcados,
         "avisos": avisos,
         "a_preencher": a_preencher,
     }
