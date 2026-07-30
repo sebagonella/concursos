@@ -255,6 +255,25 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
   font-size: .8rem; color: var(--grafite-fraco);
 }
 
+/* ---------- celular ----------
+   O `.papel` mantinha 2rem/2.25rem de padding em qualquer largura: numa tela de
+   380px são ~72px só de margem interna, quase um quinto do espaço útil. O site é
+   para estudar no celular e no tablet da rede doméstica. */
+@media (max-width: 560px) {
+  body { font-size: 15px; }
+  .folha { margin: 1rem auto 3rem; padding: 0 .75rem; }
+  .papel { padding: 1.15rem 1.15rem 1.5rem; }
+  h1 { font-size: 1.6rem; }
+  .topo-interno { padding: .6rem .75rem; gap: .5rem; }
+  .topo .trilha { font-size: .76rem; width: 100%; }
+  .cartao { padding: .85rem .9rem; }
+  .ficha { grid-template-columns: 1fr 1fr; gap: .7rem; }
+  /* o recuo do subtópico não cabe: alinha com o título do tópico */
+  .lista-topicos .subtopicos, .lista-topicos .meta { margin-left: 0; }
+  .lista-secoes li { flex-wrap: wrap; }
+  .lista-secoes .meta { margin-left: 1.6em; text-align: left; width: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

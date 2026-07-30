@@ -65,6 +65,72 @@ Os nomes de arquivo repetem o identificador porque o Obsidian resolve wikilinks 
 
 A convenção é implementada uma única vez, em `skills/concurso-aprofunda/scripts/aprofundamento_id.py`. Como as skills são instaladas de forma independente, a `concurso-publica` não pode importá-la — tem uma **cópia sincronizada**, com teste de smoke nas duas pontas que falha se divergirem. Cópia com detector de drift foi preferida a um pacote compartilhado porque o instalador copia skills isoladas para `~/.claude/skills/`, sem resolução de dependências.
 
+### A arquitetura de informação do site
+
+O site espelha a organização do vault: `{concurso}/{comum|cargo}/`, com as seções
+numeradas e `materias/{materia}/{assunto}/`. O espelho é deliberado — é a estrutura
+que o usuário já navega no Obsidian, e inventar outra obrigaria a manter duas
+taxonomias na cabeça.
+
+**Hub e trilha, não árvore.** Não há sidebar com árvore de pastas. Cada nível é uma
+página que explica o que há embaixo, e a trilha no topo diz onde se está.
+Reproduzir o explorador do Obsidian no navegador não acrescentaria nada: quem abre o
+site vem consumir, não gerenciar.
+
+**Dois registros visuais.** As pastas numeradas do vault existem para ordenar no
+explorador de arquivos — `05-HISTORICO` vem antes de `06-SINERGIA` porque alguém
+escolheu os números. Espelhar essa numeração como *peso visual* faria "Sinergia"
+competir com "Crase". Por isso o que se **estuda** ganha card com progresso, e o que
+se **consulta** vira lista tipográfica, num registro mais quieto.
+
+**Uma matéria, duas visões.** O mapa de matéria e o aprofundamento cobrem o mesmo
+recorte por ângulos diferentes: o mapa é o plano do edital (tópicos e checklists), o
+aprofundamento é o conteúdo (resumo, páginas do livro, flashcards). Ficam na mesma
+página, em abas. Separá-los em duas seções obrigaria a saber em qual procurar.
+
+**O link fino tópico→assunto não é derivável, e por isso não é inventado.** Dos 203
+tópicos dos 24 mapas do vault, cerca de 18% casam com o slug de um assunto. As
+causas são legítimas: um tópico do edital pode explodir em vários assuntos (no SEDES,
+"Domínio da estrutura morfossintática" cobre 7); nas matérias aprofundadas por
+legislação o assunto **é** uma norma, então a relação é N:M e há tópico atendido por
+assunto de *outra* matéria; e assuntos reaproveitados de outro concurso mantêm o slug
+do edital de origem. O perigo não é a ausência de link — é o **falso negativo**: um
+tópico sem link lido como "não tem aprofundamento" quando ele existe com outro nome
+esconderia trabalho já feito. Aplica-se aqui a mesma regra de nunca fingir precisão
+que rege a localização no livro: sem casamento exato, a página não afirma nada. Quem
+quiser o link fino preenche um `mapa-aliases.json` opcional.
+
+**O pacote NotebookLM é página por assunto, não por pacote.** Existem 92 pacotes no
+vault e 72 assuntos: entre `padrao--X` e `detalhado--X` do mesmo assunto, só o prompt
+de áudio difere — o resto é nome de arquivo. Uma página por pacote daria ~95% de
+conteúdo repetido, então as versões viram abas. E é a única página do site cuja razão
+de existir é uma **ação**: o vault tem 92 roteiros prontos e um único assunto com
+mídia gerada, então o gargalo não é ter o roteiro, é executá-lo. Daí o botão de
+copiar em cada prompt.
+
+**Índices do vault são derivados, não republicados.** `00-INDICE.md` e `99-Status.md`
+existem para navegar no Obsidian; na web, a navegação do site **é** o índice, e o
+progresso do status vira a barra do hub do escopo. Republicá-los criaria uma segunda
+lista que envelhece — mas eles continuam sendo *lidos*, porque é deles que saem a
+ordenação das matérias e os selos de questões e prioridade (só 1 dos 24 mapas traz
+`estimativa_questoes` no frontmatter).
+
+**Rotas antes de renderizar.** O build tem dois passos: primeiro decide onde cada
+página vai morar e indexa os nomes de arquivo do vault, depois renderiza. A ordem é
+imposta pelo resolvedor de wikilinks — para virar `href`, `[[crase]]` precisa da URL
+de uma página que talvez ainda não tenha sido gerada. Com um passo só, o resolvedor
+não conseguia ver além dos assuntos irmãos da mesma matéria, e todo wikilink que
+atravessasse matéria ou apontasse para documento morria por construção. O índice tem
+três classes de alvo, porque nem todo alvo é página: página, artefato embutido
+(flashcards, que viram âncora do quiz) e arquivo copiado (mídia, anexo).
+
+Cuidado que vale registrar: o índice de nomes resolve por *basename*, e nomes repetem
+entre escopos (`lingua-portuguesa` existe no comum e em cada cargo do BB;
+`cronograma-macro.md` existe em três cargos do SEDES). Ele serve para **wikilink**,
+onde a ambiguidade é inerente ao formato. Link de **navegação** é sempre calculado da
+rota da própria página — usar o índice fazia o hub do cargo apontar para a matéria do
+comum e deixava a própria órfã.
+
 ### Deploy por sincronização de arquivos
 
 O container Docker serve o site por **bind mount**, não por cópia para dentro da imagem. Atualizar é `rsync`: sem rebuild, sem restart, sem downtime. Servir estático é I/O, não CPU — por isso 0.5 CPU e 128 MB bastam com folga para uso doméstico.

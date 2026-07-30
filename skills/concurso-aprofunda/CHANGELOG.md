@@ -2,6 +2,14 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.4.1] - 2026-07-30
+
+### Corrigido
+- **O pacote NotebookLM passa a emitir `notebooklm_url:`.** A `concurso-publica` só mostra o botão "Abrir no NotebookLM" quando essa chave está preenchida, mas o template **nunca a escrevia** — 0 dos 92 pacotes do vault a têm, e o botão era inalcançável em 100% dos casos. Não havia como o usuário preencher um campo que não existia. O teste que cobria isso escrevia a chave à mão no fixture, num pack de duas linhas que não se parece com o template real.
+- **`herdar_campos()` preserva o que o usuário digitou na regeneração.** A chave sozinha apagaria dado: o gerador reescreve o pacote sempre que o conteúdo muda, e acrescentar um campo faz TODO pacote existente contar como mudado — a URL colada à mão iria para o `.bak.md` e o botão desapareceria do site sem erro nenhum. `notebooklm_url` e `notebooklm_status` são os dois únicos campos que o gerador não sabe reconstruir; fontes, prompts, roteiro e perguntas ele reconstrói.
+
+> Os pacotes já no vault seguem sem a chave até serem regerados. `fix_notebooklm_packs.py` faz isso com backup, mas é escrita no vault e fica a critério do dono.
+
 ## [0.4.0] - 2026-07-29
 
 ### Modificado (BREAKING — identificador de aprofundamento)

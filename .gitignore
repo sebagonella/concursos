@@ -19,7 +19,9 @@ out/
 # Versões antigas e pacotes de entrega (artefatos locais, não fonte)
 old/
 deploy-*/
-site-model-*.json
+# só na raiz: modelo coletado durante o trabalho. O exemplo versionado vive em
+# skills/concurso-publica/examples/ e é fonte, não artefato local.
+/site-model-*.json
 
 # Instalação local das skills: .claude/skills e .claude/agents são CÓPIAS que o
 # scripts/install.sh gera a partir de skills/. A fonte é skills/ — versionar as

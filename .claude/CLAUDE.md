@@ -59,6 +59,14 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
   vira pendencia explicita para conferencia humana. Nao inventar pagina.
 - **O site e derivado, o vault e a fonte**: `concurso-publica` nunca escreve no
   vault; o progresso exibido e so leitura.
+- **O site espelha COMUM/cargo** (`{concurso}/{comum|cargo}/`). `00-INDICE.md` e
+  `99-Status.md` sao derivados, nao republicados — mas continuam sendo lidos (deles
+  saem a ordenacao das materias e os selos de questoes/prioridade).
+- **Nunca inferir o link mapa↔assunto por slug**: so ~18% dos topicos casam. Sem
+  casamento exato a pagina nao afirma nada; o link fino vem de `mapa-aliases.json`.
+- **Fixture tem de espelhar a saida real da skill anterior** — fixture que inventa o
+  que o gerador nao produz e teste que se autoconfirma (foi assim com o bug do
+  `_GERAL` e com a chave `notebooklm_url`).
 - **Cores so via variaveis de tema** no CSS (nada de hex fixo para cor de texto);
   toda variavel precisa existir nos dois temas — ha teste que barra isso.
 - **Deploy e sincronizacao**: bind mount + rsync, sem rebuild nem restart. Nao

@@ -330,8 +330,19 @@ ROTULO_NIVEL = {"detalhado": "Detalhado", "padrao": "Padrão"}
 
 
 def rotulo_aprof(ap: dict) -> str:
-    """Rótulo legível de um aprofundamento: fonte + nível."""
+    """Rótulo legível de um aprofundamento: fonte + nível.
+
+    O slug da fonte vem primeiro porque é curto e desenhado para ser lido
+    (`pestana`, `lei-8742`). O campo `fontes` do frontmatter costuma guardar o
+    **nome do arquivo** do livro, e truncá-lo em 42 caracteres produzia abas como
+    "A-Gramatica-para-Concursos-Fernando-Pest… · Detalhado", que não distinguem nada
+    quando há duas versões do mesmo livro.
+    """
     nivel = ROTULO_NIVEL.get(ap.get("nivel", ""), ap.get("nivel", ""))
+    slugs = ap.get("fontes_id") or []
+    if slugs:
+        bonito = " + ".join(s.replace("-", " ").title() for s in slugs)
+        return f"{bonito} · {nivel}"
     fontes = (ap.get("fontes") or "").strip()
     if fontes:
         curto = fontes if len(fontes) <= 42 else fontes[:40] + "…"
@@ -636,11 +647,12 @@ def selos_aprofundamento(assunto: dict) -> str:
 
     partes = []
 
-    # fontes
-    if n_fontes >= 1:
+    # Fonte só vira SELO quando há mais de uma — com uma única, o nome dela é dado,
+    # não estado, e vive na linha de contexto do card, junto das páginas do livro.
+    if n_fontes > 1:
         titulo = "; ".join(assunto.get("fontes") or [])
-        rot = "1 fonte" if n_fontes == 1 else f"{n_fontes} fontes"
-        partes.append(f'<span class="selo-aprof" title="{esc(titulo)}">📚 {rot}</span>')
+        partes.append(f'<span class="selo-aprof" title="{esc(titulo)}">'
+                      f'📚 {n_fontes} fontes</span>')
 
     # níveis — meia bolha (padrão) e/ou bolha cheia (detalhado)
     tem_padrao = "padrao" in niveis
@@ -660,8 +672,10 @@ def selos_aprofundamento(assunto: dict) -> str:
         partes.append(f'<span class="selo-aprof nivel-{cls}" title="{esc(titulo)}">'
                       f'{bolhas}{esc(rot)}</span>')
 
-    # mais de um aprofundamento no mesmo assunto
-    if n_aprof > 1:
+    # "N versões" só com mais de uma FONTE: com uma fonte, duas versões são
+    # exatamente "Padrão + Detalhado", que o selo de nível ao lado já disse — era
+    # a redundância mais visível do card antigo.
+    if n_aprof > 1 and n_fontes > 1:
         partes.append(f'<span class="selo-aprof" title="Versões deste assunto">'
                       f'⇄ {n_aprof} versões</span>')
 
@@ -669,13 +683,20 @@ def selos_aprofundamento(assunto: dict) -> str:
 
 
 def card_assunto(a: dict, href: str) -> str:
-    pag = (f'<span class="meta">págs. {esc(a["paginas_livro"])}</span>'
-           if a.get("paginas_livro") else "")
+    # Uma linha de contexto discreta: onde está no livro e de qual fonte veio. Selo
+    # é para estado (nível, o que já foi gerado); texto é para dado.
+    ctx = []
+    if a.get("paginas_livro"):
+        ctx.append(f'págs. {a["paginas_livro"]}')
+    fontes = a.get("fontes") or []
+    if len(fontes) == 1:
+        ctx.append(fontes[0])
+    pag = f'<span class="meta">{esc(" · ".join(ctx))}</span>' if ctx else ""
     return f"""<a class="item" href="{esc(href)}">
   <h3>{esc(a["titulo"])}</h3>
   {pag}
   {selos_aprofundamento(a)}
-  {selos_midia(a)}
+  {selos_midia(a, so_presentes=True)}
   {gabarito(a["progresso"], max_bolhas=8)}
 </a>"""
 
@@ -963,14 +984,30 @@ def pagina_escopo(escopo: dict, concurso: str, rotas: "Rotas", rota: str,
         cards = []
         for mat in escopo["materias"]:
             href = relativo(rota_irma(rota, "materias", mat["slug"]), rota)
+            # o que a matéria TEM, não zeros: matéria só com plano dizia
+            # "0 assuntos · 0 com áudio", que não informa nada
+            partes = []
+            if mat["n_assuntos"]:
+                partes.append(f'{mat["n_assuntos"]} assuntos')
+                if mat["n_com_podcast"]:
+                    partes.append(f'{mat["n_com_podcast"]} com áudio')
+            if mat.get("mapa"):
+                partes.append(f'{mat["mapa"]["n_topicos"]} tópicos do edital')
+            if mat.get("aprofundamento_em"):
+                partes.append("aprofundado no comum")
             cards.append(f"""<a class="item" href="{esc(href)}">
   <h3>{esc(mat["nome"])}</h3>
-  <div class="meta">{mat["n_assuntos"]} assuntos · {mat["n_com_podcast"]} com áudio</div>
+  <div class="meta">{esc(" · ".join(partes))}</div>
 </a>""")
+        n_top = sum(m["mapa"]["n_topicos"] for m in escopo["materias"] if m.get("mapa"))
+        quantos = [f'{len(escopo["materias"])} matérias']
+        if escopo["n_assuntos"]:
+            quantos.append(f'{escopo["n_assuntos"]} assuntos aprofundados')
+        if n_top:
+            quantos.append(f"{n_top} tópicos do edital")
         grupos.append(f"""<section class="grupo grupo-escopo">
   <header><h2>Matérias</h2>
-  <span class="quantos">{len(escopo["materias"])} matérias ·
-  {escopo["n_assuntos"]} assuntos</span></header>
+  <span class="quantos">{esc(" · ".join(quantos))}</span></header>
   <div class="grade">{"".join(cards)}</div>
 </section>""")
 
@@ -1104,8 +1141,11 @@ def pagina_capa(modelo: dict, rotas: "Rotas", rota: str) -> str:
     cards = []
     for escopo in modelo.get("escopos") or modelo["cargos"]:
         href = relativo(rota_irma(rota, escopo["slug"]), rota)
-        n = [f'{escopo["n_materias"]} matéria(s)',
-             f'{escopo["n_assuntos"]} assunto(s)']
+        # só o que o escopo TEM: cargo sem aprofundamento próprio dizia
+        # "0 assunto(s)", que ocupa a linha sem informar nada
+        n = [f'{escopo["n_materias"]} matéria(s)']
+        if escopo["n_assuntos"]:
+            n.append(f'{escopo["n_assuntos"]} assuntos aprofundados')
         n_docs = sum(s["n_documentos"] for s in escopo.get("secoes") or [])
         if n_docs:
             n.append(f"{n_docs} documento(s)")
@@ -1234,8 +1274,12 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
     plano: list[dict] = []
 
     rota_capa = f"{slug_conc}/index.html"
-    # o 00-INDICE do vault é o índice do concurso: quem aponta para ele vai à capa
-    rotas.registrar(rota_capa, modelo["concurso"], "00-INDICE")
+    # Só o nome do concurso. `00-INDICE` NÃO é registrado: o vault tem esse nome em
+    # meia dúzia de lugares (raiz do concurso, materiais, leis-baixadas, mapas), e
+    # registrá-lo aqui fazia todo `[[00-INDICE]]` do vault — inclusive o das leis —
+    # cair na capa do concurso. Wikilink resolvido para o lugar errado é pior que
+    # wikilink morto: o morto avisa, o errado não.
+    rotas.registrar(rota_capa, modelo["concurso"])
     plano.append({"rota": rota_capa, "tipo": "capa"})
 
     for escopo in modelo.get("escopos") or modelo["cargos"]:
@@ -1260,7 +1304,10 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
                 plano.append({"rota": rota_sec, "tipo": "documento", "doc": doc,
                               "secao": secao, "escopo": escopo,
                               "trilha_meio": (rota_esc, rotulo_esc),
-                              "rota_capa": rota_capa})
+                              "rota_capa": rota_capa,
+                              # a seção foi colapsada: a rota da página É a da seção,
+                              # então é aqui que os anexos dela seriam copiados
+                              "colapsada": True})
                 continue
 
             plano.append({"rota": rota_sec, "tipo": "secao", "secao": secao,
@@ -1390,10 +1437,12 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
             html_pag = pagina_documento(item["doc"], item["secao"], item["escopo"],
                                         concurso, rotas, rota, item["trilha_meio"],
                                         rota_capa)
-            # seção de documento único não tem página de índice, então é aqui que
-            # os anexos dela (se houver) seriam copiados — hoje não há, por
-            # construção, mas manter a chamada evita anexo órfão se a regra mudar
-            copiar_anexos(item["secao"], destino, rota)
+            # Só quando a seção foi colapsada neste documento: aí a rota da página é
+            # a da seção e `rota_anexo` acerta o destino. Copiar aqui sempre fazia
+            # CADA documento receber uma cópia inteira dos anexos da seção — 685
+            # PDFs no vault real em vez de 78, e o site pulando de 260 MB para 534.
+            if item.get("colapsada"):
+                copiar_anexos(item["secao"], destino, rota)
         elif tipo == "materia":
             html_pag = pagina_materia(item["materia"], concurso,
                                       Path(item["materia"]["dir"]),

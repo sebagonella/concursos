@@ -87,4 +87,4 @@ A localização vem com score. Assuntos não encontrados ou de baixa confiança 
 - **v0.1.0**: Subsistemas A + B + flashcards nativos.
 - **Próxima**: Ponte NotebookLM em duas camadas (manual garantido + automação opcional via `notebooklm-py`), gerando podcast e mapa mental por assunto.
 
-Versão atual: **0.4.0** (identificador de aprofundamento enxuto e único por concurso: `{nivel}--{fonte}` na pasta, `--{CONCURSO}` no arquivo).
+Versão atual: **0.4.1** (o pacote NotebookLM passa a emitir `notebooklm_url:`, herdando o valor digitado à mão nas regenerações).

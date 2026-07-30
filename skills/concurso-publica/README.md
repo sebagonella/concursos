@@ -1,8 +1,11 @@
 # concurso-publica
 
-Etapa 3: transforma a estrutura de um concurso no vault em **site estático** com mídias embutidas (podcast, mapa mental, vídeo, report) e quiz de flashcards. Uso local/rede doméstica; site só leitura (o vault é a fonte de verdade).
-
-**Status: v0.2.0 — coletor + gerador de páginas + quiz implementados (20/20 testes).** Ver SKILL.md para o roadmap das entregas.
+Etapa 3: transforma a estrutura de um concurso no vault em **site estático**
+navegável. Publica todo o conteúdo abaixo da pasta do concurso — edital, análise da
+banca, cronograma, mapas de matéria, materiais e leis, histórico, sinergia,
+discursiva, títulos e o aprofundamento — com mídias embutidas (podcast, mapa mental,
+vídeo, report), quiz de flashcards e os pacotes do NotebookLM. Uso local/rede
+doméstica; site só leitura (o vault é a fonte de verdade).
 
 ```bash
 # coletar o modelo do site a partir de um concurso
@@ -14,4 +17,10 @@ python scripts/site_collector.py --concurso-dir <.../CONCURSOS/SEDES_2026> --out
 python scripts/site_builder.py --concurso-dir <.../CONCURSOS/SEDES_2026> --out out/site
 python -m http.server -d out/site 8000     # conferir localmente
 ```
-Versão atual: **0.6.0** (site servido na raiz em `concursos.casa:8088`; leitura do padrão de pastas atual da `concurso-aprofunda`).
+
+A saída espelha o vault: `{concurso}/{comum|cargo}/`, com as seções numeradas e
+`materias/{materia}/{assunto}/`. Cada matéria tem duas visões — **Plano** (o mapa do
+edital) e **Estudo** (os assuntos aprofundados).
+
+Versão atual: **0.7.0** (escopos COMUM/cargo, todo o conteúdo do concurso, mapas de
+matéria na aba Plano e pacote NotebookLM como página; 73 testes).

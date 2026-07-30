@@ -1,0 +1,296 @@
+{
+  "concurso": "SEDES_2026",
+  "meta": {
+    "orgao": "Secretaria de Estado de Desenvolvimento Social do Distrito Federal",
+    "ano": 2026,
+    "banca": "Instituto Quadrix",
+    "modo": "oficial",
+    "datas_chave": {
+      "publicacao_edital": "2026-05-13",
+      "pagamento_limite": "2026-07-14",
+      "homologacao": "2026-08-05",
+      "divulgacao_locais": "2026-09-01",
+      "prova_data": "2026-09-06",
+      "gabarito_preliminar": "2026-09-09",
+      "resultado_final": "2027-04-02"
+    },
+    "estrutura_prova": {
+      "objetiva": {
+        "presente": true,
+        "total_questoes": 60,
+        "conhecimentos_gerais": {
+          "qtd": 20,
+          "peso": 1,
+          "pontos": 20
+        },
+        "conhecimentos_especificos": {
+          "qtd": 40,
+          "peso": 2,
+          "pontos": 80
+        },
+        "duracao_horas": 4,
+        "turno": "vespertino",
+        "eliminacao": "menos de 10 pts em gerais OU menos de 40 pts em específicos"
+      },
+      "discursiva": {
+        "presente": true,
+        "tipo": "redação dissertativo-argumentativa",
+        "linhas_min": 20,
+        "linhas_max": 30,
+        "pontos": 100,
+        "nota_minima": 50,
+        "criterios": {
+          "CAC": 7,
+          "OT": 1.5,
+          "DLP": 1.5
+        }
+      },
+      "titulos": {
+        "presente": false,
+        "obs": "exclusiva para EDAS"
+      }
+    }
+  },
+  "resumo": {
+    "n_escopos": 4,
+    "n_cargos": 3,
+    "n_materias": 12,
+    "n_assuntos": 32,
+    "n_documentos": 16,
+    "n_anexos": 47
+  },
+  "escopos": [
+    {
+      "tipo": "comum",
+      "nome": "_COMUM",
+      "slug": "comum",
+      "progresso": {
+        "total": 68,
+        "feitos": 0
+      },
+      "secoes": [
+        {
+          "ordinal": "01",
+          "rotulo": "Edital",
+          "slug": "edital",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/01-EDITAL",
+          "documentos": [
+            {
+              "arquivo": "analise-banca.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/01-EDITAL/analise-banca.md",
+              "slug": "analise-banca",
+              "titulo": "🎯 Análise da Banca — Instituto Quadrix",
+              "resumo": "O Instituto Quadrix atua em concursos desde 1997 (como Quadrix Tecnologia) e, desde 2005, como organização sem fins lucrativos. É banca recorrente em conselhos …",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 8
+            }
+          ],
+          "anexos": [
+            {
+              "arquivo": "edital-original.pdf",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/01-EDITAL/edital-original.pdf",
+              "extensao": "pdf",
+              "bytes": 912745,
+              "subpasta": ""
+            }
+          ],
+          "n_documentos": 3,
+          "n_anexos": 1,
+          "bytes_anexos": 912745
+        }
+      ],
+      "materias": [
+        {
+          "nome": "Direitos e Violações (EDAS)",
+          "doc_banca": null,
+          "slug": "direitos-violacoes",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes",
+          "docs_apoio": [
+            "00-INDICE-DIREITOS-VIOLACOES.md"
+          ],
+          "mapa_localizacao": null,
+          "aliases_mapa": {},
+          "assuntos": [
+            {
+              "slug": "crimes-preconceito-raca-cor",
+              "titulo": "Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF)",
+              "prioridade": null,
+              "paginas_livro": null,
+              "n_aprofundamentos": 1,
+              "niveis": [
+                "padrao"
+              ],
+              "fontes": [
+                "Lei nº 7.716/1989",
+                "STF ADO 26/MI 4733"
+              ],
+              "n_fontes": 2,
+              "aprofundamentos": [
+                {
+                  "slug": "crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026",
+                  "slug_assunto": "crimes-preconceito-raca-cor",
+                  "aprofundamento": "padrao--lei-7716+stf-ado-26",
+                  "rotulo": "Padrão — lei-7716 + stf-ado-26",
+                  "nivel": "padrao",
+                  "n_fontes_id": 2,
+                  "fontes_id": [
+                    "lei-7716",
+                    "stf-ado-26"
+                  ],
+                  "fontes": "Lei nº 7.716/1989, STF ADO 26/MI 4733",
+                  "titulo": "Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF)",
+                  "prioridade": null,
+                  "status": "revisar",
+                  "paginas_livro": null,
+                  "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes/assuntos/crimes-preconceito-raca-cor/padrao--lei-7716+stf-ado-26/crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md",
+                  "midias": {
+                    "podcast": null,
+                    "video": null,
+                    "slides": null,
+                    "mapa_mental": null,
+                    "infografico": null,
+                    "report": null,
+                    "teste": null,
+                    "tabela": null
+                  },
+                  "flashcards": {
+                    "obsidian": "flashcards-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md",
+                    "anki": "flashcards-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.csv",
+                    "n_cards": 16
+                  },
+                  "notebooklm_url": null,
+                  "progresso": {
+                    "total": 0,
+                    "feitos": 0
+                  },
+                  "tem_pack_notebooklm": true,
+                  "pack_notebooklm": {
+                    "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes/assuntos/crimes-preconceito-raca-cor/padrao--lei-7716+stf-ado-26/_fonte-notebooklm.md",
+                    "status": "nao-criado",
+                    "url": null,
+                    "fontes": [
+                      "`crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md` — o resumo curado deste assunto (fonte principal)."
+                    ],
+                    "prompts": [
+                      {
+                        "chave": "podcast",
+                        "icone": "🎧",
+                        "rotulo": "Podcast",
+                        "titulo_secao": "🎧 Podcast (Audio Overview)",
+                        "prompt": "Foque em Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para um concurso público. Explique as regras principais de forma didática, com exemplos práticos, e destaque as pegadinhas e os erros mais comuns que bancas exploram. Priorize o que mais cai em prova objetiva. Use linguagem clara, como uma aula de revisao para quem ja estudou o basico. Evite enrolacao e frases de efeito; va direto ao ponto.",
+                        "roteiro": [
+                          "Formato: Deep Dive (completo) · alternativas: Brief (revisão rápida), Critique, Debate.",
+                          "Duração: Longer (mais completo) · ou Default/Shorter para revisão.",
+                          "Idioma: Português (Brasil)."
+                        ]
+                      },
+                      {
+                        "chave": "mapa_mental",
+                        "icone": "🧠",
+                        "rotulo": "Mapa mental",
+                        "titulo_secao": "🧠 Mapa Mental (Mind Map)",
+                        "prompt": "Construa o mapa mental de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) com estes ramos centrais: (1) CONCEITO/definicao; (2) REGRAS gerais; (3) CASOS ESPECIAIS e excecoes; (4) PEGADINHAS de prova; (5) CONEXOES com outros assuntos. Sob cada ramo, agrupe os subtopicos como nos-filhos, do mais cobrado ao menos. Priorize o que cai em concurso e mantenha os rotulos curtos.",
+                        "roteiro": []
+                      },
+                      {
+                        "chave": "video",
+                        "icone": "🎬",
+                        "rotulo": "Vídeo",
+                        "titulo_secao": "🎬 Vídeo (Video Overview)",
+                        "prompt": "Faca um video-aula explicativo sobre Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para quem estuda para concurso. Enfatize as regras que mais caem e mostre 2-3 exemplos resolvidos passo a passo. Dedique um trecho as pegadinhas classicas da banca. Publico: candidato que ja viu o basico e quer fixar e evitar erros.",
+                        "roteiro": [
+                          "Formato: Explainer (aula) · alternativa: Brief.",
+                          "Estilo visual: escolha um limpo/didático (ex.: \"Whiteboard\" ou \"Clean\")."
+                        ]
+                      },
+                      {
+                        "chave": "report",
+                        "icone": "📄",
+                        "rotulo": "Relatório",
+                        "titulo_secao": "📄 Report (Relatório / Guia de estudos)",
+                        "prompt": "Gere um guia de estudos de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para concurso, com esta estrutura: 1) Resumo das regras essenciais; 2) Quadro de casos (obrigatorio/proibido/facultativo, quando aplicavel); 3) Lista de pegadinhas com exemplo de cada; 4) 5 dicas rapidas de memorizacao. Seja objetivo e use exemplos curtos.",
+                        "roteiro": []
+                      }
+                    ],
+                    "perguntas": [
+                      "Quais são as 5 regras mais importantes de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para concurso?",
+                      "Quais as pegadinhas mais comuns de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) em provas?",
+                      "Me dê 10 exemplos comentados sobre Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF).",
+                      "Qual a diferença entre os casos que mais confundem em Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF)?"
+                    ],
+                    "checklist": [
+                      {
+                        "feito": false,
+                        "texto": "Notebook criado com as fontes"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "🎧 Podcast gerado e salvo"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "🧠 Mapa mental gerado e salvo"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "🎬 Vídeo gerado e salvo (opcional)"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "📄 Report gerado e salvo (opcional)"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "Atualizar `notebooklm_status: criado` no topo deste arquivo"
+                      }
+                    ],
+                    "progresso": {
+                      "total": 6,
+                      "feitos": 0
+                    }
+                  }
+                }
+              ],
+              "midias": {
+                "podcast": null,
+                "video": null,
+                "slides": null,
+                "mapa_mental": null,
+                "infografico": null,
+                "report": null,
+                "teste": null,
+                "tabela": null
+              },
+              "flashcards": {
+                "obsidian": "flashcards-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md",
+                "anki": "flashcards-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.csv",
+                "n_cards": 16
+              },
+              "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes/assuntos/crimes-preconceito-raca-cor/padrao--lei-7716+stf-ado-26/crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md",
+              "notebooklm_url": null,
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              }
+            }
+          ],
+          "n_assuntos": 6,
+          "n_com_podcast": 0,
+          "n_com_flashcards": 6,
+          "por_prioridade": {
+            "alta": 0,
+            "media": 0,
+            "base": 0
+          },
+          "mapa": null
+        }
+      ]
+    }
+  ],
+  "_nota": "cargos[] existe como alias de escopos[] para compatibilidade de --modelo"
+}

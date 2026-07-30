@@ -662,11 +662,20 @@ def coletar_documento(md: Path) -> dict | None:
 
 
 def primeiro_paragrafo_curto(corpo: str, limite: int = 160) -> str:
+    """Resumo de uma linha para o índice da seção — ou nada.
+
+    Só aceita linha que COMEÇA como frase (maiúscula ou dígito). Sem isso, o
+    extrator pegava a continuação de um parágrafo partido no meio e o índice exibia
+    fragmentos como "…realização de concursos públicos no DF (não "isenção"). Mantida
+    por constar". Meio resumo errado é pior que nenhum: ocupa a linha e desinforma.
+    """
     for linha in corpo.split("\n"):
         s = linha.strip()
         if not s or s.startswith(("#", ">", "-", "*", "|", "```", "<!--", "!")):
             continue
-        s = re.sub(r"[*`\[\]]", "", s)
+        s = re.sub(r"[*`\[\]]", "", s).strip()
+        if not s or not (s[0].isupper() or s[0].isdigit()):
+            return ""
         return (s[:limite] + "…") if len(s) > limite else s
     return ""
 
@@ -752,6 +761,19 @@ def _prioridade_do_titulo(titulo: str) -> tuple[str, str | None]:
     return re.sub(r"\s{2,}", " ", titulo).strip(" —-·"), prio
 
 
+def nome_materia_do_mapa(md: Path, fm: dict, corpo: str) -> str:
+    """Nome da MATÉRIA a partir do mapa, sem o rótulo do documento.
+
+    O H1 do mapa é "📚 Mapa de Estudo — Serviço Social", e usá-lo cru fazia o card
+    da matéria anunciar o nome do documento em vez do nome da matéria. Só 6 dos 24
+    mapas trazem `materia:` no frontmatter, então o resto sai daqui.
+    """
+    titulo = titulo_doc(md, fm, corpo)
+    titulo = re.sub(r"^[^\w(]*", "", titulo)                    # emoji inicial
+    titulo = re.sub(r"^mapa\s+de\s+estudo\s*[—–:-]\s*", "", titulo, flags=re.I)
+    return titulo.strip() or md.stem
+
+
 def coletar_mapa(md: Path) -> dict | None:
     """Extrai do mapa de matéria os tópicos do edital, com seus subtópicos.
 
@@ -807,7 +829,7 @@ def coletar_mapa(md: Path) -> dict | None:
     return {
         "arquivo": md.name,
         "caminho": str(md),
-        "titulo": fm.get("materia") or titulo_doc(md, fm, corpo),
+        "titulo": fm.get("materia") or nome_materia_do_mapa(md, fm, corpo),
         "topicos": topicos,
         "auxiliares": auxiliares,
         "n_topicos": len(topicos),

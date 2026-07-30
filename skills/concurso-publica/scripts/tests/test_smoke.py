@@ -1015,6 +1015,93 @@ def test_pacote_notebooklm_e_por_assunto_com_abas():
                          / "notebooklm").glob("**/index.html"))) == 1
 
 
+def test_card_mostra_so_midia_presente_e_pagina_mostra_todas():
+    """Numa matéria de 11 assuntos, os 8 tipos com os ausentes em cinza são 88 ícones
+    que afogam o título. No card só entra o que existe; a grade completa fica na
+    página do assunto, onde "falta gerar" é acionável — é de lá que se chega ao
+    prompt do NotebookLM."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=True)
+        out = Path(d) / "site"
+        _construir(base, out)
+        materia = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assunto = (_dir_assunto(out, "teste_2026", "crase")
+                   / "index.html").read_text(encoding="utf-8")
+        assert "selo ausente" not in materia
+        assert 'class="selo"' in materia            # o que existe continua sinalizado
+        assert "selo ausente" in assunto            # na página, o que falta é visível
+
+
+def test_card_nao_repete_a_mesma_informacao_em_tres_selos():
+    """O card antigo trazia "1 fonte", "Padrão + Detalhado" e "2 versões" — com uma
+    única fonte, "2 versões" é exatamente "Padrão + Detalhado" dito de novo. Fonte
+    única passa a ser texto de contexto (dado), ao lado das páginas; selo fica só
+    para estado."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = _mat_vault(base) / "assuntos" / "regencia-verbal-e-nominal"
+        for nome in ("padrao--pestana", "detalhado--pestana"):
+            p = alvo / nome
+            p.mkdir(parents=True)
+            (p / f"regencia--{nome}.md").write_text(
+                '---\ntitle: "Regência"\nfontes: "Pestana"\n'
+                'localizacao_livro: "Pestana.pdf — págs. 978–1017"\n---\nx\n',
+                encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+
+        assert "Padrão + Detalhado" in h            # o nível continua sinalizado
+        assert "1 fonte" not in h                   # fonte única não é selo
+        assert "versões" not in h                   # com 1 fonte, repetiria o nível
+        assert "págs. 978–1017 · Pestana" in h      # virou linha de contexto
+
+        # com DUAS fontes, os selos voltam: aí a contagem informa algo novo
+        outro = alvo / "padrao--abreu"
+        outro.mkdir(parents=True)
+        (outro / "regencia--padrao--abreu.md").write_text(
+            '---\ntitle: "Regência"\nfontes: "Abreu"\n---\nx\n', encoding="utf-8")
+        _construir(base, out)
+        h2 = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert "2 fontes" in h2 and "versões" in h2
+
+
+def test_anexo_e_copiado_uma_vez_por_secao_nao_por_documento():
+    """Regressão: `copiar_anexos` rodava também na página de cada documento, e como a
+    rota do documento é um nível mais fundo, cada documento recebia uma cópia inteira
+    dos anexos da seção. No vault real dava 685 PDFs em vez de 78, e o site pulava de
+    260 MB para 534."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        copias = list(out.rglob("lei-1234-1990.pdf"))
+        assert len(copias) == 1, [str(p.relative_to(out)) for p in copias]
+        assert copias[0].parent.name == "leis-baixadas"      # subpasta preservada
+        # e o PDF do edital, cuja seção tem 2 documentos, também só uma vez
+        assert len(list(out.rglob("edital-original.pdf"))) == 1
+        quebrados, _ = _auditar_links(out)
+        assert not quebrados, quebrados
+
+
+def test_00_indice_nao_sequestra_wikilink_para_a_capa():
+    """Regressão: registrar o nome genérico `00-INDICE` para a capa fazia TODO
+    `[[00-INDICE]]` do vault cair no concurso — e o vault tem esse nome em meia dúzia
+    de lugares. Wikilink resolvido para o lugar errado é pior que morto: o morto
+    avisa, o errado não."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        doc = base / "_COMUM" / "01-EDITAL" / "edital-resumo.md"
+        doc.write_text(doc.read_text(encoding="utf-8")
+                       + "\nVer o [[00-INDICE]] das leis.\n", encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "comum" / "edital" / "edital-resumo"
+             / "index.html").read_text(encoding="utf-8")
+        assert "wikilink-morto" in h, "alvo ambíguo deve ficar morto, não ser adivinhado"
+        assert '<a href="../../../index.html">00-INDICE</a>' not in h
+
+
 def test_documento_longo_ganha_sumario_lateral():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")

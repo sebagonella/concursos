@@ -1,7 +1,7 @@
 ---
 name: concurso-publica
-version: 0.6.0
-description: Use quando o usuário quiser transformar a estrutura de um concurso já gerada no vault (pelas skills concurso-prep e concurso-aprofunda) em um site estático navegável para uso local/rede doméstica — com uma página por assunto onde o podcast (m4a) toca, o vídeo roda, o mapa mental e o report aparecem embutidos, e os flashcards viram quiz interativo. Triggers - "publicar o concurso como site", "gerar páginas web do concurso", "site do vault", "ver o material no navegador", "montar o site de estudo".
+version: 0.7.0
+description: Use quando o usuário quiser transformar a estrutura de um concurso já gerada no vault (pelas skills concurso-prep e concurso-aprofunda) em um site estático navegável para uso local/rede doméstica. Publica TODO o conteúdo abaixo da pasta do concurso, espelhando a organização do vault (COMUM e um galho por cargo) - edital e análise da banca, cronograma, mapas de matéria, materiais e leis baixadas, histórico, sinergia, discursiva, títulos e o aprofundamento. Cada matéria tem duas visões (Plano, do mapa do edital, e Estudo, dos assuntos aprofundados); cada assunto tem o podcast tocando, o vídeo rodando, mapa mental e report embutidos, flashcards como quiz e uma página com os prompts do pacote NotebookLM prontos para copiar. Triggers - "publicar o concurso como site", "gerar páginas web do concurso", "site do vault", "ver o material no navegador", "montar o site de estudo", "levar os mapas de matéria para a web", "publicar o pacote do NotebookLM".
 ---
 
 # concurso-publica
@@ -26,6 +26,53 @@ Mídia ausente = seção ausente na página, sem quebrar (degradação graciosa)
 | B — `site_builder.py` + `md2html.py` + assets (modelo → HTML) | ✅ implementado |
 | C — Quiz de flashcards embutido | ✅ implementado (no builder) |
 | D — Busca client-side | 🔜 próxima entrega |
+
+## Estrutura de saída
+
+```
+out/site/
+├── index.html                            todos os concursos, por órgão
+├── assets/                               css e js compartilhados
+└── {concurso}/
+    ├── index.html                        capa: ficha da prova + um card por escopo
+    ├── .concurso.json                    manifesto (alimenta o índice raiz)
+    ├── comum/
+    │   ├── index.html                    hub do escopo
+    │   ├── edital/{doc}/                 resumo · análise da banca · cronograma oficial
+    │   ├── materiais/{doc}/              livros · canais · plataformas · leis
+    │   ├── materiais/arquivos/…          anexos copiados (PDF das leis)
+    │   ├── historico/, sinergia/
+    │   └── materias/{materia}/
+    │       ├── index.html                abas Plano | Estudo
+    │       └── {assunto}/
+    │           ├── index.html            aprofundamento (abas por fonte/nível)
+    │           └── notebooklm/index.html  pacote: fontes + prompts com copiar
+    └── {cargo}/                          idem, mais cronograma/, discursiva/, titulos/
+```
+
+O caminho espelha a organização do vault (`_COMUM` e um galho por cargo). Seção com
+um documento só e sem anexo **é** o documento — índice de um item é página inútil.
+
+**Uma matéria, duas visões.** O mapa de matéria (`03-MAPAS-*`) e o aprofundamento
+(`03-APROFUNDAMENTO`) cobrem o mesmo recorte por ângulos diferentes: o mapa é o plano
+do edital, o aprofundamento é o conteúdo. Ficam na mesma página, em abas — separá-los
+obrigaria a saber em qual procurar.
+
+**O link tópico→assunto só sai com casamento exato.** Dos 203 tópicos dos 24 mapas do
+vault, cerca de 18% casam por slug: um tópico pode explodir em 7 assuntos, nas
+matérias de "lei como fonte" o assunto **é** uma norma (relação N:M), e assuntos
+reaproveitados de outro concurso seguem o slug do outro edital. Sem casamento, a
+página **não afirma nada** — o falso negativo, um tópico lido como "não tem
+aprofundamento" quando ele existe com outro nome, esconderia trabalho já feito. Quem
+quiser o link fino preenche `mapa-aliases.json` na pasta da matéria (opcional):
+
+```json
+{ "Domínio da estrutura morfossintática do período": ["crase", "regencia-verbal-e-nominal"] }
+```
+
+`00-INDICE.md` e `99-Status.md` são **derivados, não republicados**: a navegação do
+site é o índice, e o progresso do status vira a barra do hub do escopo. Republicá-los
+criaria uma segunda lista que envelhece.
 
 **Novidades da 0.3.0:** tema claro/escuro, índice raiz com todos os concursos
 (deploy incremental via manifesto `.concurso.json`), assuntos agrupados por
@@ -54,27 +101,42 @@ site não pode quebrar por material que o usuário ainda não migrou.
 > fonte em `concurso-aprofunda`. Não edite aqui: edite lá e copie por cima. Há
 > teste de smoke que falha se as duas divergirem.
 
+**Novidades da 0.7.0:** escopos COMUM/cargo espelhando o vault; **todo** o conteúdo
+abaixo do concurso (edital, cronograma, materiais e leis, histórico, sinergia,
+discursiva, títulos) com anexos copiados; mapas de matéria na aba **Plano**; pacote
+NotebookLM como página, com botão de copiar em cada prompt; resolvedor global de
+wikilinks (mortos caíram de 96 para 22 no vault real); sumário lateral em documento
+longo. Corrigido o agrupamento por cargo, que nunca funcionou.
+
 Nos cards de assunto, um selo sinaliza **quantas fontes** e **quais níveis**
 existem (Padrão / Detalhado / ambos), reaproveitando a bolha do cartão-resposta:
 meia bolha = padrão, bolha cheia = detalhado.
 
-42/42 testes passando.
+**Selo só para mídia que existe.** No card, os tipos ausentes não aparecem: numa
+matéria de 11 assuntos, mostrar os 8 tipos em cinza são 88 ícones que afogam o
+título. A grade completa, com os ausentes, fica na página do assunto — onde "falta
+gerar" é acionável, porque é de lá que se chega ao prompt do NotebookLM.
+
+73/73 testes passando.
 
 ## Fluxo
 
 ```
 1. Coletar o modelo
    scripts/site_collector.py --concurso-dir <.../CONCURSOS/SEDES_2026> --out site-model.json
-   - Varre cargos/matérias/assuntos; detecta mídias por presença de arquivo
-     (podcast-*.m4a, video-*.mp4, mapa-mental-*.png, report-*.md)
-   - Conta flashcards (multiline e singleline; tolera nome divergente do slug)
-   - Lê progresso dos checkboxes e páginas do livro do frontmatter
-   - Lê notebooklm_url do pack, se preenchida
+   - Acha os ESCOPOS primeiro (_COMUM + cargos), depois o que há dentro de cada
+   - Seções numeradas por tabela SECOES: documentos (.md) e anexos (o resto)
+   - Matérias: aprofundamento (assuntos/) unido ao mapa de matéria, pelo slug
+   - Detecta mídia por presença de arquivo; presença é a UNIÃO dos aprofundamentos
+   - Lê progresso dos checkboxes (mapa contado à parte do aprofundamento)
+   - Extrai o pacote NotebookLM: fontes, os 4 prompts, perguntas e checklist
 
-2. Gerar as páginas
-   - capa do concurso (dados do .meta.json: banca, prova, vagas)
-   - índice por matéria com badges de mídia (🎧🧠🎬📄🃏)
-   - página por assunto: resumo renderizado + players embutidos + quiz
+2. Gerar as páginas — em dois passos
+   - montar_rotas(): decide onde cada página mora e indexa os nomes do vault.
+     Vem antes de renderizar porque o resolvedor de wikilinks precisa da URL de
+     páginas que ainda não existem
+   - renderizar: capa → hub de escopo → seção → documento → matéria (Plano|Estudo)
+     → assunto → pacote NotebookLM
 
 3. Empacotar
    - out/site/{CONCURSO}/ com assets locais (sem CDN; funciona offline)
@@ -83,10 +145,20 @@ meia bolha = padrão, bolha cheia = detalhado.
 
 ## O modelo coletado (contrato entre A e B)
 
-`site-model.json`: concurso → meta → cargos[] → materias[] → assuntos[], onde cada
-assunto traz `titulo`, `status`, `paginas_livro`, `midias{podcast,video,mapa_mental,report}`,
-`flashcards{obsidian,anki,n_cards}`, `notebooklm_url`, `progresso{total,feitos}`.
-Ver docstring do `site_collector.py` para o formato completo.
+`site-model.json`: concurso → meta → **escopos[]** → { `tipo` (comum/cargo),
+`nome`, `slug`, `secoes[]`, `materias[]`, `progresso` }.
+
+- **`secoes[]`** — `ordinal`, `rotulo`, `slug`, `registro` (estudo/consulta),
+  `documentos[]` (título, slug, resumo, progresso) e `anexos[]` (arquivo, bytes,
+  subpasta).
+- **`materias[]`** — o de sempre (`assuntos[]` com `midias`, `flashcards`,
+  `progresso`, `aprofundamentos[]`) mais `mapa` (tópicos do edital) e, quando as
+  duas metades vivem em escopos diferentes, `aprofundamento_em` / `mapa_em`.
+- Cada aprofundamento traz `pack_notebooklm` com os prompts extraídos.
+
+`cargos[]` continua presente como **alias** de `escopos[]`: `--modelo
+site-model.json` é contrato público e um `site-model.json` salvo antes não deve
+quebrar. Ver docstring do `site_collector.py` para o formato completo.
 
 ## Scripts
 
