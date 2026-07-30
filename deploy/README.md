@@ -109,7 +109,11 @@ CONCURSOS_PORTA=8100 ./deploy/deploy.sh --setup   # ou fixe em deploy/deploy.env
 
 A porta interna do nginx é sempre 80 e não muda. Para ver o que ocupa uma porta no servidor: `ss -ltnp | grep 8099`.
 
-**403 ou "directory index forbidden"** — falta o `index.html` em `site/`. Rode um deploy.
+**403 Forbidden** — `site/` está vazio: não há `index.html` e o autoindex é desligado. É o estado normal entre o `--setup` e o primeiro deploy, e o `--setup` deixa lá uma página explicando isso. O container está bom — confirme com `curl -s http://concursos.casa:8099/healthz`, que responde `ok` mesmo com o site vazio. A correção é publicar:
+
+```bash
+./deploy/deploy.sh --concurso-dir <vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026
+```
 
 **Container reiniciando** — `docker compose logs` no servidor. Se for OOM, aumente `mem_limit` (improvável nesse porte).
 

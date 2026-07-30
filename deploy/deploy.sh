@@ -77,6 +77,42 @@ if [[ $SETUP -eq 1 ]]; then
 
   ssh "$alvo" "mkdir -p '$CONCURSOS_DIR/site'"
   scp "$AQUI/docker-compose.yml" "$AQUI/nginx.conf" "$alvo:$CONCURSOS_DIR/"
+
+  # Placeholder enquanto não houver conteúdo. Sem ele, quem abre o navegador entre o
+  # --setup e o primeiro deploy leva um "403 Forbidden" cru do nginx: `site/` está
+  # vazio, não há index.html e o autoindex é desligado. O 403 não diz nada sobre o
+  # que fazer, e parece container quebrado quando o container está perfeito.
+  # O `rsync --delete` do deploy remove este arquivo sozinho — ele não existe na
+  # origem, e o gerador escreve seu próprio index.html na raiz.
+  ssh "$alvo" "cat > '$CONCURSOS_DIR/site/index.html'" <<'PLACEHOLDER'
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site ainda não publicado</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+       background:#EDEDE8;color:#23262E;line-height:1.65;margin:0;
+       display:grid;place-items:center;min-height:100vh;padding:1.5rem}
+  main{background:#F7F7F4;border:1px solid #DFDFD8;border-radius:3px;
+       padding:2rem 2.25rem;max-width:34rem}
+  h1{font-family:Palatino,Georgia,serif;font-size:1.6rem;margin:0 0 .5rem}
+  code{background:#E8ECF8;padding:.15em .4em;border-radius:2px;font-size:.9em}
+  pre{background:#101425;color:#E7ECFA;padding:1rem;border-radius:3px;
+      overflow-x:auto;font-size:.82rem}
+  p{margin:0 0 1rem}
+  @media (prefers-color-scheme: dark){
+    body{background:#14161C;color:#E4E7EE}
+    main{background:#1B1E26;border-color:#2E323D}
+    code{background:#232838}
+  }
+</style></head><body><main>
+<h1>Site ainda não publicado</h1>
+<p>O container está no ar — este arquivo é a prova. Só falta o conteúdo:
+o <code>--setup</code> cria a pasta vazia, e o material vem do deploy.</p>
+<pre>./deploy/deploy.sh --concurso-dir &lt;vault&gt;/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026</pre>
+<p>Rode na máquina que tem o vault. Esta página desaparece no primeiro deploy.</p>
+</main></body></html>
+PLACEHOLDER
   # o compose lê este .env sozinho; é o que faz CONCURSOS_PORTA valer de fato
   ssh "$alvo" "printf 'CONCURSOS_PORTA=%s\n' '$CONCURSOS_PORTA' > '$CONCURSOS_DIR/.env'"
   echo "🐳 Subindo o container na porta $CONCURSOS_PORTA..."
@@ -84,9 +120,11 @@ if [[ $SETUP -eq 1 ]]; then
   echo ""
   ssh "$alvo" "cd '$CONCURSOS_DIR' && docker compose ps"
   echo ""
-  echo "✅ Container no ar."
+  echo "✅ Container no ar em http://$CONCURSOS_HOST:$CONCURSOS_PORTA/"
   echo "   Teste:  curl -I http://$CONCURSOS_HOST:$CONCURSOS_PORTA/healthz"
-  echo "   Site:   http://$CONCURSOS_HOST:$CONCURSOS_PORTA/"
+  echo ""
+  echo "👉 Falta publicar o conteúdo — o setup criou a pasta vazia:"
+  echo "     ./deploy/deploy.sh --concurso-dir <vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026"
   echo ""
   echo "   Se ainda não resolver o nome, aponte concursos.casa para o IP do"
   echo "   servidor no seu DNS local (ou no /etc/hosts das máquinas da casa)."
