@@ -113,7 +113,7 @@ de layout. Por que este desenho e não outro está em
 - **Reaproveitamento entre concursos**: se um assunto já foi aprofundado com o mesmo livro em outro concurso, a skill detecta e reaproveita em vez de refazer.
 - **Localização automática no livro**: casa cada assunto do edital com as páginas do livro (via sumário ou densidade de termos), com score de confiança — e marca como pendência o que não achou com segurança.
 - **Vários aprofundamentos por assunto**: o mesmo assunto pode ter versões de fontes diferentes e em dois níveis (padrão para revisão, detalhado para domínio), selecionáveis no site.
-- **Uma matéria, duas visões**: no site, cada matéria abre em **Plano** (os tópicos do edital, com os subtópicos derivados) ou **Estudo** (os assuntos aprofundados) — o plano e o conteúdo no mesmo lugar.
+- **Uma matéria, duas visões**: no site, cada matéria abre em **Plano** (os tópicos do edital, com o literal do edital, os subtópicos derivados, o material recomendado, as pegadinhas da banca e a meta de questões) ou **Estudo** (os assuntos aprofundados) — o plano e o conteúdo no mesmo lugar.
 - **Pacote NotebookLM acionável**: cada assunto tem uma página com as fontes a subir e os 4 prompts com botão de copiar, para não precisar reescrevê-los a cada geração.
 - **Site de estudo**: tema claro/escuro, concursos por órgão, escopos COMUM/cargo, assuntos por prioridade, wikilinks do vault virando navegação e download de todas as mídias. Roda offline, sem CDN.
 

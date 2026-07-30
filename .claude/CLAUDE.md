@@ -62,6 +62,16 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
 - **O site espelha COMUM/cargo** (`{concurso}/{comum|cargo}/`). `00-INDICE.md` e
   `99-Status.md` sao derivados, nao republicados — mas continuam sendo lidos (deles
   saem a ordenacao das materias e os selos de questoes/prioridade).
+- **Nada escrito no topico do mapa se perde em silencio**: H3 fora do template e
+  publicado com o texto do vault **e avisado** na geracao; rotulo repetido no mesmo
+  topico acumula, nunca sobrescreve; e a lista exibida conta o mesmo que o contador
+  do rodape (ha teste que trava o invariante).
+- **Cobertura e contagem, nunca nota inventada**: a % de topicos aprofundados sai do
+  `topico_id` gravado e as lacunas aparecem por nome; nota sintetica de qualidade foi
+  descartada porque os sinais estao saturados no vault. Materia com assuntos sem vinculo
+  tem cobertura DESCONHECIDA, nunca zero.
+- **Arcabouco nao sobrescreve conteudo**: `build_subject_md.py` pula `.md` existente;
+  regerar exige `--forcar`, com backup.
 - **Nunca inferir o link mapa↔assunto por slug**: so ~18% dos topicos casam. Sem
   casamento exato a pagina nao afirma nada; o link fino vem de `mapa-aliases.json`.
 - **Fixture tem de espelhar a saida real da skill anterior** — fixture que inventa o

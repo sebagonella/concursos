@@ -5,6 +5,23 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.5.0] - 2026-07-30
+
+### Modificado
+- **Levantamento de material com piso, e por tópico.** O `material-collector` pedia "1-3 livros" e nada para o resto; passa a exigir, por matéria, livro com autor/editora, fonte gratuita, plataforma com filtro da banca e — em matéria de legislação — a **norma oficial**, além de registrar o que **não** achou. O `materia-mapper` pedia uma tripla fixa Livro/YouTube/Questões por tópico; passa a pedir o material **daquele tópico**, reaproveitando a bibliografia da matéria em vez de reinventá-la, com a norma como fonte primária quando o tópico for jurídico.
+
+## [1.4.0] - 2026-07-30
+
+### Corrigido
+- **Matéria comum a vários cargos era mapeada uma vez POR CARGO.** A Etapa 5 tinha destino único (`{CARGO}/03-MAPAS-MATERIAS/`), então num concurso multi-cargo a mesma matéria virava N arquivos quase idênticos — no BB, 5 matérias × 2 cargos = 10 onde deviam existir 5 — e editar um exigia lembrar do gêmeo. Pior: o `_COMUM/03-MAPAS-COMUNS/` que o README, o `SETUP-VAULT.md` e o `site_collector.py` leem **nunca era escrito pela skill**. O consumidor lia o que o produtor não produzia, e o sintoma visível era matéria aprofundada aparecendo no site sem aba Plano. Agora a Etapa 5 roteia por `cargos[]`: mais de um cargo vai para `_COMUM`, um cargo só fica no cargo.
+- **O validador não checava se toda matéria tem mapa** — nunca lia `materias[]`. E `check_soma_questoes` era estruturalmente cego ao buraco: soma os mapas que existem e aborta com `INFO` quando não acha nenhum, de modo que **zero mapas gerados passava como OK**. Novo check `cobertura_mapas`, que lê `materias[]` **e** `materias_por_cargo` (nenhum dos dois é completo sozinho: no SEDES o primeiro só traz um cargo; no BB o segundo não existe e faltam 3 matérias).
+
+### Adicionado
+- **`materia_id`** no contrato do `edital-parser` e no frontmatter do mapa: slug estável e curto, derivado do núcleo do nome ("Fundamentos, Organização, Gestão e Marcos Operacionais do SUAS" → `fundamentos-suas`). É o identificador que liga mapa, aprofundamento e site — sem ele o join volta a ser por nome de pasta, que falhava em 5 das 9 matérias do vault real.
+- **`cargos[]`** por matéria, que é o que decide o escopo do mapa. O vocabulário existia (`tipo: especificos_comuns`) e não era consumido por nada.
+- `scripts/aplicar_materia_id.py` e `scripts/aplicar_materia_id_meta.py`: gravam o `materia_id` no frontmatter dos mapas e nas matérias do `.meta.json`. São as outras duas pernas do vínculo — com o id só no assunto, mapa e aprofundamento continuam sem se encontrar, e o validador segue derivando o id do nome completo do edital, que nunca casa com o slug curto do arquivo. Dry-run por padrão; ambiguidade vira pendência em vez de escolha no palpite.
+- `scripts/consolidar_mapas_comuns.py`: junta em `_COMUM/03-MAPAS-COMUNS/` os mapas já duplicados, reescrevendo os wikilinks (os índices apontam pelo caminho completo). Dry-run por padrão; gêmeos que divergem viram pendência em vez de escolha no palpite.
+
 ## [1.3.1] - 2026-07-29
 
 ### Adicionado

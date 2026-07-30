@@ -2,6 +2,27 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.6.0] - 2026-07-30
+
+### Corrigido
+- **O arcabouço deixava de existir o resumo escrito à mão.** `build_subject_md.py` gravava por cima **sem perguntar**: reexecutar a matéria trocava o texto pronto por um arcabouço com os `{PLACEHOLDER}` de volta. Era o defeito mais caro possível — o `.md` é onde mora o conteúdo curado — e ficava pior justamente no modo novo, que reexecuta a mesma matéria a cada tópico. Agora assunto que já tem `.md` é **pulado** e reportado em `ja_existiam`; regerar de propósito exige `--forcar`, com backup `.md.bak`.
+
+### Adicionado
+- **Aprofundar um tópico por vez.** `scripts/assuntos_do_topico.py` lê o mapa, seleciona um tópico (por número, slug ou trecho do título) e devolve os assuntos dos seus `### Subtópicos derivados`, já com `materia_id`/`topico_id`/`topico`. A saída serve direto para `book_index.py --assuntos` (com livro) ou `build_subject_md.py --assuntos --proprio` (sem fonte). `--listar` mostra os tópicos disponíveis. Tópico inexistente **falha alto** e lista o que existe — devolver lista vazia faria parecer que o tópico não tem assunto.
+- `--assuntos` passa a aceitar o mesmo JSON do `book_index.py` além de TXT; os dois scripts liam formatos diferentes para a mesma lista.
+
+## [0.5.0] - 2026-07-30
+
+### Adicionado
+- **Aprofundamento sem fonte externa**, escrito do conhecimento próprio, nos dois níveis: `{nivel}--proprio`. `--proprio` no `build_subject_md.py`, com `--assuntos` no lugar do `--mapa` (não há livro para localizar), e dois templates novos sem `localizacao_livro`, sem `⚓ Trechos-âncora` e sem o checkbox "Ler as páginas". No lugar, `## 📚 Onde conferir`, com a norma oficial verificável.
+- **Regra de honestidade para material sem fonte**: sem livro para ancorar, *não inventar número de lei, artigo, súmula ou jurisprudência* — o que não for seguro vira pendência. É o análogo direto de "não inventar página", e não existia.
+- **Vínculo assunto → tópico do edital** gravado no frontmatter: `materia_id`, `topico_id[]` e `topico[]`. A skill já lia o mapa para saber quais assuntos existem — ela sabia de que tópico cada um veio e simplesmente não registrava.
+- `propor_vinculos.py` (extrai o material cru para a classificação por leitura) e `aplicar_vinculos.py` (grava o vínculo, dry-run por padrão, com backup e recusa de tópico inexistente).
+
+### Corrigido
+- **"Sem fonte" deixa de ser indistinguível de erro.** `id_aprofundamento([], nivel)` caía em `padrao--fonte`, que `slug_suspeito()` marca como derivação ruim — então um material deliberadamente sem fonte se disfarçaria de configuração errada, e vice-versa. O token `proprio` é reservado e declarado; a lista vazia continua significando "a derivação falhou".
+- Tag da matéria some da lista YAML quando não há matéria, em vez de deixar um item vazio (`[a, , b]`).
+
 ## [0.4.1] - 2026-07-30
 
 ### Corrigido
