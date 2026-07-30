@@ -12,11 +12,76 @@ site que precisa funcionar offline.
 """
 import html
 import re
+import unicodedata
+
+
+# --------------------------------------------------------------------------- #
+# âncoras e sumário
+# --------------------------------------------------------------------------- #
+def slug_ancora(texto: str) -> str:
+    """Slug de heading, usado como `id` e como destino de `[[nota#seção]]`.
+
+    Tem de ser a MESMA função nos dois lados: se o id do heading e a âncora do
+    wikilink forem slugificados de formas diferentes, o link aponta para um id que
+    não existe e o navegador não vai a lugar nenhum.
+    """
+    t = re.sub(r"<[^>]+>", "", texto or "")          # pode chegar já com <strong>
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    t = re.sub(r"[^\w\s-]", "", t).strip().lower()
+    return re.sub(r"[\s_]+", "-", t) or "secao"
+
+
+_FRONTMATTER = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+_HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
+
+
+def _headings(md: str, pular_frontmatter=True) -> list[tuple[int, str, str]]:
+    """Headings do documento, em ordem: (nível, texto, id).
+
+    Ignora `#` dentro de bloco de código cercado — senão um comentário Python
+    viraria heading. Desambigua ids repetidos com sufixo numérico, e é a **única**
+    fonte de ids: `converter()` consome esta lista, para o sumário e o corpo nunca
+    divergirem.
+    """
+    if pular_frontmatter:
+        md = _FRONTMATTER.sub("", md, count=1)
+    achados: list[tuple[int, str, str]] = []
+    vistos: dict[str, int] = {}
+    dentro_de_codigo = False
+    for linha in md.split("\n"):
+        if linha.strip().startswith("```"):
+            dentro_de_codigo = not dentro_de_codigo
+            continue
+        if dentro_de_codigo:
+            continue
+        m = _HEADING.match(linha.strip())
+        if not m:
+            continue
+        texto = m.group(2).strip()
+        base = slug_ancora(texto)
+        vistos[base] = vistos.get(base, 0) + 1
+        ident = base if vistos[base] == 1 else f"{base}-{vistos[base]}"
+        achados.append((len(m.group(1)), texto, ident))
+    return achados
+
+
+def sumario(md: str, niveis=(2, 3)) -> list[dict]:
+    """Índice de seções para a lateral: `[{"nivel", "texto", "id"}]`."""
+    return [{"nivel": n, "texto": t, "id": i}
+            for n, t, i in _headings(md) if n in niveis]
 
 
 # --------------------------------------------------------------------------- #
 # inline
 # --------------------------------------------------------------------------- #
+# Wikilink com âncora e com pipe escapado. Em tabela markdown o pipe do wikilink
+# vem como `\|`, e sem tratar isso o alvo capturado fica com a barra no fim — era
+# a origem de 74 falsos positivos no validador da concurso-prep, e os índices do
+# BB usam essa forma dentro de células. O `!?` inicial consome o embed `![[x]]`,
+# que antes deixava um "!" solto na frente do link.
+#   1 = alvo · 2 = âncora · 3 = rótulo
+WIKILINK_RE = re.compile(r"!?\[\[([^\]|#]+?)(?:#([^\]|]*))?(?:\\?\|([^\]]*))?\]\]")
 def _inline(texto: str, wikilink_resolver=None) -> str:
     """Aplica formatação inline. O texto JÁ deve estar escapado."""
     # código inline primeiro (protege o conteúdo do resto)
@@ -28,17 +93,28 @@ def _inline(texto: str, wikilink_resolver=None) -> str:
 
     texto = re.sub(r"`([^`]+)`", _guardar, texto)
 
-    # wikilinks [[alvo|rotulo]] ou [[alvo]]
+    # wikilinks [[alvo]], [[alvo|rotulo]], [[alvo#secao]], [[alvo#secao|rotulo]]
     def _wiki(m):
         alvo = m.group(1).strip()
-        rotulo = (m.group(2) or alvo).strip()
+        ancora = (m.group(2) or "").strip()
+        # sem rótulo explícito, exibir só o último segmento: os wikilinks do SEDES
+        # usam caminho absoluto do vault (`[[_COMUM/03-APROFUNDAMENTO/…/crase]]`) e
+        # o caminho inteiro como texto visível é ruído — e vaza convenção de pasta
+        rotulo = (m.group(3) or "").strip() or alvo.rstrip("/").split("/")[-1]
         if wikilink_resolver:
             href = wikilink_resolver(alvo)
             if href:
+                if ancora:
+                    href = f"{href}#{slug_ancora(ancora)}"
                 return f'<a href="{href}">{rotulo}</a>'
         return f'<span class="wikilink-morto" title="não publicado">{rotulo}</span>'
 
-    texto = re.sub(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]", _wiki, texto)
+    texto = WIKILINK_RE.sub(_wiki, texto)
+
+    # imagens ANTES dos links: a regex de link casa o mesmo texto e deixaria o "!"
+    # solto na frente de um <a> — era assim que toda imagem markdown saía quebrada
+    texto = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)",
+                   r'<img src="\2" alt="\1" loading="lazy">', texto)
 
     # links markdown [texto](url)
     texto = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', texto)
@@ -60,6 +136,11 @@ def _inline(texto: str, wikilink_resolver=None) -> str:
 def converter(md: str, wikilink_resolver=None, pular_frontmatter=True) -> str:
     if pular_frontmatter:
         md = re.sub(r"^---\s*\n.*?\n---\s*\n", "", md, count=1, flags=re.DOTALL)
+
+    # ids dos headings vêm de _headings(), a mesma função que alimenta sumario():
+    # calcular aqui de novo abriria espaço para o índice apontar para id inexistente
+    ids = [ident for _n, _t, ident in _headings(md, pular_frontmatter=False)]
+    prox_id = 0
 
     linhas = md.split("\n")
     out: list[str] = []
@@ -114,7 +195,9 @@ def converter(md: str, wikilink_resolver=None, pular_frontmatter=True) -> str:
             fechar_lista()
             nivel = len(m.group(1))
             conteudo = _inline(html.escape(m.group(2)), wikilink_resolver)
-            out.append(f"<h{nivel}>{conteudo}</h{nivel}>")
+            ident = ids[prox_id] if prox_id < len(ids) else slug_ancora(m.group(2))
+            prox_id += 1
+            out.append(f'<h{nivel} id="{ident}">{conteudo}</h{nivel}>')
             i += 1
             continue
 
@@ -136,7 +219,12 @@ def converter(md: str, wikilink_resolver=None, pular_frontmatter=True) -> str:
             fechar_lista()
             def celulas(l):
                 l = l.strip().strip("|")
-                return [c.strip() for c in l.split("|")]
+                # dividir só em pipe NÃO escapado: dentro de tabela o wikilink vem
+                # como `[[alvo\|rotulo]]`, e dividir nele partia o link em duas
+                # células. Depois de dividir, o `\|` volta a ser `|` para o
+                # wikilink ser reconhecido normalmente.
+                return [c.strip().replace("\\|", "|")
+                        for c in re.split(r"(?<!\\)\|", l)]
             cabecalho = celulas(linhas[i])
             i += 2
             corpo_linhas = []

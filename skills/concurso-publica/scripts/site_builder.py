@@ -51,6 +51,21 @@ def nome_legivel(slug: str) -> str:
     return re.sub(r"\s{2,}", " ", s).strip()
 
 
+def nome_escopo(nome: str) -> str:
+    """Rótulo de exibição do escopo (`_COMUM` ou um cargo).
+
+    O underscore de `_COMUM` é convenção de PASTA — existe para o Obsidian ordenar
+    a pasta antes dos cargos. Numa página web ele lê como nome de arquivo vazado.
+    O nome do cargo, ao contrário, fica como está: é o vocabulário que o usuário
+    reconhece do edital e do vault.
+    """
+    if nome in ("_GERAL", ""):
+        return ""                      # escopo implícito: não há o que rotular
+    if nome == "_COMUM":
+        return "Comum a todos os cargos"
+    return nome
+
+
 def pagina(titulo: str, trilha_html: str, corpo: str, prefixo: str,
            descricao: str = "") -> str:
     """Esqueleto comum. `prefixo` é o caminho relativo até a raiz do site."""
@@ -322,7 +337,7 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
 
 
 def pagina_assunto(assunto: dict, materia: dict, concurso: str,
-                   origem_dir: Path, destino_dir: Path) -> str:
+                   destino_dir: Path) -> str:
     titulo = assunto["titulo"]
     aprofs = assunto.get("aprofundamentos") or []
 
@@ -532,7 +547,10 @@ def pagina_capa(modelo: dict) -> str:
   <h3>{esc(mat["nome"])}</h3>
   <div class="meta">{mat["n_assuntos"]} assuntos · {mat["n_com_podcast"]} com podcast</div>
 </a>""")
-        titulo_cargo = "" if cargo["nome"] == "_GERAL" else f'<h2>{esc(cargo["nome"])}</h2>'
+        # Com um único escopo não há o que desambiguar, e o título só faria ruído —
+        # é a mesma razão pela qual o `_GERAL` era escondido, agora generalizada.
+        rotulo = nome_escopo(cargo["nome"]) if len(modelo["cargos"]) > 1 else ""
+        titulo_cargo = f'<h2>{esc(rotulo)}</h2>' if rotulo else ""
         blocos.append(titulo_cargo + f'<div class="grade">{"".join(itens)}</div>')
 
     r = modelo["resumo"]
@@ -630,6 +648,21 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
     concurso = modelo["concurso"]
     slug_conc = re.sub(r"[^A-Za-z0-9_-]+", "-", concurso).strip("-").lower()
     base = destino / slug_conc
+
+    # Limpar SÓ a pasta deste concurso antes de gerar. Sem isso, quando a
+    # estrutura de pastas muda, o layout antigo sobrevive em out/ — e o
+    # `rsync --delete` do deploy NÃO o remove, porque ele existe na origem.
+    # O escopo é deliberado: apagar `destino` mataria os concursos irmãos e o
+    # assets/ compartilhado, e o índice raiz é remontado dos manifestos.
+    #
+    # Custo conhecido: a mídia é recopiada a cada build (um podcast passa de
+    # 70 MB). O deploy não sofre — `copy2` preserva o mtime, então o rsync
+    # continua incremental — mas o disco local reescreve tudo. A correção certa é
+    # varrer por diferença contra o conjunto de arquivos efetivamente escritos, o
+    # que fica natural quando a tabela de rotas existir; guarda de mtime aqui não
+    # resolveria nada, porque o rmtree apaga a mídia antes da comparação.
+    if base.exists():
+        shutil.rmtree(base)
     base.mkdir(parents=True, exist_ok=True)
 
     # assets ficam na raiz e são compartilhados por todos os concursos
@@ -653,11 +686,10 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
             n_paginas += 1
 
             for assunto in materia["assuntos"]:
-                origem_dir = Path(assunto["resumo_md"]).parent
                 a_dir = mat_dir / assunto["slug"]
                 a_dir.mkdir(parents=True, exist_ok=True)
                 (a_dir / "index.html").write_text(
-                    pagina_assunto(assunto, materia, concurso, origem_dir, a_dir),
+                    pagina_assunto(assunto, materia, concurso, a_dir),
                     encoding="utf-8")
                 n_paginas += 1
 

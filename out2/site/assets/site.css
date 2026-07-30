@@ -1,0 +1,402 @@
+/* ==========================================================================
+   Site de estudo para concursos — folha de estilo
+   --------------------------------------------------------------------------
+   Direção visual tirada do mundo da prova de concurso brasileira:
+   papel de caderno, caneta esferográfica azul (a que o edital obriga),
+   marca-texto do estudante e caneta vermelha de correção.
+   Elemento-assinatura: as bolhas do cartão-resposta, usadas como
+   indicador de progresso.
+   Sem CDN: tudo local, tipografia por stack de sistema (o site roda offline).
+   ========================================================================== */
+
+:root {
+  /* papel e tinta */
+  --papel:        #F7F7F4;   /* papel de prova, levemente frio */
+  --papel-fundo:  #EDEDE8;   /* fundo atrás da folha */
+  --pauta:        #DFDFD8;   /* linhas de régua, bordas */
+  --grafite:      #23262E;   /* texto */
+  --grafite-fraco:#6A6F7B;   /* texto secundário */
+  --forte:        #101425;   /* <strong>: um passo mais escuro que o corpo */
+  --sobre-tinta:  #FFFFFF;   /* texto/ícone sobre superfície da cor da tinta */
+  --superficie:   #FFFFFF;   /* cartões que destacam do papel */
+
+  /* tinta esferográfica azul: a cor obrigatória nas provas */
+  --tinta:        #16307E;
+  --tinta-clara:  #2E52C4;
+  --tinta-lavada: #E8ECF8;
+
+  /* marcações do estudante */
+  --marcatexto:   #FFE566;   /* marca-texto amarelo */
+  --correcao:     #C0392B;   /* caneta vermelha: atenção/pegadinha */
+  --confere:      #1E7A4C;   /* visto verde: concluído */
+
+  --raio: 3px;               /* papel não tem cantos redondos generosos */
+  --sombra: 0 1px 2px rgba(35,38,46,.06), 0 8px 24px rgba(35,38,46,.05);
+
+  --fonte-titulo: "Iowan Old Style", "Palatino Linotype", Palatino,
+                  "Book Antiqua", Georgia, serif;
+  --fonte-texto:  system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+                  Arial, sans-serif;
+  --fonte-dado:   ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--papel-fundo);
+  color: var(--grafite);
+  font-family: var(--fonte-texto);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+/* ---------- cabeçalho fixo ---------- */
+.topo {
+  background: var(--tinta);
+  color: #fff;
+  border-bottom: 3px solid var(--tinta-clara);
+}
+.topo-interno {
+  max-width: 1120px; margin: 0 auto; padding: .75rem 1.25rem;
+  display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+}
+.topo a { color: #fff; text-decoration: none; }
+.topo .marca {
+  font-family: var(--fonte-titulo); font-size: 1.05rem; letter-spacing: .01em;
+}
+.topo .trilha { font-size: .82rem; opacity: .82; }
+.topo .trilha a { border-bottom: 1px solid rgba(255,255,255,.35); }
+.topo .trilha a:hover { border-bottom-color: #fff; }
+
+/* ---------- folha ---------- */
+.folha {
+  max-width: 1120px; margin: 1.5rem auto 4rem; padding: 0 1.25rem;
+}
+.papel {
+  background: var(--papel);
+  border: 1px solid var(--pauta);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+  padding: 2rem 2.25rem 2.5rem;
+}
+
+/* ---------- tipografia ---------- */
+h1, h2, h3, h4 { font-family: var(--fonte-titulo); line-height: 1.25; }
+h1 { font-size: 2.1rem; margin: 0 0 .35rem; letter-spacing: -.01em; }
+h2 {
+  font-size: 1.32rem; margin: 2.2rem 0 .75rem; padding-bottom: .3rem;
+  border-bottom: 1px solid var(--pauta);
+}
+h3 { font-size: 1.08rem; margin: 1.6rem 0 .5rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--tinta); }
+strong { color: var(--forte); }
+code {
+  font-family: var(--fonte-dado); font-size: .88em;
+  background: var(--tinta-lavada); padding: .1em .35em; border-radius: 2px;
+}
+pre {
+  background: #101425; color: #E7ECFA; padding: 1rem; border-radius: var(--raio);
+  overflow-x: auto; font-family: var(--fonte-dado); font-size: .85rem; line-height: 1.5;
+}
+pre code { background: none; color: inherit; padding: 0; }
+blockquote {
+  margin: 1.1rem 0; padding: .8rem 1rem;
+  background: var(--tinta-lavada);
+  border-left: 3px solid var(--tinta-clara);
+  border-radius: 0 var(--raio) var(--raio) 0;
+}
+table { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .94rem; }
+th, td { text-align: left; padding: .5rem .65rem; border-bottom: 1px solid var(--pauta); }
+th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--grafite-fraco); }
+hr { border: 0; border-top: 1px solid var(--pauta); margin: 2rem 0; }
+
+/* eyebrow: rótulo de contexto acima do título */
+.sobrancelha {
+  font-family: var(--fonte-dado); font-size: .74rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--tinta-clara); margin-bottom: .5rem;
+}
+
+/* ---------- assinatura: bolhas do cartão-resposta ---------- */
+.gabarito {
+  display: flex; align-items: center; gap: .55rem; flex-wrap: wrap;
+  margin: .9rem 0 0; padding: .7rem .9rem;
+  background: var(--superficie); border: 1px solid var(--pauta); border-radius: var(--raio);
+}
+.gabarito .rotulo {
+  font-family: var(--fonte-dado); font-size: .72rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--grafite-fraco); margin-right: .2rem;
+}
+.bolha {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 1.5px solid var(--tinta); display: inline-block; flex: none;
+}
+.bolha.cheia { background: var(--tinta); }
+.gabarito .contagem {
+  margin-left: auto; font-family: var(--fonte-dado); font-size: .8rem;
+  color: var(--grafite-fraco);
+}
+
+/* lista de tarefas (checkboxes do vault, só leitura) */
+ul.tarefas { list-style: none; padding-left: 0; }
+ul.tarefas .tarefa { display: flex; gap: .6rem; align-items: flex-start; margin: .35rem 0; }
+ul.tarefas .tarefa .bolha { margin-top: .35rem; }
+ul.tarefas .tarefa.feito .bolha { background: var(--confere); border-color: var(--confere); }
+ul.tarefas .tarefa.feito span:last-child { color: var(--grafite-fraco); }
+
+/* ---------- layout da página de assunto ---------- */
+.colunas { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 1.75rem; align-items: start; }
+@media (max-width: 900px) { .colunas { grid-template-columns: 1fr; } }
+
+.lateral { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+@media (max-width: 900px) { .lateral { position: static; } }
+
+.cartao {
+  background: var(--papel); border: 1px solid var(--pauta);
+  border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.1rem;
+}
+.cartao > h3 {
+  margin: 0 0 .7rem; font-size: .78rem; font-family: var(--fonte-dado);
+  letter-spacing: .12em; text-transform: uppercase; color: var(--grafite-fraco);
+}
+
+audio, video { width: 100%; display: block; border-radius: var(--raio); }
+video { background: #000; }
+.mapa-mental img { width: 100%; height: auto; border: 1px solid var(--pauta); border-radius: var(--raio); cursor: zoom-in; }
+
+/* botões */
+.botao {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .5rem .85rem; border-radius: var(--raio);
+  background: var(--tinta); color: var(--sobre-tinta); text-decoration: none;
+  font-size: .88rem; border: 0; cursor: pointer; font-family: var(--fonte-texto);
+}
+.botao:hover { background: var(--tinta-clara); color: var(--sobre-tinta); }
+.botao.secundario { background: transparent; color: var(--tinta); border: 1px solid var(--tinta); }
+.botao.secundario:hover { background: var(--tinta-lavada); }
+.botao:focus-visible, a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--tinta-clara); outline-offset: 2px;
+}
+
+/* selos de mídia disponível */
+.selos { display: flex; gap: .35rem; flex-wrap: wrap; }
+.selo {
+  font-family: var(--fonte-dado); font-size: .7rem; letter-spacing: .06em;
+  padding: .18rem .45rem; border-radius: 2px;
+  background: var(--tinta-lavada); color: var(--tinta); border: 1px solid var(--pauta);
+}
+.selo.ausente { background: transparent; color: var(--grafite-fraco); opacity: .55;
+                border-color: var(--pauta); }
+
+/* ---------- índices (capa e matéria) ---------- */
+.grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 1rem; }
+.item {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--papel); border: 1px solid var(--pauta);
+  border-left: 3px solid var(--tinta-clara);
+  border-radius: var(--raio); padding: .95rem 1.1rem; box-shadow: var(--sombra);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.item:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(35,38,46,.1); }
+.item h3 { margin: 0 0 .3rem; font-size: 1.02rem; }
+.item .meta { font-family: var(--fonte-dado); font-size: .74rem; color: var(--grafite-fraco); }
+.item .resumo { font-size: .88rem; color: var(--grafite-fraco); margin: .45rem 0 .6rem; }
+
+/* ficha de dados do concurso */
+.ficha { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: .9rem; margin: 1.2rem 0; }
+.ficha div { border-left: 2px solid var(--pauta); padding-left: .7rem; }
+.ficha dt { font-family: var(--fonte-dado); font-size: .7rem; letter-spacing: .1em;
+            text-transform: uppercase; color: var(--grafite-fraco); }
+.ficha dd { margin: .15rem 0 0; font-size: 1.05rem; font-weight: 600; }
+
+/* ---------- flashcards ---------- */
+.quiz { text-align: center; }
+.carta {
+  background: var(--superficie); border: 1px solid var(--pauta); border-radius: var(--raio);
+  padding: 1.4rem 1.1rem; min-height: 130px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; line-height: 1.5; cursor: pointer; text-align: left;
+}
+.carta .verso { display: none; }
+.carta.virada .frente { display: none; }
+.carta.virada .verso { display: block; }
+.carta.virada { background: #FFFDF0; border-color: #E8DFA8; }
+.quiz .controles { display: flex; gap: .5rem; margin-top: .7rem; justify-content: space-between; align-items: center; }
+.quiz .posicao { font-family: var(--fonte-dado); font-size: .76rem; color: var(--grafite-fraco); }
+.quiz .dica { font-size: .78rem; color: var(--grafite-fraco); margin-top: .5rem; }
+
+/* marca-texto para trechos de atenção */
+mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
+.atencao { color: var(--correcao); }
+
+/* lightbox do mapa mental */
+.lightbox {
+  position: fixed; inset: 0; background: rgba(16,20,37,.88);
+  display: none; align-items: center; justify-content: center; padding: 2rem; z-index: 50;
+}
+.lightbox.aberto { display: flex; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: var(--raio); }
+
+.rodape {
+  max-width: 1120px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem;
+  font-size: .8rem; color: var(--grafite-fraco);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+@media print {
+  .topo, .lateral, .quiz { display: none; }
+  .papel { box-shadow: none; border: 0; }
+  body { background: #fff; }
+}
+
+/* ---------- tema escuro ----------
+   Mesma lógica do claro, invertida para leitura noturna: papel vira ardósia,
+   a tinta azul clareia para manter contraste sobre fundo escuro. */
+:root[data-tema="escuro"] {
+  --papel:        #1B1E26;
+  --papel-fundo:  #14161C;
+  --pauta:        #2E323D;
+  --grafite:      #E4E7EE;
+  --grafite-fraco:#9BA2B0;
+
+  --forte:        #FFFFFF;   /* no escuro, <strong> CLAREIA em vez de escurecer */
+  --sobre-tinta:  #10131A;   /* sobre a tinta clara, o texto precisa ser escuro */
+  --superficie:   #232733;
+
+  --tinta:        #8AA8FF;
+  --tinta-clara:  #A9BEFF;
+  --tinta-lavada: #232838;
+
+  --marcatexto:   #6B5D1F;
+  --correcao:     #FF8A80;
+  --confere:      #5BD199;
+
+  --sombra: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+
+/* no escuro, o topo usa a superfície escura em vez do azul saturado */
+:root[data-tema="escuro"] .topo { background: #10131A; border-bottom-color: var(--tinta); }
+:root[data-tema="escuro"] .carta.virada { background: #2A2A1F; border-color: #4A452A; }
+:root[data-tema="escuro"] pre { background: #0C0E13; }
+
+/* botão de tema */
+.tema-troca {
+  margin-left: auto; background: rgba(255,255,255,.12); color: #fff;
+  border: 1px solid rgba(255,255,255,.25); border-radius: var(--raio);
+  padding: .3rem .6rem; font-size: .78rem; cursor: pointer; font-family: var(--fonte-texto);
+}
+.tema-troca:hover { background: rgba(255,255,255,.2); }
+
+/* ---------- grupos de prioridade ---------- */
+.grupo-prioridade { margin-top: 1.75rem; }
+.grupo-prioridade > header {
+  display: flex; align-items: baseline; gap: .6rem; margin-bottom: .8rem;
+  padding-bottom: .35rem; border-bottom: 2px solid var(--pauta);
+}
+.grupo-prioridade h2 { margin: 0; border: 0; padding: 0; font-size: 1.2rem; }
+.grupo-prioridade .quantos {
+  font-family: var(--fonte-dado); font-size: .76rem; color: var(--grafite-fraco);
+}
+.grupo-prioridade .explica { font-size: .84rem; color: var(--grafite-fraco); margin: 0 0 .9rem; }
+/* faixa lateral colorida por prioridade nos cards do grupo */
+.grupo-prioridade[data-prio="alta"]  > header { border-bottom-color: var(--correcao); }
+.grupo-prioridade[data-prio="alta"]  .item { border-left-color: var(--correcao); }
+.grupo-prioridade[data-prio="media"] > header { border-bottom-color: var(--tinta-clara); }
+.grupo-prioridade[data-prio="media"] .item { border-left-color: var(--tinta-clara); }
+.grupo-prioridade[data-prio="base"]  > header { border-bottom-color: var(--grafite-fraco); }
+.grupo-prioridade[data-prio="base"]  .item { border-left-color: var(--grafite-fraco); }
+
+/* ---------- downloads de mídia ---------- */
+.baixar {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .76rem; color: var(--grafite-fraco); text-decoration: none;
+  border: 1px solid var(--pauta); border-radius: var(--raio);
+  padding: .18rem .45rem; margin-top: .5rem;
+}
+.baixar:hover { color: var(--tinta); border-color: var(--tinta); }
+.cartao .titulo-linha { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+
+/* lista de outras mídias (slides, infográfico, tabela, teste) */
+.midias-extra { list-style: none; padding: 0; margin: 0; }
+.midias-extra li { display: flex; justify-content: space-between; align-items: center;
+                   gap: .5rem; padding: .35rem 0; border-bottom: 1px solid var(--pauta); }
+.midias-extra li:last-child { border-bottom: 0; }
+.midias-extra .rot { font-size: .88rem; }
+
+/* ---------- índice de concursos (raiz) ---------- */
+.concurso-item { border-left-width: 4px; }
+.concurso-item .tag {
+  display: inline-block; font-family: var(--fonte-dado); font-size: .68rem;
+  letter-spacing: .08em; text-transform: uppercase; padding: .12rem .4rem;
+  border-radius: 2px; background: var(--tinta-lavada); color: var(--tinta);
+  margin-left: .4rem;
+}
+
+/* ---------- seletor de aprofundamentos (abas) ---------- */
+.seletor-aprof {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--pauta);
+}
+.seletor-aprof .rotulo {
+  font-family: var(--fonte-dado); font-size: .7rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--grafite-fraco); margin-right: .3rem;
+}
+.aba {
+  font-family: var(--fonte-texto); font-size: .84rem; cursor: pointer;
+  padding: .35rem .7rem; border-radius: var(--raio);
+  background: transparent; color: var(--grafite);
+  border: 1px solid var(--pauta);
+}
+.aba:hover { border-color: var(--tinta); color: var(--tinta); }
+.aba.ativa {
+  background: var(--tinta); color: var(--sobre-tinta); border-color: var(--tinta);
+}
+/* só o aprofundamento ativo aparece */
+.aprof { display: none; }
+.aprof.ativo { display: block; }
+.cabecalho-assunto h1 { margin-bottom: .2rem; }
+
+/* ---------- grupos por órgão (índice raiz) ---------- */
+.grupo-orgao { margin-top: 1.75rem; }
+.grupo-orgao > header {
+  display: flex; align-items: baseline; gap: .6rem; margin-bottom: .8rem;
+  padding-bottom: .35rem; border-bottom: 2px solid var(--tinta-clara);
+}
+.grupo-orgao h2 { margin: 0; border: 0; padding: 0; font-size: 1.15rem; letter-spacing: .01em; }
+.grupo-orgao .quantos {
+  font-family: var(--fonte-dado); font-size: .74rem; color: var(--grafite-fraco);
+}
+
+/* ---------- selos de aprofundamento (fontes e níveis) ----------
+   A bolha do cartão-resposta comunica profundidade:
+   meia = nível padrão (revisão) · cheia = nível detalhado (domínio) */
+.selos-aprof {
+  display: flex; gap: .35rem; flex-wrap: wrap; align-items: center;
+  margin: .5rem 0 .1rem;
+}
+.selo-aprof {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-family: var(--fonte-dado); font-size: .69rem; letter-spacing: .03em;
+  padding: .2rem .45rem; border-radius: 2px;
+  background: transparent; color: var(--grafite-fraco);
+  border: 1px solid var(--pauta);
+}
+.selo-aprof .bolha { width: 10px; height: 10px; border-width: 1.5px; }
+/* meia bolha: preenchimento pela metade, como quem começou a marcar */
+.selo-aprof .bolha.meia {
+  background: linear-gradient(to right, var(--tinta) 50%, transparent 50%);
+}
+.selo-aprof.nivel-detalhado, .selo-aprof.nivel-ambos {
+  color: var(--tinta); border-color: var(--tinta);
+}
+.selo-aprof.nivel-padrao { color: var(--grafite-fraco); }
+
+/* no cabeçalho da página do assunto os selos ficam um pouco maiores */
+.cabecalho-assunto .selos-aprof { margin-top: .6rem; }
+.cabecalho-assunto .selo-aprof { font-size: .74rem; padding: .25rem .55rem; }

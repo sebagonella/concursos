@@ -168,9 +168,74 @@ import site_builder as sb  # noqa: E402
 
 def test_md2html_blocos_basicos():
     h = md2html.converter("# T\n\nUm **forte** e *leve*.\n\n- a\n- b\n")
-    assert "<h1>T</h1>" in h
+    assert '<h1 id="t">T</h1>' in h      # heading agora carrega âncora
     assert "<strong>forte</strong>" in h and "<em>leve</em>" in h
     assert h.count("<li>") == 2
+
+
+def test_md2html_imagem_nao_vira_link_com_bang_solto():
+    """Regressão: `![alt](src)` casava a regex de LINK e saía como `!<a href=…>`,
+    deixando toda imagem markdown quebrada."""
+    h = md2html.converter("![Mapa da prova](mapa.png)\n")
+    assert '<img src="mapa.png"' in h
+    assert 'alt="Mapa da prova"' in h
+    assert "!<a" not in h and "<a href=\"mapa.png\"" not in h
+
+
+def test_md2html_embed_wikilink_nao_deixa_bang():
+    """Regressão: `![[arquivo.png]]` resolvia o wikilink e sobrava o "!" na frente."""
+    h = md2html.converter("![[podcast-crase.m4a]]\n")
+    assert "!<span" not in h and "!<a" not in h
+    assert "wikilink-morto" in h
+
+
+def test_md2html_heading_recebe_id_e_sumario_bate():
+    """O id do heading e a entrada do sumário vêm da MESMA fonte — se divergirem,
+    `[[nota#seção]]` aponta para id inexistente."""
+    md = "# Título\n\n## Regras gerais\n\ntexto\n\n### Casos especiais\n"
+    h = md2html.converter(md)
+    assert '<h2 id="regras-gerais">' in h
+    assert '<h3 id="casos-especiais">' in h
+    s = md2html.sumario(md)
+    assert [x["id"] for x in s] == ["regras-gerais", "casos-especiais"]
+    assert [x["nivel"] for x in s] == [2, 3]
+    for x in s:                       # todo id do sumário existe no corpo
+        assert f'id="{x["id"]}"' in h
+
+
+def test_md2html_headings_repetidos_nao_colidem():
+    h = md2html.converter("## Meta\n\na\n\n## Meta\n")
+    assert '<h2 id="meta">' in h and '<h2 id="meta-2">' in h
+
+
+def test_md2html_heading_dentro_de_codigo_nao_conta():
+    """`#` em bloco cercado é comentário, não heading — se contasse, os ids do
+    corpo e do sumário sairiam desalinhados."""
+    md = "## Real\n\n```\n# comentario\n```\n\n## Outra\n"
+    assert [x["id"] for x in md2html.sumario(md)] == ["real", "outra"]
+    assert '<h2 id="outra">' in md2html.converter(md)
+
+
+def test_md2html_wikilink_com_ancora_e_pipe_escapado():
+    """Duas formas que o vault usa e o conversor ignorava: âncora de seção e o
+    pipe escapado que a tabela markdown obriga (`\\|`), usado nos índices do BB."""
+    def r(alvo):
+        return f"../{alvo}/index.html"
+    h = md2html.converter("[[crase#regras gerais|Regras]]\n", wikilink_resolver=r)
+    assert '<a href="../crase/index.html#regras-gerais">Regras</a>' in h
+
+    h2 = md2html.converter("| [[lei-8078\\|CDC]] |\n|---|\n| x |\n",
+                           wikilink_resolver=r)
+    assert '<a href="../lei-8078/index.html">CDC</a>' in h2
+    assert "wikilink-morto" not in h2          # o alvo NÃO leva a barra no fim
+
+
+def test_md2html_wikilink_sem_rotulo_mostra_so_o_nome():
+    """Os wikilinks do SEDES usam caminho absoluto do vault. Sem rótulo, o caminho
+    inteiro virava o texto visível da página — ruído, e vazando `_COMUM`."""
+    h = md2html.converter("[[_COMUM/03-APROFUNDAMENTO/lingua-portuguesa/crase]]\n")
+    assert ">crase<" in h
+    assert "_COMUM" not in h
 
 
 def test_md2html_checkbox_vira_tarefa_com_estado():
@@ -297,6 +362,118 @@ def test_builder_links_internos_resolvem():
 # --------------------------------------------------------------------------- #
 # prioridade, banca, multi-concurso, mídias e tema
 # --------------------------------------------------------------------------- #
+def test_escopo_vem_do_primeiro_componente_do_caminho():
+    """Regressão do bug do `_GERAL`. A versão anterior procurava o segmento
+    `03-MAPAS` no caminho e devolvia o componente anterior — mas o aprofundamento
+    vive em `03-APROFUNDAMENTO`, então a condição nunca casava com o vault real e
+    TODA matéria caía em `_GERAL`, deixando a capa sem agrupamento nenhum.
+
+    O teste antigo não pegava porque a fixture montava os assuntos sob
+    `03-MAPAS-MATERIAS`, um layout que a concurso-aprofunda não produz.
+    """
+    base = Path("/v/SEDES_2026")
+    casos = {
+        "_COMUM/03-APROFUNDAMENTO/lingua-portuguesa": "_COMUM",
+        "AGENTE-COMERCIAL/03-APROFUNDAMENTO/vendas-e-negociacao": "AGENTE-COMERCIAL",
+        "CARGO-X/03-MAPAS-MATERIAS/portugues": "CARGO-X",
+        "portugues": "_GERAL",           # layout achatado: matéria na raiz
+    }
+    for rel, esperado in casos.items():
+        assert sc.cargo_de(base / rel, base) == esperado, rel
+    assert sc.cargo_de(Path("/outro/lugar"), base) == "_GERAL"
+
+
+def test_midia_do_assunto_e_uniao_dos_aprofundamentos():
+    """Regressão: `midias` era herdada do aprofundamento PRINCIPAL, e como a
+    ordenação põe `detalhado` primeiro, um assunto cuja mídia estava no `padrao`
+    aparecia sem mídia. No vault real era o caso do único assunto com podcast,
+    vídeo e mapa mental — o site anunciava "0 com áudio" na matéria inteira.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=False)
+        alvo = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos" / "crase"
+        # detalhado (que ordena primeiro) SEM mídia; padrao COM mídia
+        for nome, tem_midia in (("detalhado--pestana", False), ("padrao--pestana", True)):
+            p = alvo / nome
+            p.mkdir(parents=True)
+            (p / f"crase--{nome}.md").write_text(
+                f'---\ntitle: "Crase"\nfontes: "Pestana"\n---\nx\n', encoding="utf-8")
+            if tem_midia:
+                (p / f"podcast-crase--{nome}.m4a").write_bytes(b"A")
+
+        a = sc.coletar_assunto(alvo)
+        assert a["aprofundamentos"][0]["nivel"] == "detalhado"      # principal
+        assert a["aprofundamentos"][0]["midias"]["podcast"] is None
+        assert a["midias"]["podcast"], "presença deve ser a UNIÃO, não a do principal"
+
+        m = sc.coletar_materia(alvo.parent.parent)
+        assert m["n_com_podcast"] == 1
+
+
+def test_rebuild_nao_deixa_pasta_do_layout_antigo():
+    """Regressão: `construir()` só fazia mkdir, então pasta de layout anterior
+    sobrevivia em out/ — e o `rsync --delete` do deploy NÃO a remove, porque ela
+    existe na origem. A limpeza tem de ser escopada ao concurso: apagar o destino
+    inteiro mataria os concursos irmãos e o assets/ compartilhado."""
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "site"
+        aaa = _montar_concurso(Path(d) / "AAA_2026")
+        _construir(aaa, out)
+        _construir(_montar_concurso(Path(d) / "BBB_2027"), out)
+
+        orfa = out / "aaa_2026" / "layout-antigo"
+        orfa.mkdir(parents=True)
+        (orfa / "index.html").write_text("velho", encoding="utf-8")
+
+        _construir(aaa, out)           # rebuild do MESMO concurso
+        assert not orfa.exists(), "pasta órfã sobreviveu ao rebuild"
+        # o irmão e os assets compartilhados NÃO podem ter sido levados
+        assert (out / "bbb_2027" / "index.html").exists()
+        assert (out / "assets" / "site.css").exists()
+        assert (out / "index.html").exists()
+
+
+def test_rotulo_do_escopo_nao_expoe_convencao_de_pasta():
+    assert sb.nome_escopo("_COMUM") == "Comum a todos os cargos"
+    assert sb.nome_escopo("_GERAL") == ""          # escopo implícito: sem rótulo
+    assert sb.nome_escopo("AGENTE-COMERCIAL") == "AGENTE-COMERCIAL"
+
+
+def test_capa_agrupa_por_escopo_quando_ha_mais_de_um():
+    """O agrupamento por COMUM/cargo dentro do concurso — que nunca funcionou
+    porque `cargo_de()` caía sempre em `_GERAL`."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # segundo escopo: matéria aprofundada sob _COMUM, como no vault real
+        outra = base / "_COMUM" / "03-APROFUNDAMENTO" / "suas" / "assuntos" / "loas"
+        outra.mkdir(parents=True)
+        (outra / "loas.md").write_text(
+            '---\ntitle: "LOAS"\n---\nx\n', encoding="utf-8")
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "index.html").read_text(encoding="utf-8")
+        assert "<h2>CARGO-X</h2>" in h
+        assert "<h2>Comum a todos os cargos</h2>" in h
+        assert "_COMUM" not in h, "convenção de pasta não deve vazar para a página"
+
+        # com um único escopo, nenhum título de escopo
+        base2 = _montar_concurso(Path(d) / "SOZINHO_2026")
+        _construir(base2, out)
+        h2 = (out / "sozinho_2026" / "index.html").read_text(encoding="utf-8")
+        assert "<h2>" not in h2
+
+
+def test_css_estiliza_wikilink_morto():
+    """O md2html emite `.wikilink-morto` desde a primeira versão; sem regra no CSS
+    o alvo não publicado ficava indistinguível de texto comum."""
+    css = (ROOT.parent / "assets" / "site.css").read_text(encoding="utf-8")
+    assert ".wikilink-morto" in css
+    bloco = css[css.index(".wikilink-morto"):]
+    bloco = bloco[:bloco.index("}")]
+    assert "var(--" in bloco and not re.search(r":\s*#[0-9a-fA-F]{3,6}", bloco)
+
+
 def test_normalizar_prioridade_aceita_prefixo():
     assert sc.normalizar_prioridade("Prioridade alta") == "alta"
     assert sc.normalizar_prioridade("Média") == "media"

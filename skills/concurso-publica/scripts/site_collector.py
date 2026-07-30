@@ -319,6 +319,42 @@ def coletar_aprofundamento(subdir: Path, slug_assunto: str,
 ORDEM_NIVEL = {"detalhado": 0, "padrao": 1}
 
 
+def uniao_midias(aprofs: list[dict]) -> dict:
+    """União das mídias de TODOS os aprofundamentos do assunto.
+
+    O selo no card afirma "existe podcast para este assunto", e isso é verdade se
+    QUALQUER aprofundamento tiver o arquivo. Antes o valor era herdado do
+    aprofundamento principal e, como `ORDEM_NIVEL` põe `detalhado` na frente, um
+    assunto cuja mídia estava no `padrao` aparecia sem mídia nenhuma. Era o caso do
+    único assunto do vault com podcast, vídeo e mapa mental: os três estão em
+    `padrao--pestana`, e o site anunciava "0 com áudio" na matéria inteira.
+
+    O valor guardado é o nome de arquivo do primeiro aprofundamento que o tem, e
+    serve como INDICADOR DE PRESENÇA — quem precisa do caminho real usa
+    `aprofundamentos[i]["midias"]`, que é relativo à pasta daquele aprofundamento.
+    """
+    return {chave: next((a["midias"][chave] for a in aprofs
+                         if a.get("midias", {}).get(chave)), None)
+            for chave in CATALOGO_MIDIAS}
+
+
+def uniao_flashcards(aprofs: list[dict], principal: dict) -> dict:
+    """Presença de flashcards em qualquer aprofundamento; contagem do principal.
+
+    Mesma armadilha da `uniao_midias`: a presença é do conjunto, senão a matéria
+    reporta "0 com flashcards" quando só o nível não-principal os tem. Já `n_cards`
+    continua sendo o do principal — somar baralhos de níveis diferentes daria um
+    número que não corresponde a nenhum baralho de verdade.
+    """
+    return {
+        "obsidian": next((a["flashcards"]["obsidian"] for a in aprofs
+                          if a.get("flashcards", {}).get("obsidian")), None),
+        "anki": next((a["flashcards"]["anki"] for a in aprofs
+                      if a.get("flashcards", {}).get("anki")), None),
+        "n_cards": principal["flashcards"].get("n_cards", 0),
+    }
+
+
 def coletar_assunto(subdir: Path, mapa_prio: dict | None = None) -> dict | None:
     """Coleta UM assunto com TODOS os seus aprofundamentos.
 
@@ -377,11 +413,12 @@ def coletar_assunto(subdir: Path, mapa_prio: dict | None = None) -> dict | None:
         "n_fontes": len({f.strip() for a in aprofs
                          for f in (a.get("fontes") or "").split(",") if f.strip()}),
         "aprofundamentos": aprofs,
-        # atalhos do principal (compatibilidade com o restante do site)
-        "status": principal.get("status", "?"),
+        # agregados do CONJUNTO de aprofundamentos: presença de mídia e de
+        # flashcards não podem vir do principal (ver uniao_midias)
+        "midias": uniao_midias(aprofs),
+        "flashcards": uniao_flashcards(aprofs, principal),
+        # atalhos do principal
         "resumo_md": principal["resumo_md"],
-        "midias": principal["midias"],
-        "flashcards": principal["flashcards"],
         "notebooklm_url": principal.get("notebooklm_url"),
         "progresso": principal["progresso"],
     }
@@ -457,17 +494,26 @@ def achar_materias(base: Path) -> list[Path]:
 
 
 def cargo_de(materia_dir: Path, base: Path) -> str:
-    """Deriva o cargo do caminho: .../{CARGO}/03-MAPAS-MATERIAS/{materia}.
-    Se não houver esse nível, usa '_GERAL'."""
+    """Deriva o escopo da matéria: o PRIMEIRO componente sob a raiz do concurso.
+
+    É assim que o vault organiza — `_COMUM/` para o que é transversal e
+    `{CARGO}/` para o resto — e é o que o usuário vê no Obsidian.
+
+    A versão anterior procurava o segmento `03-MAPAS` no caminho e devolvia o
+    componente anterior a ele. Como o aprofundamento vive em `03-APROFUNDAMENTO`,
+    a condição **nunca casava** com o vault real e TODA matéria caía em `_GERAL`,
+    deixando a capa do concurso sem nenhum agrupamento. O teste não pegou porque a
+    fixture montava os assuntos sob `03-MAPAS-MATERIAS`, um layout que a
+    `concurso-aprofunda` não produz.
+
+    Matéria solta na raiz do concurso (layout achatado) continua em `_GERAL`.
+    """
     try:
         rel = materia_dir.relative_to(base)
     except ValueError:
         return "_GERAL"
     partes = rel.parts
-    for i, p in enumerate(partes):
-        if p.upper().startswith("03-MAPAS"):
-            return partes[i - 1] if i >= 1 else "_GERAL"
-    return "_GERAL"
+    return partes[0] if len(partes) >= 2 else "_GERAL"
 
 
 def coletar_concurso(base: Path) -> dict:

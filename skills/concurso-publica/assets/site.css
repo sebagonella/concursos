@@ -232,6 +232,16 @@ video { background: #000; }
 mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
 .atencao { color: var(--correcao); }
 
+/* wikilink cujo alvo não foi publicado: o texto fica, o link não.
+   O md2html emite esta classe desde a primeira versão e o CSS nunca a estilizou —
+   o leitor não distinguia de texto comum e não sabia que havia referência ali.
+   Só variáveis de tema: cor fixa aqui quebraria o modo escuro. */
+.wikilink-morto {
+  color: var(--grafite-fraco);
+  border-bottom: 1px dotted var(--pauta);
+  cursor: help;
+}
+
 /* lightbox do mapa mental */
 .lightbox {
   position: fixed; inset: 0; background: rgba(16,20,37,.88);
