@@ -4,6 +4,11 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [0.7.0] - 2026-07-30
 
+### Modificado (deploy)
+- **A porta publicada passa de 8088 para 8099** — a 8088 já estava em uso no host, e o `docker compose up` falhava com "address already in use".
+- **`CONCURSOS_PORTA` passa a valer de fato.** O mapeamento do `docker-compose.yml` estava fixo em `"8088:80"` e a variável só alimentava as URLs impressas: trocar de porta exigia editar os dois lugares, e quem mexesse só na variável via o script anunciar um endereço diferente do que o container realmente publicava. Agora o compose usa `${CONCURSOS_PORTA:-8099}` e o `--setup` escreve um `.env` ao lado dele, que o compose lê sozinho. A porta interna do nginx segue 80.
+- **`--setup` confere a porta antes de subir o container**, e diz qual processo a está ocupando. Antes o erro vinha do Docker, sem apontar o culpado nem o que fazer — e descobrir isso depois custava outra ida ao servidor.
+
 ### Adicionado
 - **Escopos COMUM/cargo dentro do concurso.** A estrutura de saída espelha o vault: `{concurso}/{comum|cargo}/`. A capa lista os galhos, um card por escopo; a grade de matérias desceu para o hub do escopo, porque na capa o que se faz é escolher o cargo.
 - **Todo o conteúdo abaixo do concurso**, por tabela declarativa `SECOES`: edital, cronograma, materiais (com as leis), histórico, sinergia, discursiva e títulos. Os `.md` viram documento; o resto vira **anexo copiado** — o nginx serve só `/srv/site`, então sem a cópia o link da lei funcionaria apenas na máquina do vault. Anexo mostra o tamanho antes do clique: há PDF de quase 10 MB.

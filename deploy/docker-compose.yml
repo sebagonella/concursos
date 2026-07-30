@@ -1,4 +1,4 @@
-# docker-compose.yml - container do site de estudo (concursos.casa:8088)
+# docker-compose.yml - container do site de estudo (concursos.casa:8099)
 #
 # Estratégia de deploy: o site é montado por BIND MOUNT (./site:/srv/site:ro),
 # não copiado para dentro da imagem. Assim, atualizar o site é só sincronizar
@@ -17,9 +17,13 @@ services:
     restart: unless-stopped
 
     ports:
-      # host:container — o site responde diretamente em concursos.casa:8088.
-      # 8088 é a porta publicada no host; 80 é a porta interna do nginx.
-      - "8088:80"
+      # host:container — o site responde diretamente em concursos.casa:8099.
+      # A porta do HOST vem de CONCURSOS_PORTA (o `deploy.sh --setup` escreve um
+      # `.env` ao lado deste arquivo, que o compose lê sozinho), para a variável ser
+      # a única fonte da verdade: antes ela só alimentava as URLs impressas e o
+      # mapeamento ficava fixo aqui, então trocar de porta exigia editar os dois.
+      # A porta INTERNA do nginx é sempre 80 e não muda.
+      - "${CONCURSOS_PORTA:-8099}:80"
 
     volumes:
       - ./site:/srv/site:ro                          # conteúdo do site (read-only)

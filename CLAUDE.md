@@ -45,8 +45,8 @@ skills/
 scripts/install.sh          # instalador único (instala/atualiza todas as skills)
 scripts/test-all.sh         # roda as suítes de todas as skills
 deploy/                     # Docker + rsync para servir o site num servidor doméstico
-│   ├── docker-compose.yml  # nginx:alpine, bind mount, porta 8088, 0.5 CPU / 128 MB
-│   ├── nginx.conf          # serve na raiz em concursos.casa:8088
+│   ├── docker-compose.yml  # nginx:alpine, bind mount, porta 8099, 0.5 CPU / 128 MB
+│   ├── nginx.conf          # serve na raiz em concursos.casa:8099
 │   └── deploy.sh           # gera o site do vault e sincroniza via SSH
 docs/                       # documentação do projeto
 ```

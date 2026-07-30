@@ -1,4 +1,4 @@
-# Deploy — site de estudo em `concursos.casa:8088`
+# Deploy — site de estudo em `concursos.casa:8099`
 
 Serve o site estático num container Docker isolado, com limites de recurso.
 
@@ -6,7 +6,7 @@ Serve o site estático num container Docker isolado, com limites de recurso.
 
 O container usa **bind mount**: o site vive numa pasta do servidor (`/opt/concursos/site`) montada dentro do nginx. Consequência prática — **atualizar o site é só sincronizar arquivos**. Não há rebuild de imagem, não há restart de container, não há downtime.
 
-O container responde **diretamente** em `concursos.casa:8088`, servindo o site na **raiz** (`/`). Não é preciso proxy reverso na frente.
+O container responde **diretamente** em `concursos.casa:8099`, servindo o site na **raiz** (`/`). Não é preciso proxy reverso na frente.
 
 ```
 Sua máquina (vault)                    Servidor (Linux)
@@ -15,9 +15,9 @@ Sua máquina (vault)                    Servidor (Linux)
                                           │   ├── nginx.conf
                                           │   └── site/          ← bind mount
                                           └── container nginx:alpine
-                                              host 8088 → container 80
+                                              host 8099 → container 80
                                                       ▲
-                                            http://concursos.casa:8088/
+                                            http://concursos.casa:8099/
 ```
 
 > O caminho antigo `/concursos` continua respondendo — redireciona para a raiz, para não quebrar links já salvos.
@@ -32,7 +32,7 @@ cat > deploy/deploy.env <<'CFG'
 CONCURSOS_HOST=concursos.casa
 CONCURSOS_USER=seu-usuario
 CONCURSOS_DIR=/opt/concursos
-CONCURSOS_PORTA=8088
+CONCURSOS_PORTA=8099
 CFG
 
 # 2. prepara o servidor e sobe o container
@@ -56,7 +56,7 @@ O container atende qualquer nome que chegue nele; falta apenas o nome resolver p
   192.168.0.10   concursos.casa
   ```
 
-Se o servidor já usa outro domínio local, os dois podem coexistir: o `server_name` aceita `concursos.casa` e qualquer outro nome que chegue na porta 8088.
+Se o servidor já usa outro domínio local, os dois podem coexistir: o `server_name` aceita `concursos.casa` e qualquer outro nome que chegue na porta 8099.
 
 ## Uso no dia a dia
 
@@ -93,18 +93,24 @@ docker compose -f /opt/concursos/docker-compose.yml ps
 docker stats concursos-site --no-stream       # consumo real de CPU/RAM
 
 # de qualquer máquina da rede
-curl -I http://concursos.casa:8088/healthz    # deve responder 200
-curl -I http://concursos.casa:8088/           # o site
+curl -I http://concursos.casa:8099/healthz    # deve responder 200
+curl -I http://concursos.casa:8099/           # o site
 ```
 
 ## Solução de problemas
 
-**"Não resolve o nome"** — falta o registro DNS local (ou a entrada no `hosts`). Teste primeiro pelo IP: `http://IP-DO-SERVIDOR:8088/`.
+**"Não resolve o nome"** — falta o registro DNS local (ou a entrada no `hosts`). Teste primeiro pelo IP: `http://IP-DO-SERVIDOR:8099/`.
 
-**Porta 8088 ocupada** — troque o lado esquerdo do mapeamento no `docker-compose.yml` (`"8090:80"`) e ajuste as URLs; a porta interna (80) não muda.
+**Porta ocupada** — o `--setup` confere antes de subir e diz quem está usando. Para trocar, basta a variável; o mapeamento do compose a segue:
+
+```bash
+CONCURSOS_PORTA=8100 ./deploy/deploy.sh --setup   # ou fixe em deploy/deploy.env
+```
+
+A porta interna do nginx é sempre 80 e não muda. Para ver o que ocupa uma porta no servidor: `ss -ltnp | grep 8099`.
 
 **403 ou "directory index forbidden"** — falta o `index.html` em `site/`. Rode um deploy.
 
 **Container reiniciando** — `docker compose logs` no servidor. Se for OOM, aumente `mem_limit` (improvável nesse porte).
 
-**Quer colocar atrás de um proxy depois?** Aponte o proxy para a porta 8088 sem reescrever o caminho, ou mude o mapeamento para `127.0.0.1:8088:80` para o container deixar de ser acessível direto pela rede.
+**Quer colocar atrás de um proxy depois?** Aponte o proxy para a porta 8099 sem reescrever o caminho, ou mude o mapeamento para `127.0.0.1:8099:80` para o container deixar de ser acessível direto pela rede.

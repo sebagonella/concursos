@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy.sh - Publica o site de estudo no servidor (concursos.casa:8088).
+# deploy.sh - Publica o site de estudo no servidor (concursos.casa:8099).
 #
 # Roda na SUA máquina (onde está o vault). Faz:
 #   1. gera o site a partir da pasta do concurso no vault
@@ -30,7 +30,7 @@ SKILL_DIR="$REPO_ROOT/skills/concurso-publica"
 CONCURSOS_HOST="${CONCURSOS_HOST:-${BEELINK_HOST:-concursos.casa}}"
 CONCURSOS_USER="${CONCURSOS_USER:-${BEELINK_USER:-${USER:-${LOGNAME:-$(id -un 2>/dev/null || echo root)}}}}"
 CONCURSOS_DIR="${CONCURSOS_DIR:-${BEELINK_DIR:-/opt/concursos}}"   # onde vive o compose no servidor
-CONCURSOS_PORTA="${CONCURSOS_PORTA:-8088}"                          # porta publicada no host
+CONCURSOS_PORTA="${CONCURSOS_PORTA:-8099}"                          # porta publicada no host
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/out/site}"        # saída local do gerador
 
 [[ -f "$AQUI/deploy.env" ]] && source "$AQUI/deploy.env"
@@ -58,9 +58,28 @@ alvo="$CONCURSOS_USER@$CONCURSOS_HOST"
 # ---------------------------------------------------------------------------
 if [[ $SETUP -eq 1 ]]; then
   echo "🔧 Preparando o servidor ($alvo:$CONCURSOS_DIR)..."
+
+  # A porta é conferida ANTES de subir o container: o `docker compose up` falha com
+  # "address already in use", mensagem que não diz quem está ocupando nem o que
+  # fazer. Descobrir isso depois custa uma ida ao servidor.
+  ocupada=$(ssh "$alvo" "(ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) \
+    | grep -E '[:.]${CONCURSOS_PORTA}[[:space:]]' || true")
+  if [[ -n "$ocupada" ]]; then
+    echo "❌ A porta $CONCURSOS_PORTA já está em uso em $CONCURSOS_HOST:" >&2
+    echo "$ocupada" | sed 's/^/     /' >&2
+    echo "" >&2
+    echo "   Escolha outra porta e rode de novo:" >&2
+    echo "     CONCURSOS_PORTA=8100 ./deploy/deploy.sh --setup" >&2
+    echo "   (ou fixe em deploy/deploy.env). O mapeamento do docker-compose.yml" >&2
+    echo "   acompanha a variável; a porta interna do nginx (80) não muda." >&2
+    exit 1
+  fi
+
   ssh "$alvo" "mkdir -p '$CONCURSOS_DIR/site'"
   scp "$AQUI/docker-compose.yml" "$AQUI/nginx.conf" "$alvo:$CONCURSOS_DIR/"
-  echo "🐳 Subindo o container..."
+  # o compose lê este .env sozinho; é o que faz CONCURSOS_PORTA valer de fato
+  ssh "$alvo" "printf 'CONCURSOS_PORTA=%s\n' '$CONCURSOS_PORTA' > '$CONCURSOS_DIR/.env'"
+  echo "🐳 Subindo o container na porta $CONCURSOS_PORTA..."
   ssh "$alvo" "cd '$CONCURSOS_DIR' && docker compose up -d"
   echo ""
   ssh "$alvo" "cd '$CONCURSOS_DIR' && docker compose ps"

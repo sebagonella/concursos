@@ -187,9 +187,9 @@ porque o site precisa funcionar offline na rede doméstica.
 
 ## Deploy (servidor doméstico)
 
-Em `deploy/`: ambiente Docker para servir o site em `concursos.casa:8088`.
+Em `deploy/`: ambiente Docker para servir o site em `concursos.casa:8099`.
 
-- `docker-compose.yml` — nginx:alpine com bind mount do site; publica a porta **8088**;
+- `docker-compose.yml` — nginx:alpine com bind mount do site; publica a porta **8099**;
   limites 0.5 CPU / 128 MB (dimensionado para ~3 usuários simultâneos; servir estático é I/O, não CPU)
 - `nginx.conf` — serve o site na **raiz** (`/`), com healthcheck e logs enxutos.
   O caminho antigo `/concursos/<algo>` redireciona para `/<algo>`, preservando deep links
