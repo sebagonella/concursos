@@ -185,6 +185,37 @@ def montar_lista_fontes(assunto_md: Path, leis: list[str], fm: dict) -> str:
     return "\n".join(linhas)
 
 
+def herdar_campos(destino: Path) -> tuple[str, str]:
+    """Lê do pack existente os campos que só o usuário sabe preencher.
+
+    Devolve `(notebooklm_url, notebooklm_status)`, com os padrões de um pack novo
+    quando o arquivo não existe ou não tem as chaves. O `notebooklm_url` é o único
+    dado do pacote que não é derivável: tudo o mais (fontes, prompts, roteiro,
+    perguntas) o gerador reconstrói a partir do assunto.
+    """
+    if not destino.exists():
+        return "", "nao-criado"
+    try:
+        txt = destino.read_text(encoding="utf-8")
+    except OSError:
+        return "", "nao-criado"
+    m = re.match(r"^---\s*\n(.*?)\n---\s*\n", txt, re.DOTALL)
+    if not m:
+        return "", "nao-criado"
+    fm = m.group(1)
+
+    def ler(chave: str, padrao: str) -> str:
+        achado = re.search(rf"^{chave}:\s*(.*)$", fm, re.MULTILINE)
+        if not achado:
+            return padrao
+        valor = achado.group(1).strip().strip('"').strip("'")
+        if valor.lower() in ("", "null", "~"):
+            return padrao
+        return valor
+
+    return ler("notebooklm_url", ""), ler("notebooklm_status", "nao-criado")
+
+
 def preencher(tpl: str, ctx: dict) -> str:
     out = tpl
     for k, v in ctx.items():
@@ -238,6 +269,13 @@ def main():
                 "PERGUNTAS_CHAT": montar_perguntas(assunto),
             }
             destino = pasta / "_fonte-notebooklm.md"
+
+            # Campos que o USUÁRIO preenche à mão viajam do pack antigo para o novo.
+            # Sem isso, a regeneração manda o link do notebook para o `.bak.md` e o
+            # botão "Abrir no NotebookLM" desaparece do site sem erro nenhum — é a
+            # única informação do pacote que não dá para regerar.
+            ctx["NOTEBOOKLM_URL"], ctx["NOTEBOOKLM_STATUS"] = herdar_campos(destino)
+
             novo = preencher(tpl, ctx)
             # preservar trabalho do usuário: só sobrescreve com backup, e só se mudou
             if destino.exists():

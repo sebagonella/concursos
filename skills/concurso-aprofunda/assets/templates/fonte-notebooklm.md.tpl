@@ -5,7 +5,10 @@ materia: "{MATERIA}"
 concurso: "{CONCURSO}"
 assunto: "{ASSUNTO}"
 tags: [notebooklm, concurso/aprofundamento, {TAG_ASSUNTO}]
-notebooklm_status: nao-criado
+notebooklm_status: {NOTEBOOKLM_STATUS}
+# Cole aqui o link do notebook depois de criá-lo: é o que faz o botão
+# "Abrir no NotebookLM" aparecer no site gerado pela concurso-publica.
+notebooklm_url: "{NOTEBOOKLM_URL}"
 ---
 
 # 🎙️ Pacote NotebookLM — {ASSUNTO}

@@ -216,6 +216,62 @@ def test_notebooklm_pack_gera_pacote_por_assunto():
         assert "Construa o mapa mental" in pack  # prompt de mindmap fino            # prompt específico
 
 
+def test_pack_emite_notebooklm_url_para_o_site_ler():
+    """A `concurso-publica` só mostra o botão "Abrir no NotebookLM" se
+    `notebooklm_url:` estiver preenchida no pack. O template nunca emitia a chave, o
+    que deixava o botão inalcançável em 100% dos casos — não havia como o usuário
+    preencher um campo que não existia."""
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d) / "assuntos" / "crase"
+        base.mkdir(parents=True)
+        (base / "crase.md").write_text(
+            '---\ntitle: "Crase"\nmateria: "Português"\n---\nResumo real.\n',
+            encoding="utf-8")
+        subprocess.run([sys.executable, str(ROOT / "notebooklm_pack.py"),
+                        "--assuntos-dir", str(Path(d) / "assuntos"),
+                        "--concurso", "SEDES_2026", "--materia", "Português"],
+                       capture_output=True, text=True)
+        pack = (base / "_fonte-notebooklm.md").read_text(encoding="utf-8")
+        assert 'notebooklm_url: ""' in pack
+        assert "notebooklm_status: nao-criado" in pack
+
+
+def test_regerar_pack_nao_apaga_o_link_digitado_a_mao():
+    """Regressão do risco que acompanha a chave nova: `notebooklm_pack.py` reescreve
+    o pack sempre que o conteúdo muda, e acrescentar a chave ao template faz TODO
+    pack existente contar como mudado. Sem herdar o valor, a URL que o usuário
+    digitou iria para o `.bak.md` e o botão desapareceria do site sem erro — a única
+    informação do pacote que não é regerável."""
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d) / "assuntos" / "crase"
+        base.mkdir(parents=True)
+        (base / "crase.md").write_text(
+            '---\ntitle: "Crase"\nmateria: "Português"\n---\nResumo real.\n',
+            encoding="utf-8")
+        args = [sys.executable, str(ROOT / "notebooklm_pack.py"),
+                "--assuntos-dir", str(Path(d) / "assuntos"),
+                "--concurso", "SEDES_2026", "--materia", "Português"]
+        subprocess.run(args, capture_output=True, text=True)
+
+        # o usuário cria o notebook e cola o link, e marca o status
+        pack_f = base / "_fonte-notebooklm.md"
+        txt = pack_f.read_text(encoding="utf-8")
+        txt = txt.replace('notebooklm_url: ""',
+                          'notebooklm_url: "https://notebooklm.google.com/notebook/abc"')
+        txt = txt.replace("notebooklm_status: nao-criado", "notebooklm_status: criado")
+        pack_f.write_text(txt, encoding="utf-8")
+
+        # o resumo muda e o pacote é regerado
+        (base / "crase.md").write_text(
+            '---\ntitle: "Crase"\nmateria: "Português"\n---\nOutro resumo, revisado.\n',
+            encoding="utf-8")
+        subprocess.run(args, capture_output=True, text=True)
+
+        novo = pack_f.read_text(encoding="utf-8")
+        assert "https://notebooklm.google.com/notebook/abc" in novo
+        assert "notebooklm_status: criado" in novo
+
+
 def test_notebooklm_pack_pula_arcabouco():
     with tempfile.TemporaryDirectory() as d:
         base = Path(d) / "assuntos" / "vazio"
