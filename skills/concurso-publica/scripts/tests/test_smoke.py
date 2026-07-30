@@ -39,12 +39,23 @@ def _dir_materia(out: Path, concurso: str, materia: str = "portugues",
                  escopo: str = "cargo-x") -> Path:
     """Pasta da matéria no site gerado. O nível de escopo entra aqui quando o
     layout mudar; os testes não precisam saber."""
-    return out / concurso / materia
+    return out / concurso / escopo / "materias" / materia
 
 
 def _dir_assunto(out: Path, concurso: str, assunto: str,
                  materia: str = "portugues", escopo: str = "cargo-x") -> Path:
     return _dir_materia(out, concurso, materia, escopo) / assunto
+
+
+def _mat_vault(base: Path, materia: str = "portugues",
+               escopo: str = "CARGO-X") -> Path:
+    """Pasta da matéria no VAULT, como a `concurso-aprofunda` a cria.
+
+    Era `{CARGO}/03-MAPAS-MATERIAS/{materia}/` — caminho que a skill nunca emite, e
+    que por isso mesmo mantinha o bug do `_GERAL` invisível. Agora espelha o real:
+    `{ESCOPO}/03-APROFUNDAMENTO/{materia}/`.
+    """
+    return base / escopo / "03-APROFUNDAMENTO" / materia
 
 
 # --------------------------------------------------------------------------- #
@@ -53,7 +64,7 @@ def _dir_assunto(out: Path, concurso: str, assunto: str,
 def _montar_concurso(base: Path, com_midias=True, com_url_nb=False):
     """Monta um concurso mínimo: 1 cargo, 1 matéria, 2 assuntos."""
     base.mkdir(parents=True, exist_ok=True)
-    mat = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues"
+    mat = _mat_vault(base)
     (base / ".meta.json").write_text(json.dumps(
         {"orgao": "TESTE", "ano": 2026, "banca": "Banca X"}), encoding="utf-8")
 
@@ -90,11 +101,9 @@ def _montar_concurso(base: Path, com_midias=True, com_url_nb=False):
 def _montar_secoes(base: Path):
     """As pastas numeradas que a concurso-prep gera e o site ainda não publica.
 
-    Ficam no fixture desde já, ainda inertes: hoje `achar_materias()` só procura
-    `assuntos/`, então nada disso entra no modelo. O ponto é que os coletores novos
-    e o auditor de links nasçam vendo a MESMA forma que o vault tem — foi
-    exatamente um fixture divergente do vault (assuntos sob `03-MAPAS-MATERIAS`)
-    que deixou o bug do `_GERAL` verde por tanto tempo.
+    Junto com `_mat_vault()`, é o que faz o fixture ter a MESMA forma que o vault:
+    foi exatamente um fixture divergente (assuntos sob `03-MAPAS-MATERIAS`, caminho
+    que a concurso-aprofunda nunca emite) que manteve o bug do `_GERAL` verde.
     """
     def escrever(rel: str, texto: str):
         p = base / rel
@@ -222,8 +231,15 @@ def test_coleta_estrutura_completa():
         m = _rodar(base)
         assert m["concurso"] == "TESTE_2026"
         assert m["meta"]["banca"] == "Banca X"
-        assert m["resumo"] == {"n_cargos": 1, "n_materias": 1, "n_assuntos": 2}
-        assert _escopos(m)[0]["nome"] == "CARGO-X"
+        r = m["resumo"]
+        # dois escopos: o cargo (que tem a matéria) e o _COMUM (que só tem seções).
+        # Antes o _COMUM não era nem descoberto, porque a varredura partia de
+        # `rglob("assuntos")` e ele não tem aprofundamento.
+        assert (r["n_escopos"], r["n_cargos"]) == (2, 1)
+        assert (r["n_materias"], r["n_assuntos"]) == (1, 2)
+        assert r["n_documentos"] > 0 and r["n_anexos"] > 0
+        assert [e["nome"] for e in _escopos(m)] == ["_COMUM", "CARGO-X"]
+        assert [e["tipo"] for e in _escopos(m)] == ["comum", "cargo"]
 
 
 def test_midias_por_presenca():
@@ -617,23 +633,30 @@ def test_rotas_tem_tres_classes_de_alvo():
         m = sc.coletar_concurso(base)
         rotas, plano = sb.montar_rotas(m, "teste_2026")
 
+        raiz_a = "teste_2026/cargo-x/materias/portugues/crase"
         # página
-        assert rotas.rota_de("crase") == "teste_2026/portugues/crase/index.html"
+        assert rotas.rota_de("crase") == f"{raiz_a}/index.html"
         # artefato embutido -> âncora na página que o hospeda
-        assert rotas.rota_de("flashcards-crase") \
-            == "teste_2026/portugues/crase/index.html#flashcards"
+        assert rotas.rota_de("flashcards-crase") == f"{raiz_a}/index.html#flashcards"
         # arquivo copiado -> caminho da mídia dentro do site
         assert rotas.rota_de("podcast-crase.m4a") \
-            == "teste_2026/portugues/crase/media/unico/podcast-crase.m4a"
-        # o plano cobre capa + matéria + os 2 assuntos
-        assert [p["tipo"] for p in plano] == ["capa", "materia", "assunto", "assunto"]
+            == f"{raiz_a}/media/unico/podcast-crase.m4a"
+        # anexo de seção -> caminho do arquivo dentro do site
+        assert rotas.rota_de("lei-1234-1990.pdf") \
+            == "teste_2026/comum/materiais/arquivos/leis-baixadas/lei-1234-1990.pdf"
+        # o plano cobre capa, os dois escopos, suas seções, documentos e assuntos
+        tipos = [p["tipo"] for p in plano]
+        assert tipos[0] == "capa"
+        assert tipos.count("escopo") == 2
+        assert tipos.count("assunto") == 2
+        assert "secao" in tipos and "documento" in tipos
 
 
 def test_wikilink_de_flashcards_aponta_para_a_ancora_do_quiz():
     """Antes, TODO wikilink morto do site real apontava para flashcards."""
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        alvo = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos" / "crase"
+        alvo = _mat_vault(base) / "assuntos" / "crase"
         md = alvo / "crase.md"
         md.write_text(md.read_text(encoding="utf-8")
                       + "\nVer [[flashcards-crase]].\n", encoding="utf-8")
@@ -676,7 +699,7 @@ def test_midia_do_assunto_e_uniao_dos_aprofundamentos():
     """
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=False)
-        alvo = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos" / "crase"
+        alvo = _mat_vault(base) / "assuntos" / "crase"
         # detalhado (que ordena primeiro) SEM mídia; padrao COM mídia
         for nome, tem_midia in (("detalhado--pestana", False), ("padrao--pestana", True)):
             p = alvo / nome
@@ -724,29 +747,92 @@ def test_rotulo_do_escopo_nao_expoe_convencao_de_pasta():
     assert sb.nome_escopo("AGENTE-COMERCIAL") == "AGENTE-COMERCIAL"
 
 
-def test_capa_agrupa_por_escopo_quando_ha_mais_de_um():
-    """O agrupamento por COMUM/cargo dentro do concurso — que nunca funcionou
-    porque `cargo_de()` caía sempre em `_GERAL`."""
+def test_capa_agrupa_por_escopo():
+    """O agrupamento por COMUM/cargo dentro do concurso — item 1 do pedido, que
+    nunca funcionou porque `cargo_de()` caía sempre em `_GERAL`.
+
+    A capa lista os GALHOS (um card por escopo). A grade de matérias, que ficava
+    aqui, desceu para o hub do escopo: na capa o que se faz é escolher o cargo.
+    """
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        # segundo escopo: matéria aprofundada sob _COMUM, como no vault real
+        # matéria aprofundada sob _COMUM, como no vault real
         outra = base / "_COMUM" / "03-APROFUNDAMENTO" / "suas" / "assuntos" / "loas"
         outra.mkdir(parents=True)
-        (outra / "loas.md").write_text(
-            '---\ntitle: "LOAS"\n---\nx\n', encoding="utf-8")
+        (outra / "loas.md").write_text('---\ntitle: "LOAS"\n---\nx\n', encoding="utf-8")
 
         out = Path(d) / "site"
         _construir(base, out)
         h = (out / "teste_2026" / "index.html").read_text(encoding="utf-8")
-        assert "<h2>CARGO-X</h2>" in h
-        assert "<h2>Comum a todos os cargos</h2>" in h
+        assert "CARGO-X" in h and "Comum a todos os cargos" in h
+        assert '<span class="tag">comum</span>' in h
         assert "_COMUM" not in h, "convenção de pasta não deve vazar para a página"
+        # os dois hubs de escopo existem e a capa aponta para eles
+        assert (out / "teste_2026" / "comum" / "index.html").exists()
+        assert (out / "teste_2026" / "cargo-x" / "index.html").exists()
+        assert 'href="comum/index.html"' in h and 'href="cargo-x/index.html"' in h
+        quebrados, orfas = _auditar_links(out)
+        assert not quebrados, quebrados
+        assert not orfas, orfas
 
-        # com um único escopo, nenhum título de escopo
-        base2 = _montar_concurso(Path(d) / "SOZINHO_2026")
-        _construir(base2, out)
-        h2 = (out / "sozinho_2026" / "index.html").read_text(encoding="utf-8")
-        assert "<h2>" not in h2
+
+def test_secoes_numeradas_viram_paginas_com_anexos():
+    """Item 2 do pedido: todo o conteúdo abaixo do concurso, não só o
+    aprofundamento. Os `.md` viram documento; o resto vira anexo copiado, porque o
+    nginx só serve `/srv/site` — sem a cópia, o link da lei só funcionaria na
+    máquina do vault."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+
+        comum = out / "teste_2026" / "comum"
+        # documento de seção
+        assert (comum / "edital" / "edital-resumo" / "index.html").exists()
+        assert (comum / "edital" / "index.html").exists()
+        assert (comum / "materiais" / "index.html").exists()
+        assert (comum / "historico" / "index.html").exists()
+        assert (comum / "sinergia" / "index.html").exists()
+        # seções do cargo
+        cargo = out / "teste_2026" / "cargo-x"
+        for slug in ("cronograma", "discursiva", "titulos"):
+            assert (cargo / slug / "index.html").exists(), slug
+        # anexos copiados, preservando a subpasta do vault
+        assert (comum / "materiais" / "arquivos" / "leis-baixadas"
+                / "lei-1234-1990.pdf").exists()
+        assert (comum / "edital" / "arquivos" / "edital-original.pdf").exists()
+
+        # 00-INDICE e 99-Status são LIDOS, não republicados
+        todo_html = "\n".join(p.read_text(encoding="utf-8")
+                              for p in out.rglob("index.html"))
+        assert "00-INDICE" not in todo_html
+        assert not list(out.rglob("*99-status*"))
+
+        quebrados, orfas = _auditar_links(out)
+        assert not quebrados, quebrados
+        assert not orfas, orfas
+
+
+def test_documento_longo_ganha_sumario_lateral():
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        longo = base / "_COMUM" / "01-EDITAL" / "cronograma-oficial.md"
+        longo.write_text("---\ntipo: documentacao\n---\n# Cronograma oficial\n\n"
+                         + "".join(f"## Etapa {i}\n\ntexto\n\n" for i in range(1, 6)),
+                         encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "comum" / "edital" / "cronograma-oficial"
+             / "index.html").read_text(encoding="utf-8")
+        assert 'class="cartao sumario"' in h
+        assert 'href="#etapa-1"' in h and 'id="etapa-1"' in h
+        quebrados, _ = _auditar_links(out)
+        assert not quebrados, quebrados
+
+        # documento curto não ganha sumário — 2 seções não justificam índice
+        h2 = (out / "teste_2026" / "comum" / "edital" / "analise-banca"
+              / "index.html").read_text(encoding="utf-8")
+        assert 'class="cartao sumario"' not in h2
 
 
 def test_css_estiliza_wikilink_morto():
@@ -769,7 +855,7 @@ def test_normalizar_prioridade_aceita_prefixo():
 def test_prioridade_derivada_do_guia():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        mat = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues"
+        mat = _mat_vault(base)
         (mat / "00-GUIA-NOTEBOOKLM.md").write_text(
             "## Ordem sugerida\n\nPrioridade alta (os que derrubam): Crase.\n"
             "Média: Regência.\n", encoding="utf-8")
@@ -782,7 +868,7 @@ def test_prioridade_derivada_do_guia():
 def test_prioridade_do_frontmatter_tem_precedencia():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        crase = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos" / "crase"
+        crase = _mat_vault(base) / "assuntos" / "crase"
         (crase / "crase.md").write_text(
             '---\ntitle: "Crase"\nprioridade: base\nstatus: concluido\n---\ntexto\n',
             encoding="utf-8")
@@ -794,7 +880,7 @@ def test_prioridade_do_frontmatter_tem_precedencia():
 def test_detecta_todas_as_midias_do_notebooklm():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        crase = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos" / "crase"
+        crase = _mat_vault(base) / "assuntos" / "crase"
         for nome in ("video-crase.mp4", "slides-crase.pdf", "infografico-crase.png",
                      "report-crase.md", "teste-crase.md", "tabela-crase.csv"):
             (crase / nome).write_bytes(b"x")
@@ -808,7 +894,7 @@ def test_detecta_todas_as_midias_do_notebooklm():
 def test_doc_da_banca_detectado_e_renderizado_antes_dos_assuntos():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        mat = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues"
+        mat = _mat_vault(base)
         (mat / "COMO-A-BANCA-COBRA-PORTUGUES.md").write_text(
             "# Como a Banca X cobra\n\nTexto sobre o estilo da banca.\n", encoding="utf-8")
         out = Path(d) / "site"
@@ -876,7 +962,7 @@ def test_variaveis_de_tema_definidas_nos_dois_temas():
 # múltiplos aprofundamentos por assunto e agrupamento por órgão
 # --------------------------------------------------------------------------- #
 def _add_aprof(base: Path, assunto: str, ident: str, nivel: str, fontes: str):
-    d = (base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos"
+    d = (_mat_vault(base) / "assuntos"
          / assunto / "aprofundamentos" / ident)
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{assunto}--{ident}.md").write_text(
@@ -1012,7 +1098,7 @@ def _assunto_do_modelo(m, slug):
 
 def _add_aprof_atual(base: Path, assunto: str, ident: str, fontes: str = ""):
     """Cria um aprofundamento no padrão ATUAL (sem o nível 'aprofundamentos/')."""
-    d = (base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos"
+    d = (_mat_vault(base) / "assuntos"
          / assunto / ident)
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{assunto}--{ident}.md").write_text(
@@ -1059,7 +1145,7 @@ def test_pasta_que_nao_e_aprofundamento_e_ignorada():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
         _add_aprof_atual(base, "crase", "padrao--1f--f1-pestana")
-        lixo = (base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos"
+        lixo = (_mat_vault(base) / "assuntos"
                 / "crase" / "anotacoes-soltas")
         lixo.mkdir(parents=True, exist_ok=True)
         (lixo / "rascunho.md").write_text("---\ntitle: x\n---\nnada\n", encoding="utf-8")

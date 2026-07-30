@@ -615,6 +615,182 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
     return pagina(f'{materia["nome"]} — {nome_legivel(concurso)}', trilha, corpo, rota)
 
 
+def tamanho_legivel(n: int) -> str:
+    for unidade, limite in (("GB", 1 << 30), ("MB", 1 << 20), ("kB", 1 << 10)):
+        if n >= limite:
+            return f"{n / limite:.1f} {unidade}".replace(".0 ", " ")
+    return f"{n} B"
+
+
+def lista_documentos(secao: dict, rotas: "Rotas", rota: str) -> str:
+    """As seções de CONSULTA num registro tipográfico, sem card.
+
+    Card com sombra e progresso é para o que se estuda; transformar "Sinergia" em
+    peer visual de "Crase" faria a página competir consigo mesma. Aqui a hierarquia
+    é só tipográfica.
+    """
+    itens = []
+    for doc in secao["documentos"]:
+        href = rotas.rota_de(doc["arquivo"])
+        if not href:
+            continue
+        meta = []
+        if doc["n_secoes"]:
+            meta.append(f'{doc["n_secoes"]} seções')
+        if doc["progresso"]["total"]:
+            meta.append(f'{doc["progresso"]["feitos"]}/{doc["progresso"]["total"]} itens')
+        itens.append(
+            f'<li><a href="{esc(relativo(href, rota))}">{esc(doc["titulo"])}</a>'
+            + (f'<span class="meta">{esc(" · ".join(meta))}</span>' if meta else "")
+            + (f'<p class="resumo">{esc(doc["resumo"])}</p>' if doc["resumo"] else "")
+            + "</li>")
+    return f'<ul class="lista-docs">{"".join(itens)}</ul>' if itens else ""
+
+
+def lista_anexos(secao: dict, rotas: "Rotas", rota: str) -> str:
+    """Anexos com tamanho, para o peso ser visível ANTES do clique — há PDF de
+    quase 10 MB, e quem abre no celular na rede doméstica agradece o aviso."""
+    if not secao["anexos"]:
+        return ""
+    itens = []
+    for a in secao["anexos"]:
+        href = rotas.rota_de(a["arquivo"])
+        if not href:
+            continue
+        rel = relativo(href, rota)
+        itens.append(
+            f'<li><span class="rot">{esc(a["arquivo"])}</span>'
+            f'<span class="meta">{esc(tamanho_legivel(a["bytes"]))}</span>'
+            f'<a class="baixar" href="{esc(rel)}" download="{esc(a["arquivo"])}">'
+            f'⤓ Baixar</a></li>')
+    total = tamanho_legivel(secao["bytes_anexos"])
+    return (f'<section class="papel" style="margin-top:1.5rem">'
+            f'<h2 id="arquivos">Arquivos ({secao["n_anexos"]} · {esc(total)})</h2>'
+            f'<ul class="midias-extra">{"".join(itens)}</ul></section>')
+
+
+def pagina_escopo(escopo: dict, concurso: str, rotas: "Rotas", rota: str,
+                  rota_capa: str) -> str:
+    """Hub de um escopo (`_COMUM` ou um cargo).
+
+    Focal: as matérias, que é onde se estuda. Depois as seções de estudo, e por
+    último as de consulta, num registro visivelmente mais quieto.
+    """
+    rotulo = nome_escopo(escopo["nome"]) or nome_legivel(concurso)
+
+    grupos = []
+    if escopo["materias"]:
+        cards = []
+        for mat in escopo["materias"]:
+            href = relativo(rotas.rota_de(mat["slug"]) or "", rota)
+            cards.append(f"""<a class="item" href="{esc(href)}">
+  <h3>{esc(mat["nome"])}</h3>
+  <div class="meta">{mat["n_assuntos"]} assuntos · {mat["n_com_podcast"]} com áudio</div>
+</a>""")
+        grupos.append(f"""<section class="grupo grupo-escopo">
+  <header><h2>Matérias</h2>
+  <span class="quantos">{len(escopo["materias"])} matérias ·
+  {escopo["n_assuntos"]} assuntos</span></header>
+  <div class="grade">{"".join(cards)}</div>
+</section>""")
+
+    for registro, titulo, explica in (
+            ("estudo", "Estudo e planejamento",
+             "O que fazer e como treinar."),
+            ("consulta", "Consulta",
+             "As regras, as fontes e o histórico — para conferir quando precisar.")):
+        secoes = [s for s in escopo["secoes"] if s["registro"] == registro]
+        if not secoes:
+            continue
+        blocos = []
+        for s in secoes:
+            # a rota da seção é sempre `{escopo}/{slug}/index.html`, mesmo quando ela
+            # foi colapsada no documento único — o caminho é o mesmo, muda o conteúdo
+            href = relativo(f'{PurePosixPath(rota).parent}/{s["slug"]}/index.html', rota)
+            n = []
+            if s["n_documentos"] > 1:
+                n.append(f'{s["n_documentos"]} documentos')
+            if s["n_anexos"]:
+                n.append(f'{s["n_anexos"]} arquivo(s) · {tamanho_legivel(s["bytes_anexos"])}')
+            blocos.append(
+                f'<li><span class="ordinal">{esc(s["ordinal"])}</span>'
+                f'<a href="{esc(href)}">{esc(s["rotulo"])}</a>'
+                f'<span class="meta">{esc(" · ".join(n))}</span></li>')
+        grupos.append(f"""<section class="grupo grupo-escopo" data-registro="{registro}">
+  <header><h2>{esc(titulo)}</h2><span class="quantos">{len(secoes)} seções</span></header>
+  <p class="explica">{esc(explica)}</p>
+  <ul class="lista-secoes">{"".join(blocos)}</ul>
+</section>""")
+
+    prog = escopo.get("progresso") or {}
+    corpo = f"""<div class="papel">
+  <div class="sobrancelha">{esc(nome_legivel(concurso))}</div>
+  <h1>{esc(rotulo)}</h1>
+  {gabarito(prog) if prog.get("total") else ""}
+</div>
+<div style="margin-top:1.25rem">{"".join(grupos)}</div>"""
+    trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a>'
+              f' › {esc(rotulo)}')
+    return pagina(f"{rotulo} — {nome_legivel(concurso)}", trilha, corpo, rota)
+
+
+def pagina_secao(secao: dict, escopo: dict, concurso: str, rotas: "Rotas",
+                 rota: str, rota_escopo: str, rota_capa: str) -> str:
+    """Índice de uma seção: seus documentos e seus anexos."""
+    rotulo_esc = nome_escopo(escopo["nome"]) or nome_legivel(concurso)
+    corpo = f"""<div class="papel">
+  <div class="sobrancelha">{esc(secao["ordinal"])} · {esc(rotulo_esc)}</div>
+  <h1>{esc(secao["rotulo"])}</h1>
+  {lista_documentos(secao, rotas, rota)}
+</div>
+{lista_anexos(secao, rotas, rota)}"""
+    trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a> › '
+              f'<a href="{relativo(rota_escopo, rota)}">{esc(rotulo_esc)}</a> › '
+              f'{esc(secao["rotulo"])}')
+    return pagina(f'{secao["rotulo"]} — {nome_legivel(concurso)}', trilha, corpo, rota)
+
+
+def bloco_sumario(md: str, rota_atual: str) -> str:
+    """Índice de seções na lateral, quando o documento é longo o bastante.
+
+    Reusa `.colunas`/`.lateral` da página de assunto em vez de inventar layout: os
+    documentos do vault têm de 50 a 2.400 linhas, e rolar 600 linhas sem índice é o
+    que faz a pessoa desistir e voltar ao Obsidian.
+    """
+    itens = md2html.sumario(md)
+    if len(itens) < 4:
+        return ""
+    links = "".join(
+        f'<li class="n{x["nivel"]}"><a href="#{esc(x["id"])}">{esc(x["texto"])}</a></li>'
+        for x in itens)
+    return (f'<section class="cartao sumario"><h3>Nesta página</h3>'
+            f'<ul>{links}</ul></section>')
+
+
+def pagina_documento(doc: dict, secao: dict, escopo: dict, concurso: str,
+                     rotas: "Rotas", rota: str, trilha_meio: tuple,
+                     rota_capa: str) -> str:
+    md = Path(doc["caminho"]).read_text(encoding="utf-8")
+    corpo_html = md2html.converter(md, wikilink_resolver=rotas.resolvedor(rota))
+    sumario = bloco_sumario(md, rota)
+
+    if sumario:
+        corpo = (f'<div class="colunas">'
+                 f'<article class="papel">{corpo_html}</article>'
+                 f'<aside class="lateral">{sumario}</aside></div>')
+    else:
+        corpo = f'<article class="papel">{corpo_html}</article>'
+
+    # o nível do meio da trilha é a seção quando ela tem índice próprio, e o escopo
+    # quando a seção É este documento
+    rota_meio, rotulo_meio = trilha_meio
+    trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a> › '
+              f'<a href="{relativo(rota_meio, rota)}">{esc(rotulo_meio)}</a> › '
+              f'{esc(doc["titulo"])}')
+    return pagina(f'{doc["titulo"]} — {nome_legivel(concurso)}', trilha, corpo, rota,
+                  doc.get("resumo", ""))
+
+
 def pagina_capa(modelo: dict, rotas: "Rotas", rota: str) -> str:
     meta = modelo.get("meta", {})
     campos = []
@@ -643,31 +819,34 @@ def pagina_capa(modelo: dict, rotas: "Rotas", rota: str) -> str:
             f"<div><dt>{esc(k)}</dt><dd>{esc(v)}</dd></div>" for k, v in campos)
             + "</dl>")
 
-    blocos = []
-    for cargo in modelo["cargos"]:
-        itens = []
-        for mat in cargo["materias"]:
-            href = relativo(rotas.rota_de(mat["slug"]) or f'{mat["slug"]}/index.html',
-                            rota)
-            itens.append(f"""<a class="item" href="{esc(href)}">
-  <h3>{esc(mat["nome"])}</h3>
-  <div class="meta">{mat["n_assuntos"]} assuntos · {mat["n_com_podcast"]} com podcast</div>
+    # Um card por escopo — o galho, não a matéria. A grade de matérias, que ficava
+    # aqui, desceu para o hub do escopo: na capa o que importa é escolher o cargo.
+    cards = []
+    for escopo in modelo.get("escopos") or modelo["cargos"]:
+        href = relativo(rotas.rota_de(escopo["nome"]) or "", rota)
+        n = [f'{escopo["n_materias"]} matéria(s)',
+             f'{escopo["n_assuntos"]} assunto(s)']
+        n_docs = sum(s["n_documentos"] for s in escopo.get("secoes") or [])
+        if n_docs:
+            n.append(f"{n_docs} documento(s)")
+        prog = escopo.get("progresso") or {}
+        cards.append(f"""<a class="item concurso-item" href="{esc(href)}">
+  <h3>{esc(nome_escopo(escopo["nome"]) or "Material")}
+  {'<span class="tag">comum</span>' if escopo["tipo"] == "comum" else ""}</h3>
+  <div class="meta">{esc(" · ".join(n))}</div>
+  {gabarito(prog, max_bolhas=8) if prog.get("total") else ""}
 </a>""")
-        # Com um único escopo não há o que desambiguar, e o título só faria ruído —
-        # é a mesma razão pela qual o `_GERAL` era escondido, agora generalizada.
-        rotulo = nome_escopo(cargo["nome"]) if len(modelo["cargos"]) > 1 else ""
-        titulo_cargo = f'<h2>{esc(rotulo)}</h2>' if rotulo else ""
-        blocos.append(titulo_cargo + f'<div class="grade">{"".join(itens)}</div>')
 
     r = modelo["resumo"]
+    resumo_txt = (f'{r["n_materias"]} matéria(s) · {r["n_assuntos"]} assuntos '
+                  f'aprofundados · {r.get("n_documentos", 0)} documento(s)')
     corpo = f"""<div class="papel">
   <div class="sobrancelha">Preparação</div>
   <h1>{esc(nome_legivel(modelo["concurso"]))}</h1>
   {ficha}
-  {gabarito({"total": r["n_assuntos"], "feitos": 0}) if False else ""}
-  <p>{r["n_materias"]} matéria(s) · {r["n_assuntos"]} assuntos aprofundados</p>
+  <p>{esc(resumo_txt)}</p>
 </div>
-<div style="margin-top:1.25rem">{"".join(blocos)}</div>"""
+<div class="grade" style="margin-top:1.25rem">{"".join(cards)}</div>"""
     trilha = f'<a href="{relativo("index.html", rota)}">Concursos</a>'
     return pagina(nome_legivel(modelo["concurso"]), trilha, corpo, rota)
 
@@ -747,6 +926,26 @@ def ler_manifestos(raiz: Path) -> list[dict]:
     return achados
 
 
+def copiar_anexos(secao: dict, destino: Path, rotas: "Rotas") -> None:
+    """Copia os anexos da seção para dentro do site, na rota já registrada.
+
+    O site precisa ser autossuficiente: servido pelo nginx a partir de `/srv/site`,
+    nada que esteja fora dessa pasta é alcançável pelo navegador. Sem a cópia, o
+    link da lei funcionaria só na máquina do vault.
+    """
+    for a in secao["anexos"]:
+        rota = rotas.rota_de(a["arquivo"])
+        if not rota:
+            continue
+        alvo = destino / rota
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        origem = Path(a["caminho"])
+        # o rmtree do concurso já limpou; a checagem cobre anexo homônimo em duas
+        # subpastas da mesma seção, que resolveria para a mesma rota
+        if not alvo.exists():
+            shutil.copy2(origem, alvo)
+
+
 def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
     """Passo 1 do build: decide onde cada página mora e indexa os nomes do vault.
 
@@ -763,14 +962,64 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
     plano.append({"rota": rota_capa, "tipo": "capa"})
 
     for escopo in modelo.get("escopos") or modelo["cargos"]:
+        esc_slug = escopo.get("slug") or "geral"
+        rota_esc = f"{slug_conc}/{esc_slug}/index.html"
+        # o `99-Status` não vira página (a navegação do site é o índice), mas quem
+        # aponta para ele quer o progresso — que é justamente o que o hub mostra
+        rotas.registrar(rota_esc, escopo["nome"], "99-Status")
+        plano.append({"rota": rota_esc, "tipo": "escopo", "escopo": escopo,
+                      "rota_capa": rota_capa})
+
+        for secao in escopo.get("secoes") or []:
+            rota_sec = f'{slug_conc}/{esc_slug}/{secao["slug"]}/index.html'
+            rotulo_esc = nome_escopo(escopo["nome"])
+
+            # Seção com um documento só e sem anexo É o documento. Um índice que
+            # lista um único item é página inútil, e gerava caminho redundante
+            # (`titulos/titulos/`, `cronograma/cronograma-macro/`).
+            if len(secao["documentos"]) == 1 and not secao["anexos"]:
+                doc = secao["documentos"][0]
+                rotas.registrar(rota_sec, doc["arquivo"], doc["slug"], secao["slug"])
+                plano.append({"rota": rota_sec, "tipo": "documento", "doc": doc,
+                              "secao": secao, "escopo": escopo,
+                              "trilha_meio": (rota_esc, rotulo_esc),
+                              "rota_capa": rota_capa})
+                continue
+
+            plano.append({"rota": rota_sec, "tipo": "secao", "secao": secao,
+                          "escopo": escopo, "rota_escopo": rota_esc,
+                          "rota_capa": rota_capa})
+
+            for doc in secao["documentos"]:
+                rota_doc = (f'{slug_conc}/{esc_slug}/{secao["slug"]}'
+                            f'/{doc["slug"]}/index.html')
+                # o documento é citado pelo nome do arquivo (com e sem prefixo
+                # numérico) — as duas formas aparecem nos wikilinks do vault
+                rotas.registrar(rota_doc, doc["arquivo"], doc["slug"])
+                plano.append({"rota": rota_doc, "tipo": "documento", "doc": doc,
+                              "secao": secao, "escopo": escopo,
+                              "trilha_meio": (rota_sec, secao["rotulo"]),
+                              "rota_capa": rota_capa})
+
+            # anexos: rota determinística, registrada antes da cópia, para que os
+            # wikilinks que apontam direto para o PDF da lei resolvam
+            for anexo in secao["anexos"]:
+                sub = (anexo["subpasta"] + "/") if anexo["subpasta"] else ""
+                rotas.registrar(
+                    f'{slug_conc}/{esc_slug}/{secao["slug"]}/arquivos/'
+                    f'{sub}{anexo["arquivo"]}', anexo["arquivo"])
+
         for materia in escopo["materias"]:
-            rota_mat = f'{slug_conc}/{materia["slug"]}/index.html'
+            rota_mat = f'{slug_conc}/{esc_slug}/materias/{materia["slug"]}/index.html'
             rotas.registrar(rota_mat, materia["slug"],
                             f'00-INDICE-{materia["slug"]}')
-            plano.append({"rota": rota_mat, "tipo": "materia", "materia": materia})
+            plano.append({"rota": rota_mat, "tipo": "materia", "materia": materia,
+                          "escopo": escopo, "rota_escopo": rota_esc,
+                          "rota_capa": rota_capa})
 
             for assunto in materia["assuntos"]:
-                rota_a = f'{slug_conc}/{materia["slug"]}/{assunto["slug"]}/index.html'
+                rota_a = (f'{slug_conc}/{esc_slug}/materias/{materia["slug"]}'
+                          f'/{assunto["slug"]}/index.html')
                 aprofs = assunto.get("aprofundamentos") or []
                 # 1ª classe — página: o slug da pasta e o nome de cada .md de
                 # aprofundamento (o Obsidian resolve por nome de arquivo, e o nome
@@ -793,11 +1042,12 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
                     for nome in (ap.get("midias") or {}).values():
                         if nome:
                             rotas.registrar(
-                                f'{slug_conc}/{materia["slug"]}/{assunto["slug"]}'
-                                f'/media/{ident}/{nome}', nome)
+                                f'{slug_conc}/{esc_slug}/materias/{materia["slug"]}'
+                                f'/{assunto["slug"]}/media/{ident}/{nome}', nome)
 
                 plano.append({"rota": rota_a, "tipo": "assunto", "assunto": assunto,
-                              "materia": materia, "rota_materia": rota_mat})
+                              "materia": materia, "escopo": escopo,
+                              "rota_materia": rota_mat, "rota_capa": rota_capa})
     return rotas, plano
 
 
@@ -844,12 +1094,27 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
         rota = item["rota"]
         alvo = destino / rota
         alvo.parent.mkdir(parents=True, exist_ok=True)
-        if item["tipo"] == "capa":
+        tipo = item["tipo"]
+        if tipo == "capa":
             html_pag = pagina_capa(modelo, rotas, rota)
-        elif item["tipo"] == "materia":
+        elif tipo == "escopo":
+            html_pag = pagina_escopo(item["escopo"], concurso, rotas, rota, rota_capa)
+        elif tipo == "secao":
+            html_pag = pagina_secao(item["secao"], item["escopo"], concurso, rotas,
+                                    rota, item["rota_escopo"], rota_capa)
+            copiar_anexos(item["secao"], destino, rotas)
+        elif tipo == "documento":
+            html_pag = pagina_documento(item["doc"], item["secao"], item["escopo"],
+                                        concurso, rotas, rota, item["trilha_meio"],
+                                        rota_capa)
+            # seção de documento único não tem página de índice, então é aqui que
+            # os anexos dela (se houver) seriam copiados — hoje não há, por
+            # construção, mas manter a chamada evita anexo órfão se a regra mudar
+            copiar_anexos(item["secao"], destino, rotas)
+        elif tipo == "materia":
             html_pag = pagina_materia(item["materia"], concurso,
                                       Path(item["materia"]["dir"]),
-                                      rotas, rota, rota_capa)
+                                      rotas, rota, item["rota_escopo"])
         else:
             html_pag = pagina_assunto(item["assunto"], item["materia"], concurso,
                                       alvo.parent, rotas, rota,

@@ -372,16 +372,68 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
 .aprof.ativo { display: block; }
 .cabecalho-assunto h1 { margin-bottom: .2rem; }
 
-/* ---------- grupos por órgão (índice raiz) ---------- */
-.grupo-orgao { margin-top: 1.75rem; }
-.grupo-orgao > header {
+/* ---------- grupos (órgão, escopo, prioridade) ----------
+   Os três blocos tinham cabeçalho idêntico duplicado; `.grupo` é a base e cada um
+   só muda a cor da régua. */
+.grupo, .grupo-orgao, .grupo-escopo { margin-top: 1.75rem; }
+.grupo > header, .grupo-orgao > header, .grupo-escopo > header {
   display: flex; align-items: baseline; gap: .6rem; margin-bottom: .8rem;
-  padding-bottom: .35rem; border-bottom: 2px solid var(--tinta-clara);
+  padding-bottom: .35rem; border-bottom: 2px solid var(--pauta);
 }
-.grupo-orgao h2 { margin: 0; border: 0; padding: 0; font-size: 1.15rem; letter-spacing: .01em; }
-.grupo-orgao .quantos {
+.grupo h2, .grupo-orgao h2, .grupo-escopo h2 {
+  margin: 0; border: 0; padding: 0; font-size: 1.15rem; letter-spacing: .01em;
+}
+.grupo .quantos, .grupo-orgao .quantos, .grupo-escopo .quantos {
   font-family: var(--fonte-dado); font-size: .74rem; color: var(--grafite-fraco);
 }
+.grupo .explica, .grupo-escopo .explica {
+  font-size: .84rem; color: var(--grafite-fraco); margin: 0 0 .9rem;
+}
+.grupo-orgao > header { border-bottom-color: var(--tinta-clara); }
+.grupo-escopo > header { border-bottom-color: var(--tinta-clara); }
+/* o registro de CONSULTA é deliberadamente mais quieto que o de estudo */
+.grupo-escopo[data-registro="consulta"] > header { border-bottom-color: var(--pauta); }
+.grupo-escopo[data-registro="consulta"] h2 { color: var(--grafite-fraco); }
+
+/* ---------- lista de seções (hub do escopo) ----------
+   Registro tipográfico, sem card: card com sombra e progresso é para o que se
+   estuda. O ordinal é o do vault — vocabulário que o usuário já lê no Obsidian. */
+.lista-secoes { list-style: none; padding: 0; margin: 0; }
+.lista-secoes li {
+  display: flex; align-items: baseline; gap: .6rem;
+  padding: .5rem 0; border-bottom: 1px solid var(--pauta);
+}
+.lista-secoes li:last-child { border-bottom: 0; }
+.lista-secoes .ordinal {
+  font-family: var(--fonte-dado); font-size: .74rem; color: var(--grafite-fraco);
+  flex: none; min-width: 1.6em;
+}
+.lista-secoes a { font-size: 1rem; text-decoration: none; }
+.lista-secoes a:hover { text-decoration: underline; }
+.lista-secoes .meta {
+  margin-left: auto; font-family: var(--fonte-dado); font-size: .74rem;
+  color: var(--grafite-fraco); text-align: right;
+}
+
+/* ---------- lista de documentos (índice de seção) ---------- */
+.lista-docs { list-style: none; padding: 0; margin: 1rem 0 0; }
+.lista-docs li { padding: .7rem 0; border-bottom: 1px solid var(--pauta); }
+.lista-docs li:last-child { border-bottom: 0; }
+.lista-docs a { font-size: 1.02rem; font-family: var(--fonte-titulo); }
+.lista-docs .meta {
+  margin-left: .5rem; font-family: var(--fonte-dado); font-size: .72rem;
+  color: var(--grafite-fraco);
+}
+.lista-docs .resumo {
+  margin: .25rem 0 0; font-size: .88rem; color: var(--grafite-fraco);
+}
+
+/* ---------- sumário do documento (lateral) ---------- */
+.sumario ul { list-style: none; padding: 0; margin: 0; }
+.sumario li { padding: .2rem 0; font-size: .86rem; line-height: 1.4; }
+.sumario li.n3 { padding-left: .9rem; font-size: .8rem; }
+.sumario a { text-decoration: none; }
+.sumario a:hover { text-decoration: underline; }
 
 /* ---------- selos de aprofundamento (fontes e níveis) ----------
    A bolha do cartão-resposta comunica profundidade:

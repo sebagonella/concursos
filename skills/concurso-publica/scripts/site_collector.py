@@ -480,6 +480,206 @@ def coletar_materia(materia_dir: Path) -> dict | None:
 
 
 # --------------------------------------------------------------------------- #
+# seções numeradas do concurso
+# --------------------------------------------------------------------------- #
+# Tabela declarativa pasta-do-vault → seção-do-site. O `modo` diz quem cuida do
+# conteúdo: `documentos` é o tratamento genérico (um .md = uma página, + anexos);
+# `materias` e `mapas` têm páginas próprias, montadas em outro lugar.
+#
+# `03-MAPAS-MATERIAS` e `03-MAPAS-COMUNS` são dois nomes para a mesma coisa: o
+# primeiro é por cargo, o segundo é o que o SEDES usa no _COMUM.
+SECOES = {
+    # o edital é o que se CONSULTA ("o que a regra diz"), não o que se estuda hoje —
+    # fica no registro quieto, mas em primeiro lugar dentro dele
+    "01-EDITAL":             ("01", "Edital", "edital", "consulta", "documentos"),
+    "02-CRONOGRAMA":         ("02", "Cronograma", "cronograma", "estudo", "documentos"),
+    "03-MAPAS-MATERIAS":     ("03", "Mapas de matéria", "mapas", "estudo", "mapas"),
+    "03-MAPAS-COMUNS":       ("03", "Mapas comuns", "mapas", "estudo", "mapas"),
+    "03-APROFUNDAMENTO":     ("03", "Aprofundamento", "aprofundamento", "estudo", "materias"),
+    "04-MATERIAIS":          ("04", "Materiais", "materiais", "consulta", "documentos"),
+    "05-HISTORICO-CONCURSO": ("05", "Histórico do concurso", "historico", "consulta", "documentos"),
+    "06-SINERGIA":           ("06", "Sinergia", "sinergia", "consulta", "documentos"),
+    "07-DISCURSIVA":         ("07", "Discursiva", "discursiva", "estudo", "documentos"),
+    "08-TITULOS":            ("08", "Títulos", "titulos", "estudo", "documentos"),
+}
+
+# Artefatos que existem para navegar no Obsidian, não para ler na web: a navegação
+# do site É o índice, e republicá-lo cria uma segunda lista que envelhece. O
+# 99-Status continua sendo LIDO (alimenta o progresso do escopo), só não vira página.
+DOCS_NAO_PUBLICAVEIS = re.compile(r"^(00-INDICE|99-Status)", re.IGNORECASE)
+
+# Template não preenchido: `{ASSUNTO}`, `{MATERIA}`… Publicar isso seria mostrar
+# arcabouço como conteúdo.
+PLACEHOLDER_RE = re.compile(r"\{[A-Z_][A-Z0-9_]{2,}\}")
+
+EXT_DOC = (".md",)
+
+
+def slug_doc(nome: str) -> str:
+    """Slug de URL de um documento, sem o prefixo numérico do vault.
+
+    O número existe para ordenar no explorador de arquivos; na URL ele só polui.
+    E no SEDES o número exibido no índice às vezes difere do prefixo do arquivo, o
+    que torna o prefixo uma fonte ruim de identidade.
+    """
+    base = re.sub(r"\.md$", "", nome, flags=re.IGNORECASE)
+    base = re.sub(r"^\d{2}[-_ ]+", "", base)
+    base = norm(base)
+    base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+    return base or "documento"
+
+
+def titulo_doc(md: Path, fm: dict, corpo: str) -> str:
+    """Título legível: frontmatter, senão o primeiro H1, senão o nome do arquivo."""
+    for chave in ("title", "titulo"):
+        if fm.get(chave):
+            return fm[chave]
+    m = re.search(r"^#\s+(.+)$", corpo, re.MULTILINE)
+    if m:
+        return re.sub(r"\s*[·—-]\s*$", "", m.group(1).strip())
+    return re.sub(r"^\d{2}[-_ ]+", "", md.stem).replace("-", " ").strip().capitalize()
+
+
+def coletar_documento(md: Path) -> dict | None:
+    fm = ler_frontmatter(md)
+    corpo = fm.get("_corpo", "")
+    if PLACEHOLDER_RE.search(corpo):
+        return None                     # arcabouço não preenchido não vira página
+    return {
+        "arquivo": md.name,
+        "caminho": str(md),
+        "slug": slug_doc(md.name),
+        "titulo": titulo_doc(md, fm, corpo),
+        "resumo": primeiro_paragrafo_curto(corpo),
+        "progresso": contar_progresso(corpo),
+        "n_secoes": len(re.findall(r"^##\s+", corpo, re.MULTILINE)),
+    }
+
+
+def primeiro_paragrafo_curto(corpo: str, limite: int = 160) -> str:
+    for linha in corpo.split("\n"):
+        s = linha.strip()
+        if not s or s.startswith(("#", ">", "-", "*", "|", "```", "<!--", "!")):
+            continue
+        s = re.sub(r"[*`\[\]]", "", s)
+        return (s[:limite] + "…") if len(s) > limite else s
+    return ""
+
+
+def coletar_secao(secao_dir: Path, info: tuple) -> dict:
+    """Uma seção numerada: os `.md` viram documentos, o resto vira anexo.
+
+    Recursivo porque `04-MATERIAIS/leis-baixadas/` é subpasta — e é lá que estão as
+    55 leis. Anexo guarda tamanho para a página poder avisar o peso antes do clique.
+    """
+    ordinal, rotulo, slug, registro, modo = info
+    documentos, anexos = [], []
+
+    alvos = [secao_dir] if secao_dir.is_file() else sorted(secao_dir.rglob("*"))
+    for p in alvos:
+        if p.is_dir() or p.name.startswith("."):
+            continue
+        if p.suffix.lower() in EXT_DOC:
+            if DOCS_NAO_PUBLICAVEIS.match(p.stem):
+                continue
+            doc = coletar_documento(p)
+            if doc:
+                documentos.append(doc)
+        else:
+            anexos.append({
+                "arquivo": p.name,
+                "caminho": str(p),
+                "extensao": p.suffix.lower().lstrip("."),
+                "bytes": p.stat().st_size,
+                "subpasta": (str(p.parent.relative_to(secao_dir))
+                             if secao_dir.is_dir() and p.parent != secao_dir else ""),
+            })
+
+    documentos.sort(key=lambda d: d["arquivo"])
+    anexos.sort(key=lambda a: (a["subpasta"], a["arquivo"]))
+    return {
+        "ordinal": ordinal, "rotulo": rotulo, "slug": slug,
+        "registro": registro, "modo": modo,
+        "dir": str(secao_dir),
+        "documentos": documentos, "anexos": anexos,
+        "n_documentos": len(documentos), "n_anexos": len(anexos),
+        "bytes_anexos": sum(a["bytes"] for a in anexos),
+    }
+
+
+def progresso_do_status(escopo_dir: Path) -> dict:
+    """Progresso declarado no `99-Status.md` — lido, mas não republicado."""
+    for md in escopo_dir.glob("99-Status*.md"):
+        fm = ler_frontmatter(md)
+        return contar_progresso(fm.get("_corpo", ""))
+    return {"total": 0, "feitos": 0}
+
+
+def coletar_escopo(escopo_dir: Path) -> dict:
+    """Um escopo: `_COMUM` ou um cargo, com suas seções e suas matérias."""
+    nome = escopo_dir.name
+    secoes = []
+    for filho in sorted(escopo_dir.iterdir()):
+        chave = filho.name if filho.is_dir() else filho.stem
+        info = SECOES.get(chave.upper())
+        if not info:
+            continue
+        if info[4] in ("materias", "mapas"):
+            continue                    # têm páginas próprias, montadas fora daqui
+        s = coletar_secao(filho, info)
+        if s["documentos"] or s["anexos"]:
+            secoes.append(s)
+
+    # matérias aprofundadas do escopo. Segue por `rglob("assuntos")` de propósito:
+    # tolera o layout atual (`03-APROFUNDAMENTO/{materia}/assuntos/`) e os
+    # anteriores, sem o site quebrar por material que o usuário não migrou.
+    materias = []
+    for materia_dir in achar_materias(escopo_dir):
+        m = coletar_materia(materia_dir)
+        if m:
+            materias.append(m)
+    materias.sort(key=lambda m: m["slug"])
+
+    secoes.sort(key=lambda s: (s["ordinal"], s["slug"]))
+    prog_docs = {"total": 0, "feitos": 0}
+    for s in secoes:
+        for d in s["documentos"]:
+            prog_docs["total"] += d["progresso"]["total"]
+            prog_docs["feitos"] += d["progresso"]["feitos"]
+    prog_assuntos = {"total": 0, "feitos": 0}
+    for m in materias:
+        for a in m["assuntos"]:
+            prog_assuntos["total"] += a["progresso"]["total"]
+            prog_assuntos["feitos"] += a["progresso"]["feitos"]
+
+    return {
+        "tipo": "comum" if nome.upper() in ("_COMUM", "COMUM") else "cargo",
+        "nome": nome,
+        "slug": re.sub(r"[^a-z0-9-]+", "-", norm(nome).strip("_")).strip("-") or "escopo",
+        "secoes": secoes,
+        "materias": materias,
+        "n_materias": len(materias),
+        "n_assuntos": sum(m["n_assuntos"] for m in materias),
+        "progresso": prog_assuntos,
+        "progresso_documentos": prog_docs,
+        "progresso_status": progresso_do_status(escopo_dir),
+    }
+
+
+def achar_escopos(base: Path) -> list[Path]:
+    """Escopos do concurso: `_COMUM` e cada pasta de cargo na raiz.
+
+    A varredura ANTES partia de `rglob("assuntos")` na raiz do concurso, então a
+    árvore inteira do site era descoberta a partir da existência de
+    aprofundamento — e um escopo que só tem `01-EDITAL` (o caso do `_COMUM` em
+    qualquer concurso antes da Etapa 2) nunca era descoberto. Nada dele podia ser
+    publicado, por construção.
+    """
+    return sorted(p for p in base.iterdir()
+                  if p.is_dir() and not p.name.startswith("."))
+
+
+# --------------------------------------------------------------------------- #
 # coleta do concurso
 # --------------------------------------------------------------------------- #
 def achar_materias(base: Path) -> list[Path]:
@@ -525,28 +725,48 @@ def coletar_concurso(base: Path) -> dict:
         except json.JSONDecodeError:
             meta = {"_erro": ".meta.json malformado"}
 
-    por_cargo: dict[str, list[dict]] = {}
-    for materia_dir in achar_materias(base):
-        m = coletar_materia(materia_dir)
-        if not m:
-            continue
-        cargo = cargo_de(materia_dir, base)
-        por_cargo.setdefault(cargo, []).append(m)
+    escopos = []
+    for escopo_dir in achar_escopos(base):
+        e = coletar_escopo(escopo_dir)
+        if e["secoes"] or e["materias"]:
+            escopos.append(e)
 
-    cargos = [{"nome": c, "materias": ms} for c, ms in sorted(por_cargo.items())]
+    # layout achatado: matéria direto na raiz do concurso, sem escopo. Vira um
+    # escopo implícito, que o builder não rotula.
+    soltas = [m for m in (coletar_materia(d) for d in achar_materias(base)
+                          if cargo_de(d, base) == "_GERAL") if m]
+    if soltas:
+        escopos.append({
+            "tipo": "geral", "nome": "_GERAL", "slug": "geral",
+            "secoes": [], "materias": soltas,
+            "n_materias": len(soltas),
+            "n_assuntos": sum(m["n_assuntos"] for m in soltas),
+            "progresso": {"total": 0, "feitos": 0},
+            "progresso_documentos": {"total": 0, "feitos": 0},
+            "progresso_status": {"total": 0, "feitos": 0},
+        })
 
-    total_assuntos = sum(m["n_assuntos"] for c in cargos for m in c["materias"])
+    # `_COMUM` primeiro (é o que vale para todos), cargos em ordem alfabética
+    escopos.sort(key=lambda e: (e["tipo"] != "comum", e["nome"]))
+
     return {
         "concurso": base.name,
         "dir": str(base),
         "meta": {k: v for k, v in meta.items() if k in
                  ("orgao", "ano", "banca", "modo", "datas_chave", "estrutura_prova",
                   "vagas_ac", "vagas_total", "salario")},
-        "cargos": cargos,
+        "escopos": escopos,
+        # alias de compatibilidade: `--modelo site-model.json` é contrato público e
+        # documentado no SKILL.md. Sai numa versão futura, com aviso.
+        "cargos": escopos,
         "resumo": {
-            "n_cargos": len(cargos),
-            "n_materias": sum(len(c["materias"]) for c in cargos),
-            "n_assuntos": total_assuntos,
+            "n_escopos": len(escopos),
+            "n_cargos": sum(1 for e in escopos if e["tipo"] == "cargo"),
+            "n_materias": sum(e["n_materias"] for e in escopos),
+            "n_assuntos": sum(e["n_assuntos"] for e in escopos),
+            "n_documentos": sum(s["n_documentos"] for e in escopos
+                                for s in e["secoes"]),
+            "n_anexos": sum(s["n_anexos"] for e in escopos for s in e["secoes"]),
         },
     }
 
