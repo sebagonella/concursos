@@ -19,6 +19,35 @@ import site_collector as sc  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
+# indireção: a forma do modelo e a do caminho de saída vão mudar
+# --------------------------------------------------------------------------- #
+# Mais da metade da suíte fala da forma do modelo (`m["cargos"][0]…`) ou do caminho
+# gerado (`out/<concurso>/<materia>/<assunto>/`). Ancorar isso em 30 lugares faz de
+# qualquer mudança de estrutura um patch de 30 arquivos-teste. Todo acesso passa
+# por estes três helpers, para a migração acontecer AQUI.
+def _escopos(m: dict) -> list:
+    """Os escopos do modelo — `escopos[]` quando existir, senão `cargos[]`."""
+    return m.get("escopos") or m["cargos"]
+
+
+def _materias(m: dict) -> list:
+    """Todas as matérias do modelo, de todos os escopos, achatadas."""
+    return [mat for e in _escopos(m) for mat in e["materias"]]
+
+
+def _dir_materia(out: Path, concurso: str, materia: str = "portugues",
+                 escopo: str = "cargo-x") -> Path:
+    """Pasta da matéria no site gerado. O nível de escopo entra aqui quando o
+    layout mudar; os testes não precisam saber."""
+    return out / concurso / materia
+
+
+def _dir_assunto(out: Path, concurso: str, assunto: str,
+                 materia: str = "portugues", escopo: str = "cargo-x") -> Path:
+    return _dir_materia(out, concurso, materia, escopo) / assunto
+
+
+# --------------------------------------------------------------------------- #
 # fixtures
 # --------------------------------------------------------------------------- #
 def _montar_concurso(base: Path, com_midias=True, com_url_nb=False):
@@ -53,12 +82,113 @@ def _montar_concurso(base: Path, com_midias=True, com_url_nb=False):
         '---\ntitle: "Regência"\nstatus: concluido\n---\nResumo.\n', encoding="utf-8")
     (reg / "flashcards-regencia.md").write_text(  # nome mais curto que o slug
         "---\n---\n#flashcards\nP::R\n", encoding="utf-8")
+
+    _montar_secoes(base)
     return base
+
+
+def _montar_secoes(base: Path):
+    """As pastas numeradas que a concurso-prep gera e o site ainda não publica.
+
+    Ficam no fixture desde já, ainda inertes: hoje `achar_materias()` só procura
+    `assuntos/`, então nada disso entra no modelo. O ponto é que os coletores novos
+    e o auditor de links nasçam vendo a MESMA forma que o vault tem — foi
+    exatamente um fixture divergente do vault (assuntos sob `03-MAPAS-MATERIAS`)
+    que deixou o bug do `_GERAL` verde por tanto tempo.
+    """
+    def escrever(rel: str, texto: str):
+        p = base / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(texto, encoding="utf-8")
+
+    escrever("00-INDICE.md",
+             '---\ntipo: moc\n---\n# TESTE 2026\n\n'
+             '- [[_COMUM/01-EDITAL/edital-resumo|Resumo do edital]]\n')
+
+    escrever("_COMUM/01-EDITAL/edital-resumo.md",
+             '---\ntipo: documentacao\n---\n# Resumo do edital\n\n'
+             '## Estrutura da prova\n\n| Bloco | Questões |\n|---|---|\n| Geral | 20 |\n\n'
+             '## Leis citadas\n\nVer [[_COMUM/04-MATERIAIS/livros-recomendados]].\n')
+    escrever("_COMUM/01-EDITAL/analise-banca.md",
+             '---\ntipo: documentacao\n---\n# Análise da banca\n\n'
+             '## Pegadinhas comuns\n\n- Literalidade da lei.\n')
+    (base / "_COMUM" / "01-EDITAL" / "edital-original.pdf").write_bytes(b"%PDF-1.4 x")
+
+    escrever("_COMUM/04-MATERIAIS/livros-recomendados.md",
+             '---\ntipo: material\n---\n# Livros\n\n## Português\n\n- Um livro.\n')
+    escrever("_COMUM/04-MATERIAIS/leis-baixadas/00-INDICE.md",
+             '---\ntipo: moc\n---\n# Leis\n\n- [[lei-1234-1990|Lei 1.234/1990]]\n')
+    (base / "_COMUM" / "04-MATERIAIS" / "leis-baixadas"
+     / "lei-1234-1990.pdf").write_bytes(b"%PDF-1.4 lei")
+
+    escrever("_COMUM/05-HISTORICO-CONCURSO/concursos-anteriores.md",
+             '---\ntipo: historico\n---\n# Edições anteriores\n\n## Análise\n\nTexto.\n')
+    (base / "_COMUM" / "05-HISTORICO-CONCURSO" / "provas-anteriores").mkdir(parents=True)
+    (base / "_COMUM" / "05-HISTORICO-CONCURSO" / "provas-anteriores"
+     / "prova-2019.pdf").write_bytes(b"%PDF-1.4 prova")
+
+    escrever("_COMUM/06-SINERGIA/concursos-similares.md",
+             '---\ntipo: sinergia\n---\n# Sinergia\n\n## Critério aplicado\n\nTexto.\n')
+
+    escrever("CARGO-X/02-CRONOGRAMA/cronograma-macro.md",
+             '---\ntipo: cronograma\n---\n# Cronograma\n\n## Fases\n\n- [ ] Fase 1\n')
+    escrever("CARGO-X/07-DISCURSIVA/guia-discursiva.md",
+             '---\ntipo: documentacao\n---\n# Discursiva\n\n## Critérios\n\n- Coesão.\n')
+    escrever("CARGO-X/08-TITULOS.md",
+             '---\ntipo: documentacao\n---\n# Títulos\n\n- [ ] Diploma\n')
+    escrever("CARGO-X/99-Status.md",
+             '---\ntipo: status\n---\n# Status\n\n## Marcos\n\n- [x] Inscrição\n- [ ] Prova\n')
+
+    # índice de matérias, com a linha de onde saem ordenação e selos
+    escrever("CARGO-X/03-MAPAS-MATERIAS/00-INDICE.md",
+             '---\ntipo: moc\n---\n# Mapas\n\n'
+             '- [[01-portugues|01 · Português]] — ~10–12 q · 🟡 média\n')
+    # mapa de matéria: template rígido, com as variantes de rótulo que o vault usa
+    escrever("CARGO-X/03-MAPAS-MATERIAS/01-portugues.md",
+             '---\ntipo: mapa-materia\nmateria: "Português"\n---\n'
+             '# Mapa de Estudo — Português\n\n'
+             '## 1. Emprego do acento indicativo de crase 🔴\n\n'
+             '### Tópicos do edital (literais)\n\n> Crase.\n\n'
+             '### Subtópicos derivados\n\n- [ ] Regra geral\n- [ ] Casos proibidos\n\n'
+             '### ⚠️ Pegadinhas da banca neste tópico\n\n- Antes de verbo.\n\n'
+             '### Meta\n\n- [ ] 30 questões resolvidas\n\n'
+             '## 2. Reconhecimento de tipos textuais\n\n'
+             '### Subtópicos derivados — TEORIA\n\n- [ ] Narração\n\n'
+             '### Meta\n\n- [ ] 10 questões resolvidas\n\n'
+             '## ✍️ Meu resumo\n\n**Conceitos-chave:**\n-\n\n'
+             '## ✅ Checklist Final\n\n- [ ] Revisar crase\n- [ ] Simulado\n')
 
 
 # --------------------------------------------------------------------------- #
 # unidades
 # --------------------------------------------------------------------------- #
+def test_fixture_espelha_as_pastas_numeradas_do_vault():
+    """O fixture tem de ter a mesma forma que a `concurso-prep` gera.
+
+    Fixture que inventa uma realidade que o gerador não produz é teste que se
+    autoconfirma — foi assim que o bug do `_GERAL` ficou verde por meses (os
+    assuntos estavam sob `03-MAPAS-MATERIAS`, caminho que a `concurso-aprofunda`
+    nunca emite). Este teste existe para ninguém enxugar o fixture de novo.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        for rel in ("00-INDICE.md",
+                    "_COMUM/01-EDITAL/edital-resumo.md",
+                    "_COMUM/01-EDITAL/analise-banca.md",
+                    "_COMUM/01-EDITAL/edital-original.pdf",
+                    "_COMUM/04-MATERIAIS/livros-recomendados.md",
+                    "_COMUM/04-MATERIAIS/leis-baixadas/lei-1234-1990.pdf",
+                    "_COMUM/05-HISTORICO-CONCURSO/concursos-anteriores.md",
+                    "_COMUM/06-SINERGIA/concursos-similares.md",
+                    "CARGO-X/02-CRONOGRAMA/cronograma-macro.md",
+                    "CARGO-X/03-MAPAS-MATERIAS/00-INDICE.md",
+                    "CARGO-X/03-MAPAS-MATERIAS/01-portugues.md",
+                    "CARGO-X/07-DISCURSIVA/guia-discursiva.md",
+                    "CARGO-X/08-TITULOS.md",
+                    "CARGO-X/99-Status.md"):
+            assert (base / rel).exists(), rel
+
+
 def test_contar_progresso():
     corpo = "- [x] a\n- [ ] b\n- [X] c\ntexto\n"
     p = sc.contar_progresso(corpo)
@@ -93,14 +223,14 @@ def test_coleta_estrutura_completa():
         assert m["concurso"] == "TESTE_2026"
         assert m["meta"]["banca"] == "Banca X"
         assert m["resumo"] == {"n_cargos": 1, "n_materias": 1, "n_assuntos": 2}
-        assert m["cargos"][0]["nome"] == "CARGO-X"
+        assert _escopos(m)[0]["nome"] == "CARGO-X"
 
 
 def test_midias_por_presenca():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=True)
         m = _rodar(base)
-        assuntos = {a["slug"]: a for a in m["cargos"][0]["materias"][0]["assuntos"]}
+        assuntos = {a["slug"]: a for a in _materias(m)[0]["assuntos"]}
         crase = assuntos["crase"]
         assert crase["midias"]["podcast"] == "podcast-crase.m4a"
         assert crase["midias"]["mapa_mental"] == "mapa-mental-crase.png"
@@ -113,7 +243,7 @@ def test_flashcards_nome_divergente_tolerado():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
         m = _rodar(base)
-        assuntos = {a["slug"]: a for a in m["cargos"][0]["materias"][0]["assuntos"]}
+        assuntos = {a["slug"]: a for a in _materias(m)[0]["assuntos"]}
         reg = assuntos["regencia-verbal-e-nominal"]
         assert reg["flashcards"]["obsidian"] == "flashcards-regencia.md"
         assert reg["flashcards"]["n_cards"] == 1
@@ -123,7 +253,7 @@ def test_progresso_lido_do_vault():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
         m = _rodar(base)
-        crase = next(a for a in m["cargos"][0]["materias"][0]["assuntos"]
+        crase = next(a for a in _materias(m)[0]["assuntos"]
                      if a["slug"] == "crase")
         assert crase["progresso"] == {"total": 3, "feitos": 1}
         assert crase["paginas_livro"] == "10–20"
@@ -133,13 +263,13 @@ def test_notebooklm_url_so_se_preenchida():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "A_2026", com_url_nb=False)
         m = _rodar(base)
-        crase = next(a for a in m["cargos"][0]["materias"][0]["assuntos"]
+        crase = next(a for a in _materias(m)[0]["assuntos"]
                      if a["slug"] == "crase")
         assert crase["notebooklm_url"] is None
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "B_2026", com_url_nb=True)
         m = _rodar(base)
-        crase = next(a for a in m["cargos"][0]["materias"][0]["assuntos"]
+        crase = next(a for a in _materias(m)[0]["assuntos"]
                      if a["slug"] == "crase")
         assert crase["notebooklm_url"].startswith("https://notebooklm.google.com/")
 
@@ -295,12 +425,15 @@ def test_builder_gera_paginas_e_assets():
         base = _montar_concurso(Path(d) / "TESTE_2026")
         out = Path(d) / "site"
         r = _construir(base, out)
-        assert r["paginas"] == 5          # raiz + capa + matéria + 2 assuntos
+        # o contador tem de bater com o que foi realmente escrito. Ancorar um
+        # inteiro aqui era dívida: qualquer página nova exigia editar o número, e o
+        # número não dizia se o arquivo existia.
+        assert r["paginas"] == len(list(out.rglob("index.html")))
         assert (out / "index.html").exists()            # índice raiz (concursos)
         assert (out / "teste_2026" / "index.html").exists()  # capa do concurso
         assert (out / "assets" / "site.css").exists()
         assert (out / "assets" / "site.js").exists()
-        assert (out / "teste_2026" / "portugues" / "crase" / "index.html").exists()
+        assert (_dir_assunto(out, "teste_2026", "crase") / "index.html").exists()
 
 
 def test_builder_embute_midia_presente_e_omite_ausente():
@@ -308,11 +441,12 @@ def test_builder_embute_midia_presente_e_omite_ausente():
         base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=True)
         out = Path(d) / "site"
         _construir(base, out)
-        crase = (out / "teste_2026" / "portugues" / "crase" / "index.html").read_text(encoding="utf-8")
+        crase = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
         assert "<audio controls" in crase          # tem podcast
         assert "media/unico/podcast-crase.m4a" in crase
         assert "<video" not in crase               # não tem vídeo -> seção ausente
-        assert (out / "teste_2026" / "portugues" / "crase" / "media" / "unico" / "podcast-crase.m4a").exists()
+        assert (_dir_assunto(out, "teste_2026", "crase")
+                / "media" / "unico" / "podcast-crase.m4a").exists()
 
 
 def test_builder_quiz_com_cards_embutidos():
@@ -320,7 +454,7 @@ def test_builder_quiz_com_cards_embutidos():
         base = _montar_concurso(Path(d) / "TESTE_2026")
         out = Path(d) / "site"
         _construir(base, out)
-        crase = (out / "teste_2026" / "portugues" / "crase" / "index.html").read_text(encoding="utf-8")
+        crase = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
         assert 'class="cartao quiz"' in crase
         m = re.search(r'<script type="application/json">(.*?)</script>', crase, re.DOTALL)
         assert m and len(json.loads(m.group(1))) == 2
@@ -332,13 +466,59 @@ def test_builder_notebooklm_so_com_url():
         out = Path(d) / "s1"
         _construir(base, out)
         assert "Abrir no NotebookLM" not in (
-            out / "sem_2026" / "portugues" / "crase" / "index.html").read_text(encoding="utf-8")
+            _dir_assunto(out, "sem_2026", "crase") / "index.html"
+        ).read_text(encoding="utf-8")
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "COM_2026", com_url_nb=True)
         out = Path(d) / "s2"
         _construir(base, out)
         assert "Abrir no NotebookLM" in (
-            out / "com_2026" / "portugues" / "crase" / "index.html").read_text(encoding="utf-8")
+            _dir_assunto(out, "com_2026", "crase") / "index.html"
+        ).read_text(encoding="utf-8")
+
+
+def _auditar_links(out: Path) -> tuple[list, list]:
+    """Resolve todo href/src do site contra o disco. Devolve (quebrados, órfãos).
+
+    A versão anterior usava `([^"#?]+)`, o que fazia a regex **não casar nada**
+    quando a URL tinha `#` ou `?` — ou seja, link com âncora passava sem ser
+    verificado. Como o md2html agora gera âncoras de heading, uma classe inteira de
+    link ficaria fora de cobertura exatamente quando passou a existir.
+
+    Também exige `index.html` em link de diretório (senão o nginx devolve 403 ou
+    listagem) e acusa página gerada que ninguém aponta — com a navegação crescendo,
+    esquecer de linkar uma seção é plausível e invisível de outra forma.
+    """
+    quebrados: list[str] = []
+    apontadas: set[Path] = set()
+    paginas = {p.resolve() for p in out.rglob("index.html")}
+
+    for f in sorted(out.rglob("*.html")):
+        h = f.read_text(encoding="utf-8")
+        for attr in ("href", "src"):
+            for bruto in re.findall(rf'{attr}="([^"]+)"', h):
+                if bruto.startswith(("http", "mailto:", "#", "data:")):
+                    continue
+                caminho, _, frag = bruto.partition("#")
+                caminho = caminho.split("?")[0]
+                if not caminho:
+                    continue
+                alvo = (f.parent / caminho).resolve()
+                if alvo.is_dir():                 # link de diretório precisa de index
+                    alvo = alvo / "index.html"
+                if not alvo.exists():
+                    quebrados.append(f"{f.relative_to(out)} -> {bruto}")
+                    continue
+                if alvo in paginas:
+                    apontadas.add(alvo)
+                if frag:                          # a âncora tem de existir no destino
+                    if f'id="{frag}"' not in alvo.read_text(encoding="utf-8"):
+                        quebrados.append(
+                            f"{f.relative_to(out)} -> {bruto} (âncora inexistente)")
+
+    raiz = (out / "index.html").resolve()
+    orfas = sorted(str(p.relative_to(out)) for p in paginas - apontadas - {raiz})
+    return quebrados, orfas
 
 
 def test_builder_links_internos_resolvem():
@@ -346,16 +526,35 @@ def test_builder_links_internos_resolvem():
         base = _montar_concurso(Path(d) / "TESTE_2026")
         out = Path(d) / "site"
         _construir(base, out)
-        quebrados = []
-        for f in out.rglob("*.html"):
-            h = f.read_text(encoding="utf-8")
-            for attr in ("href", "src"):
-                for v in re.findall(rf'{attr}="([^"#?]+)"', h):
-                    if v.startswith(("http", "mailto:")):
-                        continue
-                    if not (f.parent / v).resolve().exists():
-                        quebrados.append(f"{f.name}: {v}")
+        quebrados, _orfas = _auditar_links(out)
         assert not quebrados, quebrados
+
+
+def test_builder_nao_gera_pagina_orfa():
+    """Página gerada e não linkada de lugar nenhum é trabalho invisível."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        _quebrados, orfas = _auditar_links(out)
+        assert not orfas, orfas
+
+
+def test_auditor_de_links_pega_ancora_e_diretorio_sem_index():
+    """Contra-prova do auditor: ele tem de reprovar o que antes passava calado."""
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "site"
+        (out / "vazio").mkdir(parents=True)
+        (out / "index.html").write_text(
+            '<a href="vazio/">dir sem index</a>'
+            '<a href="alvo/index.html#nao-existe">âncora morta</a>',
+            encoding="utf-8")
+        (out / "alvo").mkdir()
+        (out / "alvo" / "index.html").write_text(
+            '<h2 id="existe">x</h2>', encoding="utf-8")
+        quebrados, _ = _auditar_links(out)
+        assert any("vazio/" in q for q in quebrados)
+        assert any("âncora inexistente" in q for q in quebrados)
 
 
 
@@ -489,7 +688,7 @@ def test_prioridade_derivada_do_guia():
             "## Ordem sugerida\n\nPrioridade alta (os que derrubam): Crase.\n"
             "Média: Regência.\n", encoding="utf-8")
         m = _rodar(base)
-        assuntos = {a["slug"]: a for a in m["cargos"][0]["materias"][0]["assuntos"]}
+        assuntos = {a["slug"]: a for a in _materias(m)[0]["assuntos"]}
         assert assuntos["crase"]["prioridade"] == "alta"
         assert assuntos["regencia-verbal-e-nominal"]["prioridade"] == "media"
 
@@ -502,7 +701,7 @@ def test_prioridade_do_frontmatter_tem_precedencia():
             '---\ntitle: "Crase"\nprioridade: base\nstatus: concluido\n---\ntexto\n',
             encoding="utf-8")
         m = _rodar(base)
-        a = next(x for x in m["cargos"][0]["materias"][0]["assuntos"] if x["slug"] == "crase")
+        a = next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == "crase")
         assert a["prioridade"] == "base"
 
 
@@ -514,7 +713,7 @@ def test_detecta_todas_as_midias_do_notebooklm():
                      "report-crase.md", "teste-crase.md", "tabela-crase.csv"):
             (crase / nome).write_bytes(b"x")
         m = _rodar(base)
-        a = next(x for x in m["cargos"][0]["materias"][0]["assuntos"] if x["slug"] == "crase")
+        a = next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == "crase")
         for chave in ("podcast", "video", "slides", "mapa_mental",
                       "infografico", "report", "teste", "tabela"):
             assert a["midias"][chave], f"não detectou {chave}"
@@ -528,7 +727,7 @@ def test_doc_da_banca_detectado_e_renderizado_antes_dos_assuntos():
             "# Como a Banca X cobra\n\nTexto sobre o estilo da banca.\n", encoding="utf-8")
         out = Path(d) / "site"
         _construir(base, out)
-        h = (out / "teste_2026" / "portugues" / "index.html").read_text(encoding="utf-8")
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
         i_banca = h.find("Como a Banca X cobra")
         i_grupo = h.find('class="grupo-prioridade"')
         assert i_banca > 0
@@ -553,7 +752,7 @@ def test_downloads_e_tema_presentes():
         base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=True)
         out = Path(d) / "site"
         _construir(base, out)
-        h = (out / "teste_2026" / "portugues" / "crase" / "index.html").read_text(encoding="utf-8")
+        h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
         assert 'class="baixar"' in h and 'download="podcast-crase.m4a"' in h
         assert "tema-troca" in h           # botão de tema
         assert "data-tema" in h            # script anti-flash
@@ -607,7 +806,7 @@ def test_varios_aprofundamentos_por_assunto():
         _add_aprof(base, "crase", "pestana--padrao", "padrao", "Pestana")
         _add_aprof(base, "crase", "damasceno--detalhado", "detalhado", "Damasceno")
         m = _rodar(base)
-        a = next(x for x in m["cargos"][0]["materias"][0]["assuntos"] if x["slug"] == "crase")
+        a = next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == "crase")
         # 2 novos + o legado que já existia na fixture
         assert a["n_aprofundamentos"] == 3
         assert set(a["niveis"]) == {"padrao", "detalhado"}
@@ -619,7 +818,7 @@ def test_legado_continua_funcionando_sozinho():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
         m = _rodar(base)
-        a = next(x for x in m["cargos"][0]["materias"][0]["assuntos"] if x["slug"] == "crase")
+        a = next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == "crase")
         assert a["n_aprofundamentos"] == 1
         assert a["aprofundamentos"][0]["aprofundamento"] == "unico"
 
@@ -630,13 +829,12 @@ def test_site_gera_seletor_quando_ha_varios():
         _add_aprof(base, "crase", "pestana--padrao", "padrao", "Pestana")
         out = Path(d) / "site"
         _construir(base, out)
-        h = (out / "teste_2026" / "portugues" / "crase" / "index.html").read_text(encoding="utf-8")
+        h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
         assert "seletor-aprof" in h
         assert 'data-alvo="pestana--padrao"' in h
         assert h.count('class="aprof') >= 2      # blocos de conteúdo separados
         # assunto com um só aprofundamento não ganha seletor
-        h2 = (out / "teste_2026" / "portugues" / "regencia-verbal-e-nominal"
-              / "index.html").read_text(encoding="utf-8")
+        h2 = (_dir_assunto(out, "teste_2026", "regencia-verbal-e-nominal") / "index.html").read_text(encoding="utf-8")
         assert "seletor-aprof" not in h2
 
 
@@ -649,7 +847,7 @@ def test_midias_de_aprofundamentos_nao_colidem():
         (d2 / "podcast-crase--bbb--detalhado.m4a").write_bytes(b"2")
         out = Path(d) / "site"
         _construir(base, out)
-        media = out / "teste_2026" / "portugues" / "crase" / "media"
+        media = (_dir_assunto(out, "teste_2026", "crase") / "media")
         assert (media / "aaa--padrao").is_dir()
         assert (media / "bbb--detalhado").is_dir()
 
@@ -679,7 +877,7 @@ def test_selos_de_aprofundamento_sinalizam_fontes_e_niveis():
         _add_aprof(base, "crase", "damasceno--detalhado", "detalhado", "Damasceno")
         out = Path(d) / "site"
         _construir(base, out)
-        h = (out / "teste_2026" / "portugues" / "crase" / "index.html").read_text(encoding="utf-8")
+        h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
         assert "selos-aprof" in h
         assert "2 fontes" in h                      # duas fontes distintas
         assert "Padrão + Detalhado" in h            # ambos os níveis
@@ -688,8 +886,7 @@ def test_selos_de_aprofundamento_sinalizam_fontes_e_niveis():
         assert 'class="bolha meia"' in h and 'class="bolha cheia"' in h
 
         # assunto com um só nível mostra só ele
-        h2 = (out / "teste_2026" / "portugues" / "regencia-verbal-e-nominal"
-              / "index.html").read_text(encoding="utf-8")
+        h2 = (_dir_assunto(out, "teste_2026", "regencia-verbal-e-nominal") / "index.html").read_text(encoding="utf-8")
         assert "Padrão + Detalhado" not in h2
 
 
@@ -715,7 +912,7 @@ def test_niveis_distintos_geram_selo_combinado():
         _add_aprof(base, "crase", "bbb--detalhado", "detalhado", "Fonte B")
         out = Path(d) / "site"
         _construir(base, out)
-        h = (out / "teste_2026" / "portugues" / "crase" / "index.html").read_text(encoding="utf-8")
+        h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
         assert "Padrão + Detalhado" in h
         assert "2 fontes" in h
 
@@ -724,7 +921,7 @@ def test_niveis_distintos_geram_selo_combinado():
 # padrão de pastas atual: {assunto}/{nivel}--{N}f--f1-{fonte}/
 # --------------------------------------------------------------------------- #
 def _assunto_do_modelo(m, slug):
-    return next(x for x in m["cargos"][0]["materias"][0]["assuntos"] if x["slug"] == slug)
+    return next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == slug)
 
 
 def _add_aprof_atual(base: Path, assunto: str, ident: str, fontes: str = ""):
