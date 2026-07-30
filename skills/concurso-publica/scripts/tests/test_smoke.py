@@ -73,6 +73,9 @@ def _montar_concurso(base: Path, com_midias=True, com_url_nb=False):
     crase.mkdir(parents=True)
     (crase / "crase.md").write_text(
         '---\ntitle: "Crase"\nstatus: concluido\n'
+        'materia_id: portugues\n'
+        'topico_id: [emprego-do-acento-indicativo-de-crase]\n'
+        'topico: ["1. Emprego do acento indicativo de crase"]\n'
         'localizacao_livro: "Livro.pdf — págs. 10–20"\n---\n'
         "Resumo.\n- [x] Ler\n- [ ] Revisar\n- [ ] Questões\n", encoding="utf-8")
     (crase / "flashcards-crase.md").write_text(
@@ -152,19 +155,43 @@ def _montar_secoes(base: Path):
     escrever("CARGO-X/03-MAPAS-MATERIAS/00-INDICE.md",
              '---\ntipo: moc\n---\n# Mapas\n\n'
              '- [[01-portugues|01 · Português]] — ~10–12 q · 🟡 média\n')
-    # mapa de matéria: template rígido, com as variantes de rótulo que o vault usa
+    # Mapa de matéria. O template é rígido, mas o vault real varia dentro dele, e o
+    # fixture precisa espelhar ESSA variação — não a forma idealizada. Daqui vêm:
+    # as três formas do rótulo de pegadinhas (com e sem emoji, com e sem o nome da
+    # banca), blocos REPETIDOS de subtópicos com sufixo temático, um H3 fora do
+    # template (`Leis-chave`, `🧠 …` com tabela), checkbox já marcado, URL nua e
+    # wikilink no material, e o mesmo H4 em dois tópicos (que colidiria de id).
     escrever("CARGO-X/03-MAPAS-MATERIAS/01-portugues.md",
              '---\ntipo: mapa-materia\nmateria: "Português"\n---\n'
              '# Mapa de Estudo — Português\n\n'
              '## 1. Emprego do acento indicativo de crase 🔴\n\n'
              '### Tópicos do edital (literais)\n\n> Crase.\n\n'
-             '### Subtópicos derivados\n\n- [ ] Regra geral\n- [ ] Casos proibidos\n\n'
-             '### ⚠️ Pegadinhas da banca neste tópico\n\n- Antes de verbo.\n\n'
+             '### Leis-chave\n\n- Acordo Ortográfico de 1990.\n\n'
+             '#### Fontes\n\n- Manual da banca.\n\n'
+             '### Subtópicos derivados — TEORIA\n\n'
+             '- [x] Regra geral\n- [ ] Casos proibidos\n\n'
+             '#### Detalhe do bloco\n\n- [ ] Antes de masculino\n\n'
+             '### Subtópicos derivados — LEI 8.662/1993 (DECORAR ARTIGOS)\n\n'
+             '- [ ] Artigo 4º\n'
+             '- Observação sem checkbox\n\n'
+             '### Material recomendado\n\n'
+             '- Livro: *Gramática* — Pestana (Método).\n'
+             '- Questões: https://qconcursos.com/crase\n'
+             '- Lei: [[lei-1234-1990.pdf]]\n\n'
+             '### ⚠️ Pegadinhas da banca neste tópico\n\n'
+             '- Antes de verbo.\n- Antes de pronome.\n\n'
              '### Meta\n\n- [ ] 30 questões resolvidas\n\n'
+             '---\n\n'
              '## 2. Reconhecimento de tipos textuais\n\n'
+             '### Tópicos do edital (literais)\n\n> Tipos textuais.\n\n'
              '### Subtópicos derivados — TEORIA\n\n- [ ] Narração\n\n'
+             '#### Detalhe do bloco\n\n- [ ] Dissertação\n\n'
+             '### Pegadinhas da Quadrix neste tópico\n\n- Trocar tipo por gênero.\n\n'
+             '### 🧠 Quem faz o quê — tabela de ouro\n\n'
+             '| Tipo | Marca |\n|---|---|\n| Narração | Tempo |\n\n'
+             '#### Fontes\n\n- Caderno de questões.\n\n'
              '### Meta\n\n- [ ] 10 questões resolvidas\n\n'
-             '## ✍️ Meu resumo\n\n**Conceitos-chave:**\n-\n\n'
+             '## ✍️ Meu resumo\n\nRASCUNHO-NAO-PUBLICAR\n-\n\n'
              '## ✅ Checklist Final\n\n- [ ] Revisar crase\n- [ ] Simulado\n')
 
 
@@ -352,6 +379,37 @@ def test_md2html_heading_recebe_id_e_sumario_bate():
 def test_md2html_headings_repetidos_nao_colidem():
     h = md2html.converter("## Meta\n\na\n\n## Meta\n")
     assert '<h2 id="meta">' in h and '<h2 id="meta-2">' in h
+
+
+def test_md2html_prefixo_id_evita_colisao_entre_trechos():
+    """A aba Plano converte um trecho SOLTO por tópico da mesma página. A
+    desambiguação por sufixo só enxerga o trecho corrente, então o mesmo
+    `#### Fontes` em dois tópicos sairia com o mesmo id."""
+    md = "#### Fontes\n\n- a\n"
+    assert '<h4 id="t1-fontes">' in md2html.converter(md, prefixo_id="t1-")
+    assert '<h4 id="t2-fontes">' in md2html.converter(md, prefixo_id="t2-")
+    assert '<h4 id="fontes">' in md2html.converter(md)          # sem prefixo, como antes
+    assert [x["id"] for x in md2html.sumario("## A\n")] == ["a"]   # sumário intocado
+
+
+def test_md2html_url_nua_vira_link():
+    """`- Questões: https://…` é o formato do "Material recomendado" dos mapas.
+    Sem autolink, a linha chega como texto morto justamente na seção cuja razão de
+    existir é levar o estudante ao material."""
+    h = md2html.converter("- Questões: https://qconcursos.com/x?a=1&b=2\n")
+    assert 'href="https://qconcursos.com/x?a=1&amp;b=2"' in h
+    # pontuação de fim de frase fica FORA do link, senão vira 404
+    assert 'href="https://planalto.gov.br/l.htm"' in md2html.converter(
+        "Veja https://planalto.gov.br/l.htm.")
+
+
+def test_md2html_autolink_nao_cria_link_dentro_de_link():
+    for md in ("[Qconcursos](https://qconcursos.com/x)",
+               "![alt](https://img.com/a.png)",
+               "use `https://nao-linkar.com` aqui"):
+        h = md2html.converter(md)
+        assert h.count("<a ") <= 1, md
+        assert "\x01" not in h and "\x00" not in h, md
 
 
 def test_md2html_heading_dentro_de_codigo_nao_conta():
@@ -813,6 +871,181 @@ def test_secoes_numeradas_viram_paginas_com_anexos():
         assert not orfas, orfas
 
 
+def test_estudo_agrupa_por_topico_e_por_prioridade():
+    """Dois eixos de leitura para o mesmo conjunto: a ordem do edital (o que a
+    prova cobra) e a prioridade (por onde começar)."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert 'data-eixo-alvo="topico"' in h and 'data-eixo-alvo="prioridade"' in h
+        assert 'data-eixo="topico"' in h and 'data-eixo="prioridade"' in h
+        assert 'class="grupo-topico"' in h
+        # a Crase tem topico_id gravado; a Regência não — e isso fica VISÍVEL
+        assert "Emprego do acento indicativo de crase" in h
+        assert "Ainda sem tópico" in h
+        quebrados, _ = _auditar_links(out)
+        assert not quebrados, quebrados
+
+
+def test_agrupamento_por_topico_usa_o_vinculo_gravado_nao_o_slug():
+    """A regra de nunca inferir por slug continua valendo. O que mudou é que
+    agora existe dado gravado pela Etapa 2 — e dado gravado não é inferência."""
+    def _assunto(slug, titulo, topicos):
+        return {"slug": slug, "titulo": titulo, "topico_id": topicos,
+                "progresso": {"total": 0, "feitos": 0}, "midias": {},
+                "flashcards": {}, "niveis": [], "n_fontes": 0,
+                "n_aprofundamentos": 1, "fontes": []}
+
+    materia = {
+        "mapa": {"topicos": [{"numero": 1, "titulo": "Tópico A", "slug": "topico-a"},
+                             {"numero": 2, "titulo": "Tópico B", "slug": "topico-b"}]},
+        "assuntos": [
+            # slug NÃO bate com nenhum tópico, mas o vínculo gravado diz onde vai
+            _assunto("assunto-de-nome-diferente", "X", ["topico-b"]),
+            _assunto("sem-vinculo", "Y", []),
+        ],
+    }
+    h = sb.agrupar_por_topico(materia, lambda a: "#")
+    assert "Tópico B" in h and "Tópico A" not in h
+    assert "Ainda sem tópico" in h
+
+
+def test_material_proprio_nao_conta_como_fonte():
+    """"material próprio" ocupa o campo `fontes:` porque o template precisa
+    preencher algo — mas é a declaração de que NÃO há fonte externa. Contá-lo
+    fazia o card anunciar "2 fontes" num assunto com uma norma e um texto
+    escrito do zero."""
+    aprofs = [
+        {"fontes_id": ["lei-8069"], "fontes": "Lei nº 8.069/1990"},
+        {"fontes_id": ["proprio"], "fontes": "material próprio"},
+    ]
+    assert sc.fontes_externas(aprofs) == {"Lei nº 8.069/1990"}
+    assert sc.fontes_externas([aprofs[1]]) == set()
+    assert len(sc.fontes_externas(aprofs)) == 1
+
+
+def test_rotulo_do_aprofundamento_proprio_descreve_o_artefato():
+    """`proprio` é token de PATH, não nome de fonte: a cascata genérica faria
+    title-case e sairia "Proprio · Padrão" — que não descreve nada e ainda perde
+    o acento."""
+    assert sb.rotulo_aprof({"nivel": "padrao", "fontes_id": ["proprio"]}) \
+        == "Material próprio · Padrão"
+    assert sb.rotulo_aprof({"nivel": "detalhado", "fontes_id": ["proprio"]}) \
+        == "Material próprio · Detalhado"
+    # fonte de verdade continua como era
+    assert sb.rotulo_aprof({"nivel": "padrao", "fontes_id": ["pestana"]}) \
+        == "Pestana · Padrão"
+
+
+def test_agrupamento_por_topico_nao_vira_moldura_sem_conteudo():
+    """O tópico vem do edital, verbatim — não é nosso para engordar. Mas edital
+    plano existe: o do BB tem 24 itens numa matéria só e cada assunto nasceu 1:1
+    de um item, então "agrupar" renderizava 15 cabeçalhos pesados para 15 cards.
+    Quando o agrupamento não reduz nada, vira grade corrida e o tópico desce
+    para o card — a mesma informação do edital, sem a moldura."""
+    def _a(slug, tid, titulo=None):
+        return {"slug": slug, "titulo": titulo or slug, "topico_id": [tid],
+                "progresso": {"total": 0, "feitos": 0}, "midias": {},
+                "flashcards": {}, "niveis": [], "n_fontes": 0,
+                "n_aprofundamentos": 1, "fontes": []}
+
+    def _mapa(n):
+        return {"topicos": [{"numero": i, "titulo": f"Tópico {i}",
+                             "slug": f"t{i}"} for i in range(1, n + 1)]}
+
+    # 1:1 — 8 tópicos, 8 assuntos, assunto com o MESMO nome do tópico (é o que
+    # acontece quando o assunto nasce direto do item do edital): NÃO agrupa
+    plano = {"mapa": _mapa(8),
+             "assuntos": [_a(f"a{i}", f"t{i}", f"Tópico {i}") for i in range(1, 9)]}
+    h = sb.agrupar_por_topico(plano, lambda a: "#")
+    assert 'class="grupo-topico corrido"' in h
+    assert "Na ordem do edital" in h
+    assert h.count('class="grupo-topico"') == 0
+    assert h.count("selo-topico") == 8          # o tópico não se perde
+    # e não repete o título do card logo acima dele: sobra só o número
+    assert ">tópico 1</span>" in h and "tópico 1 ·" not in h
+
+    # quando os títulos diferem, o rótulo do tópico aparece inteiro
+    dif = {"mapa": _mapa(8),
+           "assuntos": [_a(f"c{i}", f"t{i}", f"Assunto {i}") for i in range(1, 9)]}
+    assert "tópico 1 · Tópico 1" in sb.agrupar_por_topico(dif, lambda a: "#")
+
+    # concentrado — 8 tópicos, 12 assuntos em 3 tópicos: AGRUPA
+    conc = {"mapa": _mapa(8),
+            "assuntos": [_a(f"b{i}", f"t{(i % 3) + 1}") for i in range(12)]}
+    h2 = sb.agrupar_por_topico(conc, lambda a: "#")
+    assert h2.count('class="grupo-topico"') == 3
+    assert "corrido" not in h2
+    assert "selo-topico" not in h2               # aqui o cabeçalho já diz o tópico
+
+
+def test_materia_sem_mapa_nao_oferece_aba_plano():
+    """A simétrica de `test_materia_so_com_mapa_nao_e_descartada`, que não tinha
+    cobertura: com assuntos e sem plano, a Estudo nasce ativa e o seletor some."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        (base / "CARGO-X/03-MAPAS-MATERIAS/01-portugues.md").unlink()
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert 'data-visao-alvo="plano"' not in h
+        assert 'class="visao ativo" data-visao="estudo"' in h
+        assert "Crase" in h                     # o conteúdo continua lá
+
+
+def test_mapa_de_outro_escopo_vira_plano_com_a_origem_dita():
+    """`mapa_em` era gravado e nunca lido: a matéria do comum ficava sem aba
+    Plano mesmo com o plano existindo no cargo — o caso de "Direitos e Violações
+    (EDAS)". Agora o mapa é ANEXADO, e a página diz de onde ele veio."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # o aprofundamento de `portugues` está no _COMUM; o mapa, no cargo
+        comum = base / "_COMUM" / "03-APROFUNDAMENTO" / "portugues" / "assuntos" / "coesao"
+        comum.mkdir(parents=True)
+        (comum / "coesao.md").write_text(
+            '---\ntitle: "Coesão"\nmateria_id: portugues\nstatus: revisar\n---\nR.\n',
+            encoding="utf-8")
+        m = sc.coletar_concurso(base)
+        escopo_comum = next(e for e in _escopos(m) if e["tipo"] == "comum")
+        mat = next(x for x in escopo_comum["materias"] if x["slug"] == "portugues")
+        assert mat.get("mapa"), "o mapa do cargo deveria ter sido anexado"
+        assert mat["mapa_em"]["escopo_slug"] == "cargo-x"
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "comum" / "materias" / "portugues"
+             / "index.html").read_text(encoding="utf-8")
+        assert 'data-visao-alvo="plano"' in h
+        assert "Plano do edital de" in h        # a origem é dita, não escondida
+
+
+def test_materia_id_casa_slugs_divergentes():
+    """No vault a mesma matéria é `direitos-violacoes` no aprofundamento e
+    `direitos-violacoes-vulnerabilidades` no mapa. Casar por nome de pasta
+    falhava em 5 das 9 matérias aprofundadas."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # matéria cujo aprofundamento usa slug curto e o mapa, slug longo
+        ap = (base / "CARGO-X" / "03-APROFUNDAMENTO" / "direitos-violacoes"
+              / "assuntos" / "eca")
+        ap.mkdir(parents=True)
+        (ap / "eca.md").write_text(
+            '---\ntitle: "ECA"\nmateria_id: direitos-violacoes-vulnerabilidades\n'
+            'status: revisar\n---\nR.\n', encoding="utf-8")
+        (base / "CARGO-X/03-MAPAS-MATERIAS/05-direitos-violacoes-vulnerabilidades.md"
+         ).write_text(
+            '---\ntipo: mapa-materia\nmateria_id: direitos-violacoes-vulnerabilidades\n'
+            'materia: "Direitos e Violações"\n---\n# Mapa\n\n'
+            '## 1. Crianças\n\n### Subtópicos derivados\n\n- [ ] ECA\n', encoding="utf-8")
+        m = sc.coletar_concurso(base)
+        cargo = next(e for e in _escopos(m) if e["tipo"] != "comum")
+        mats = [x for x in cargo["materias"] if "direitos" in x["slug"]]
+        assert len(mats) == 1, [x["slug"] for x in mats]   # uma matéria, não duas
+        assert mats[0]["mapa"] and mats[0]["n_assuntos"] == 1
+
+
 def test_mapa_de_materia_vira_aba_plano():
     """Item 4 do pedido. Uma matéria, duas visões: Plano (o mapa do edital) e Estudo
     (os assuntos aprofundados)."""
@@ -837,6 +1070,337 @@ def test_mapa_de_materia_vira_aba_plano():
         assert not orfas, orfas
 
 
+def test_plano_publica_todas_as_subsecoes_do_topico():
+    """O pedido: cada subseção do tópico chega à web.
+
+    Um `assert` por subseção, de propósito — assim "sumiu o Material recomendado"
+    falha nomeando o Material, e não numa asserção genérica de página.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+
+        assert "Crase." in h, "literal do edital"
+        assert "Regra geral" in h and "Artigo 4º" in h, "subtópicos derivados"
+        assert "Pestana" in h, "material recomendado"
+        assert "Antes de verbo." in h, "pegadinhas"
+        assert "30 questões resolvidas" in h, "meta"
+        assert "Acordo Ortográfico" in h, "H3 fora do template"
+        # cada uma sob a sua seção, para o CSS poder dar voz própria a cada voz
+        for chave in ("material", "pegadinhas", "meta", "extra"):
+            assert f'data-secao="{chave}"' in h, chave
+        quebrados, orfas = _auditar_links(out)
+        assert not quebrados, quebrados
+
+
+def test_plano_rotulo_da_secao_preserva_o_literal_do_vault():
+    """"Pegadinhas da Quadrix neste tópico" nomeia a banca — trocar por um rótulo
+    canônico apagaria informação que o autor do mapa escolheu escrever."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert "Pegadinhas da Quadrix neste tópico" in h
+        assert "Leis-chave" in h
+
+
+def test_plano_tabela_do_mnemonico_vira_tabela():
+    """O bloco 🧠 traz tabela markdown; passar pelo `md2html` é o que a faz tabela
+    em vez de linha de pipes."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert "<table>" in h and "<th>Tipo</th>" in h
+
+
+def test_plano_wikilink_e_url_do_material_viram_link():
+    """Reproduz dois esquecimentos plausíveis: não passar o `wikilink_resolver` (o
+    link da lei morreria) e não autolinkar a URL nua (a linha `Questões: https://…`
+    chegaria como texto morto, na seção cuja razão de existir é levar ao material).
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert 'href="https://qconcursos.com/crase"' in h
+        assert "lei-1234-1990.pdf" in h
+        assert 'wikilink-morto" title="não publicado">lei-1234-1990' not in h
+
+
+def test_plano_subtopico_mostra_estado_e_grupo():
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert 'class="tarefa feito"' in h and 'class="tarefa aberto"' in h
+        assert 'class="grupo-sub"' in h
+        assert "LEI 8.662/1993" in h
+        # o H4 que subdivide o bloco (no vault: `#### Proteção Social Básica (PSB)`)
+        # não pode sumir: ele diz a que parte da matéria aqueles itens pertencem
+        assert "Detalhe do bloco" in h
+        assert "Antes de masculino" in h
+
+
+def test_plano_bolha_so_no_que_e_marcavel():
+    """A bolha do cartão-resposta significa "marcável". Dá-la a um bullet simples
+    fazia a lista mostrar mais itens do que o rodapé conta — a mesma contradição
+    que denunciou o bug dos subtópicos sobrescritos, só que ao contrário.
+
+    Pego contra o vault real, não pelo fixture: 2 tópicos (`Estrutura de Dados e
+    Algoritmos` do BB e `fundamentos-assistencia-social` do SEDES) misturam bullet
+    e checkbox no mesmo bloco de subtópicos.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert '<li class="livre"><span>Observação sem checkbox</span></li>' in h
+
+        # invariante: bolha por item marcável == denominador do rodapé, em TODO tópico
+        for t in h.split('<li class="topico">')[1:]:
+            m = re.search(r'>(\d+)/(\d+) itens do plano<', t)
+            if not m:
+                continue
+            corpo = t[:m.start()]          # o rodapé fecha o tópico
+            bolhas = len(re.findall(r'<li class="tarefa (?:feito|aberto)"', corpo))
+            assert bolhas == int(m.group(2)), (bolhas, m.group(2))
+
+
+def test_plano_nao_publica_o_separador_de_topico():
+    """Os mapas fecham cada tópico com `---`. Como o separador vem depois do último
+    H3, era absorvido por aquele bloco (a `Meta`) e virava um `<hr>` solto dentro da
+    seção, com um vão embaixo. É pontuação do documento, não conteúdo."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        blocos = _materias(sc.coletar_concurso(base))[0]["mapa"]["topicos"][0]["blocos"]
+        meta = [b for b in blocos if b["chave"] == "meta"][0]
+        assert not meta["markdown"].rstrip().endswith("---"), meta["markdown"]
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert "<hr>" not in h.split('class="lista-topicos"')[1].split("</ol>")[0]
+
+
+def test_plano_dobra_anuncia_o_conteudo_fechado():
+    """Uma dobra muda obrigaria a abrir 24 tópicos para achar o que interessa."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert '<details class="mais-topico"' in h
+        assert "2 pegadinhas" in h and "3 materiais" in h
+
+
+def test_plano_recolhe_o_topico_so_em_materia_grande():
+    """Matéria pequena cabe aberta (SEDES tem 5 a 7 tópicos); as do BB têm 14, 17 e
+    24, e aí cinco seções por tópico viram paredão."""
+    assert sb.TOPICOS_PARA_RECOLHER == 8
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        # 2 tópicos: nasce aberto e sem botão de expandir
+        assert '<details class="mais-topico" open>' in h
+        assert "data-expandir" not in h
+
+        grande = "".join(
+            f'\n## {i}. Tópico {i}\n\n### Material recomendado\n\n- Livro: X.\n'
+            for i in range(1, 10))
+        (base / "CARGO-X/03-MAPAS-MATERIAS/01-portugues.md").write_text(
+            '---\ntipo: mapa-materia\nmateria: "Português"\n---\n'
+            '# Mapa de Estudo — Português\n' + grande, encoding="utf-8")
+        out2 = Path(d) / "site2"
+        _construir(base, out2)
+        h2 = (_dir_materia(out2, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert '<details class="mais-topico">' in h2
+        assert '<details class="mais-topico" open>' not in h2
+        assert "data-expandir" in h2
+
+
+def test_plano_ancoras_das_secoes_nao_colidem():
+    """O mesmo `#### Fontes` existe nos dois tópicos do fixture. Sem prefixo por
+    tópico, os dois sairiam com `id="fontes"`: HTML inválido e âncora que salta
+    para o tópico errado."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        ids = re.findall(r'\sid="([^"]+)"', h)
+        repetidos = {i for i in ids if ids.count(i) > 1}
+        assert not repetidos, repetidos
+        assert 'id="t1"' in h and 'id="t1-material"' in h
+        assert 'id="t1-fontes"' in h and 'id="t2-fontes"' in h
+
+
+def test_selo_de_prioridade_do_topico_tem_estilo_proprio():
+    """`selo-aprof nivel-alta` nunca teve regra no CSS — o selo saía sem estilo — e
+    ainda emprestava a semântica de "profundidade do aprofundamento" para
+    "prioridade do tópico", que é outra coisa."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert 'class="selo-prio prio-alta"' in h
+        assert "selo-aprof nivel-alta" not in h
+        css = (out / "assets" / "site.css").read_text(encoding="utf-8")
+        assert ".selo-prio.prio-alta" in css
+
+
+def test_exemplo_do_modelo_constroi_de_verdade():
+    """`examples/site-model-exemplo.json` é o contrato entre coletor e builder — e
+    até agora nada o exercitava, então podia divergir do código em silêncio (o
+    mesmo defeito de fixture que já deixou dois bugs verdes por anos). Aqui ele
+    passa a ser construído: se o formato mudar e o exemplo não, isto quebra."""
+    exemplo = ROOT.parent / "examples" / "site-model-exemplo.json"
+    modelo = json.loads(exemplo.read_text(encoding="utf-8"))
+    materia = _materias(modelo)[0]
+    assert materia["mapa"], "o exemplo precisa representar o mapa, não `null`"
+
+    # os caminhos do exemplo são `<vault>/…` de propósito (nada de path pessoal em
+    # repo público), então o site inteiro não sai daqui — o que se exercita é a aba
+    # que consome o mapa, que é justamente a parte do contrato que mudou
+    class _RotasFalsas:
+        def resolvedor(self, rota):
+            return lambda alvo: None
+
+    h = sb.bloco_plano(materia, _RotasFalsas(), "c/e/materias/x/index.html")
+    assert "Pegadinhas da Quadrix neste tópico" in h
+    assert "Leis-chave" in h                     # H3 fora do template
+    assert 'class="livre"' in h                  # bullet sem checkbox
+    assert 'href="https://www.qconcursos.com/"' in h
+    assert 'class="grupo-sub">TEORIA · Princípios<' in h
+    for t in h.split('<li class="topico">')[1:]:
+        m = re.search(r'>(\d+)/(\d+) itens do plano<', t)
+        if not m:
+            continue
+        bolhas = len(re.findall(r'<li class="tarefa (?:feito|aberto)"', t[:m.start()]))
+        assert bolhas == int(m.group(2)), (bolhas, m.group(2))
+
+
+def test_builder_aceita_modelo_da_versao_anterior():
+    """`--modelo site-model.json` é contrato público: um arquivo salvo com a 0.7.x
+    trazia `secoes` (dict) e `subtopicos` (list[str]) e não pode quebrar o build."""
+    antigo = {
+        "numero": 1, "titulo": "Crase", "slug": "crase", "prioridade": "alta",
+        "subtopicos": ["Regra geral"],
+        "secoes": {"pegadinhas": "- Antes de verbo.\n"},
+        "progresso": {"total": 1, "feitos": 0},
+    }
+    assert [s["texto"] for s in sb.subtopicos_de(antigo)] == ["Regra geral"]
+    blocos = sb.blocos_de(antigo)
+    assert [b["chave"] for b in blocos] == ["pegadinhas"]
+    assert sb.lista_subtopicos(antigo).count("<li") == 1
+    assert "Antes de verbo." in sb.secoes_do_topico(antigo, blocos, None)
+
+
+def test_site_js_abre_os_detalhes_para_impressao():
+    """`<details>` fechado não imprime, e forçar por CSS não é confiável entre
+    navegadores. O botão existe porque o Ctrl+F do Firefox também não expande."""
+    js = (ROOT.parent / "assets" / "site.js").read_text(encoding="utf-8")
+    assert "beforeprint" in js and "afterprint" in js
+    assert "mais-topico" in js and "data-expandir" in js
+
+
+def test_mapa_soma_todos_os_blocos_de_subtopicos():
+    """Regressão: `secoes[chave] = texto` fazia o ÚLTIMO bloco vencer.
+
+    Um tópico com `### Subtópicos derivados — TEORIA` e `— LEI 8.662/1993` perdia o
+    primeiro inteiro. No vault real são 5 tópicos e 57 subtópicos, e dava para ver
+    na página: o tópico 2 de `servico-social` listava 1 item enquanto o rodapé dizia
+    `0/22 itens do plano` — a página se contradizia sozinha.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        t1 = sc.coletar_concurso(base)
+        t1 = _materias(t1)[0]["mapa"]["topicos"][0]
+        textos = [s["texto"] for s in t1["subtopicos"]]
+        # os dois blocos, com o H4 que mora dentro do primeiro
+        assert "Regra geral" in textos and "Casos proibidos" in textos
+        assert "Antes de masculino" in textos
+        assert "Artigo 4º" in textos, "o bloco da lei foi sobrescrito pelo da teoria"
+        assert "Observação sem checkbox" in textos      # bullet simples também entra
+        assert len(textos) == 5
+        # cada item sabe de que bloco veio — inclusive do H4 que subdivide o bloco
+        grupos = {s["grupo"] for s in t1["subtopicos"]}
+        assert grupos == {"TEORIA", "TEORIA · Detalhe do bloco",
+                          "LEI 8.662/1993 (DECORAR ARTIGOS)"}
+
+
+def test_mapa_lista_de_subtopicos_bate_com_o_progresso_do_topico():
+    """A lista e o contador têm de contar a mesma coisa — era essa contradição que
+    denunciava o bug em produção."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        for t in _materias(sc.coletar_concurso(base))[0]["mapa"]["topicos"]:
+            marcaveis = sum(1 for s in t["subtopicos"] if s["feito"] is not None)
+            marcaveis += sum(1 for b in t["blocos"] if b["chave"] != "subtopicos"
+                             for i in b["itens"] if i["feito"] is not None)
+            assert marcaveis == t["progresso"]["total"], t["titulo"]
+
+
+def test_mapa_preserva_estado_do_checkbox_do_subtopico():
+    """`- [x]` vem do vault; descartá-lo fazia item estudado e item não começado
+    ficarem idênticos, enquanto o contador do rodapé dizia o contrário."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        subs = _materias(sc.coletar_concurso(base))[0]["mapa"]["topicos"][0]["subtopicos"]
+        por_texto = {s["texto"]: s["feito"] for s in subs}
+        assert por_texto["Regra geral"] is True
+        assert por_texto["Casos proibidos"] is False
+
+
+def test_mapa_captura_h3_fora_do_template_em_vez_de_descartar():
+    """`Leis-chave`, `Conceitos-chave / fórmulas` e os mnemônicos 🧠 somam 50 blocos
+    dentro de tópicos numerados do vault e sumiam em silêncio — justamente o
+    conteúdo que dá mais trabalho para escrever."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mapa = _materias(sc.coletar_concurso(base))[0]["mapa"]
+        extras = [b for t in mapa["topicos"] for b in t["blocos"]
+                  if b["chave"] == sc.CHAVE_EXTRA]
+        rotulos = {b["rotulo"] for b in extras}
+        assert "Leis-chave" in rotulos
+        assert any(r.startswith("🧠") for r in rotulos), rotulos
+        # e a geração AVISA que apareceu rótulo fora do template
+        assert "Leis-chave" in mapa["rotulos_extras"]
+
+
+def test_mapa_reconhece_as_tres_variantes_de_pegadinhas():
+    """`### Pegadinhas…`, `### ⚠️ Pegadinhas…` e `### Pegadinhas da Quadrix…`
+    coexistem no vault. O rótulo exibido é o literal: a banca citada é informação,
+    e canonizar seria apagá-la."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mapa = _materias(sc.coletar_concurso(base))[0]["mapa"]
+        peg = [b for t in mapa["topicos"] for b in t["blocos"]
+               if b["chave"] == "pegadinhas"]
+        assert len(peg) == 2, peg
+        assert any("Quadrix" in b["rotulo"] for b in peg)
+        assert any(b["rotulo"].startswith("⚠️") for b in peg)
+
+
+def test_mapa_mantem_blocos_na_ordem_do_documento():
+    """`Leis-chave` foi autorado ANTES dos subtópicos; a página deve respeitar a
+    ordem de quem escreveu, não uma ordem canônica inventada aqui."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        t1 = _materias(sc.coletar_concurso(base))[0]["mapa"]["topicos"][0]
+        chaves = [b["chave"] for b in t1["blocos"]]
+        assert chaves[:3] == ["topicos_edital", sc.CHAVE_EXTRA, "subtopicos"], chaves
+
+
 def test_mapa_descarta_meu_resumo_e_conta_progresso_separado():
     """`✍️ Meu resumo` está vazio em 16 dos 24 mapas do vault e nos outros 8 é
     exercício de preenchimento — na web rende cabeçalho seguido de nada.
@@ -850,7 +1414,9 @@ def test_mapa_descarta_meu_resumo_e_conta_progresso_separado():
         _construir(base, out)
         h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
         assert "Meu resumo" not in h
-        assert "Conceitos-chave" not in h
+        # marcador inequívoco: "Conceitos-chave" era ambíguo, porque é também um H3
+        # legítimo de tópico no vault — a asserção passaria a testar outra coisa
+        assert "RASCUNHO-NAO-PUBLICAR" not in h
         assert "itens do plano" in h        # progresso do mapa, rotulado como tal
 
         m = sc.coletar_concurso(base)
@@ -887,15 +1453,94 @@ def test_topico_do_mapa_linka_so_com_casamento_exato():
                                  materia_ruim) == []
 
 
-def test_pagina_sem_topico_nao_afirma_falta_de_aprofundamento():
+def test_cobertura_conta_topicos_e_lista_as_lacunas():
+    """Cobertura é CONTAGEM de tópicos com `topico_id` gravado — nunca estimativa.
+    O invariante: cobertos + lacunas == total de tópicos do mapa."""
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
+        m = sc.coletar_concurso(base)
+        cb = _materias(m)[0]["cobertura"]
+        # o fixture tem 2 tópicos e só a crase vinculada
+        assert cb["n_topicos"] == 2 and cb["n_cobertos"] == 1 and cb["pct"] == 50
+        assert len(cb["topicos_sem"]) + cb["n_cobertos"] == cb["n_topicos"]
+        assert cb["topicos_sem"][0]["numero"] == 2
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert "Cobertura do edital" in h
+        assert "1/2 tópicos (50%)" in h
+        assert 'class="barra-cobertura"' in h
+        assert "Reconhecimento de tipos textuais" in h      # a lacuna, por nome
+
+
+def test_cobertura_zero_aparece_em_vez_de_sumir():
+    """Matéria só com plano mostra 0% — esconder faria a lacuna desaparecer
+    justamente onde ela é maior. No vault real são 10 matérias em 0%."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        (base / "CARGO-X/03-MAPAS-MATERIAS/02-matematica.md").write_text(
+            '---\ntipo: mapa-materia\nmateria: "Matemática"\n---\n# Mapa\n\n'
+            '## 1. Porcentagens\n\n### Subtópicos derivados\n\n- [ ] Regra de três\n',
+            encoding="utf-8")
+        m = sc.coletar_concurso(base)
+        mat = next(x for x in _materias(m) if x["slug"] == "matematica")
+        assert mat["cobertura"]["pct"] == 0 and mat["cobertura"]["n_cobertos"] == 0
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "materias" / "matematica"
+             / "index.html").read_text(encoding="utf-8")
+        assert "0/1 tópicos (0%)" in h
+
+
+def test_sinais_do_assunto_dizem_o_que_existe():
+    """Sem nota sintética: contagem de cards e ausência de âncoras, que são os
+    sinais que de fato variam no vault (33 dos 92 assuntos não têm âncoras)."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        m = sc.coletar_concurso(base)
+        crase = next(a for a in _materias(m)[0]["assuntos"] if a["slug"] == "crase")
+        assert crase["sinais"]["n_cards"] == 2
+        assert crase["sinais"]["tem_ancoras"] is False
+        assert crase["sinais"]["palavras"] > 0
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert "2 cards" in h and "sem trechos-âncora" in h
+
+
+def test_pagina_sem_topico_nao_afirma_falta_de_aprofundamento():
+    """A regra continua: **não afirmar ausência que não se pode conhecer**.
+
+    O que mudou é o que se pode conhecer. Até a 0.9.0 o link tópico→assunto era
+    inferido por slug e casava em ~18%, então dizer "sem aprofundamento" era
+    chute. Agora o `topico_id` é GRAVADO na Etapa 2, e a contagem é dado.
+
+    O caso perigoso passou a ser outro, e é o que este teste trava: matéria com
+    assuntos e NENHUM vínculo gravado. Aí a cobertura é desconhecida, não zero —
+    dizer 0% afirmaria que nada foi aprofundado sobre uma matéria inteiramente
+    aprofundada.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # tira o vínculo dos assuntos, preservando o resto do frontmatter
+        for md in (base / "CARGO-X" / "03-APROFUNDAMENTO").rglob("*.md"):
+            txt = md.read_text(encoding="utf-8")
+            if "topico_id:" in txt:
+                md.write_text("\n".join(l for l in txt.split("\n")
+                                        if not l.startswith("topico_id:")),
+                              encoding="utf-8")
+        m = sc.coletar_concurso(base)
+        mat = _materias(m)[0]
+        assert mat["assuntos"], "o fixture precisa ter assuntos"
+        assert mat["cobertura"].get("vinculo_ausente"), mat["cobertura"]
+        assert "pct" not in mat["cobertura"]
+
         out = Path(d) / "site"
         _construir(base, out)
         h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
         for frase in ("sem aprofundamento", "não aprofundado", "nao aprofundado"):
-            assert frase.lower() not in h.lower(), frase
-
+            assert frase not in h.lower(), frase
 
 def test_materia_so_com_mapa_nao_e_descartada():
     """`coletar_materia()` devolvia None sem `assuntos/`, então matéria que só tem

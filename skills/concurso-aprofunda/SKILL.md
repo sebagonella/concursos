@@ -1,6 +1,6 @@
 ---
 name: concurso-aprofunda
-version: 0.4.1
+version: 0.6.0
 description: Use quando o usuário já tem uma preparação de concurso montada no vault (pela skill concurso-prep) e quer APROFUNDAR uma matéria a partir de um material denso — tipicamente um livro de referência (PDF/EPUB) que está no vault. A skill localiza no livro cada assunto já mapeado daquela matéria (via sumário ou busca por densidade de termos), gera um arquivo .md por assunto no vault com resumo completo próprio + ponteiros de página + trechos-âncora curtos citados (Modelo 2, sem copiar a obra), e produz flashcards nativos (Obsidian + Anki). Prepara também o insumo para a Etapa NotebookLM (podcast, mapa mental), tratada separadamente. Suporta DOIS NÍVEIS de profundidade (padrao = resumo de revisão; detalhado = tratamento exaustivo com exemplos resolvidos e questões comentadas) e VÁRIOS APROFUNDAMENTOS por assunto (fontes diferentes convivem lado a lado). Triggers - "aprofundar português com o livro X", "pegar os assuntos do livro", "mapear o livro de referência", "gerar flashcards do assunto", "extrair assuntos do material para o vault", "aprofundar mais/mais detalhado esse assunto", "aprofundar com outro livro/outra fonte", "versão detalhada do assunto".
 ---
 
@@ -11,8 +11,10 @@ Segunda etapa do fluxo de preparação. Consome a saída da `concurso-prep` (os 
 ## Pré-condições
 
 1. Já existe uma pasta de concurso gerada pela `concurso-prep` (ex.: `SEDES_2026/`).
-2. Existe um livro de referência da matéria no vault (PDF com texto, PDF escaneado, ou EPUB).
-3. A matéria tem assuntos mapeados (lista de tópicos no mapa da matéria).
+2. A matéria tem assuntos mapeados (lista de tópicos no mapa da matéria).
+3. **Uma fonte densa OU nenhuma**:
+   - com livro de referência no vault (PDF com texto, PDF escaneado, ou EPUB) → fluxo completo, com localização por página;
+   - **sem fonte externa** (`--proprio`) → o conteúdo é escrito do zero, e as etapas de localização no livro não se aplicam.
 
 ## Aprofundamentos: fontes e níveis
 
@@ -112,11 +114,15 @@ NotebookLM — ver "Ponte NotebookLM".
 
 | Parâmetro | Obrigatório | Default | Descrição |
 |---|---|---|---|
-| `livro` | sim | — | Caminho do livro no vault (PDF/EPUB) |
+| `livro` | **sim, exceto com `proprio`** | — | Caminho do livro no vault (PDF/EPUB) |
+| `proprio` | não | false | **Aprofundamento sem fonte externa**: o conteúdo é escrito do zero, do conhecimento próprio. Dispensa `livro` e `fontes`, e a identidade vira `{nivel}--proprio`. Vale nos dois níveis |
 | `materia` | sim | — | Matéria a aprofundar (ex.: "Língua Portuguesa") |
+| `topico` | não | matéria inteira | **Aprofundar só UM tópico do edital**: número (`4`), slug ou trecho do título. Sem ele, a matéria inteira |
+| `materia-id` | não | slug da matéria | Slug estável da matéria — o join com o mapa do edital |
+| `topico-id` | **sim na prática** | derivado de `topico` | Slug do tópico gravado em cada assunto. Sem ele o assunto nasce órfão e o site não consegue agrupá-lo; o script avisa. Vindo do `assuntos_do_topico.py`, já vem pronto junto com o título legível |
 | `concurso` | sim | — | Pasta do concurso (ex.: "SEDES_2026") |
 | `nivel` | não | `padrao` | **`padrao`** = resumo de revisão (~350-500 palavras) · **`detalhado`** = tratamento exaustivo (~1200-2500 palavras, com desenvolvimento completo, quadro de casos, exemplos resolvidos, questões comentadas e divergências entre autores) |
-| `fontes` | não | nome do livro | Nome(s) da(s) fonte(s), separados por vírgula. Define a identidade do aprofundamento junto com o nível. **Várias fontes numa mesma execução geram UM aprofundamento combinado**; execuções separadas geram aprofundamentos distintos do mesmo assunto |
+| `fontes` | não | nome do livro | Nome(s) da(s) fonte(s), separados por vírgula. Define a identidade do aprofundamento junto com o nível. **Várias fontes numa mesma execução geram UM aprofundamento combinado**; execuções separadas geram aprofundamentos distintos do mesmo assunto. Ignorado com `proprio` |
 | `fontes-slug` | não | derivado | Slugs das fontes, na mesma ordem de `fontes`. Sobrepõe a derivação automática (sobrenome do autor / identificador da norma). Use quando o nome da fonte não permite deduzir — obra com dois autores, arquivo sem autor no nome, documento sem número de norma |
 | `ocr` | não | `auto` | `auto` (OCR só se o PDF for imagem), `forcar`, `nunca` |
 | `so-encontrados` | não | false | Não gerar arcabouço para assuntos não localizados no livro |
@@ -124,13 +130,31 @@ NotebookLM — ver "Ponte NotebookLM".
 
 ## Fluxo (8 etapas)
 
+> **Com `topico` o fluxo estreita**: em vez de montar `assuntos.json` da matéria
+> inteira na etapa 1, roda-se
+> `scripts/assuntos_do_topico.py --concurso-dir <...> --materia-id <slug> --topico <N>`,
+> que já devolve `{materia, materia_id, topico_id, topico, assuntos}` — a saída serve
+> direto de entrada para a etapa 2 (`book_index.py --assuntos`) ou para a etapa 4
+> (`build_subject_md.py --assuntos`). Use `--listar` para ver os tópicos disponíveis.
+>
+> É o modo recomendado para matéria grande: `conhecimentos-bancarios` tem 24 tópicos, e
+> aprofundar tudo de uma vez é uma sessão que não termina.
+
+> **Com `--proprio` o fluxo encurta**: as etapas 2, 2b, 3 e 3b (localização no
+> livro, reaproveitamento, pendências, cobertura) **não se aplicam** — não há
+> livro para localizar. Vai-se da etapa 1 direto para a 4, com `--assuntos` no
+> lugar de `--mapa`. As etapas 5 a 8 valem iguais.
+
 ```
 1. Ler os assuntos mapeados da matéria
    - Fonte: os mapas de matéria — .md PLANOS em {concurso}/{CARGO}/03-MAPAS-MATERIAS/
      ou em {concurso}/_COMUM/03-MAPAS-COMUNS/ (matérias comuns a vários cargos)
    - Montar assuntos.json = {materia, assuntos:[...]}
+   - ANOTAR de qual tópico (`## N.`) cada assunto veio: é isso que vira
+     --topico-id/--topico na etapa 4. A skill lê o mapa aqui, então ela SABE —
+     e sem registrar, o assunto nasce sem vínculo com o plano do edital.
 
-2. Localizar cada assunto no livro   [Subsistema A]
+2. Localizar cada assunto no livro   [Subsistema A]   (pular com --proprio)
    - scripts/book_index.py --livro <livro> --assuntos assuntos.json --out mapa-localizacao.json
    - Detecta tipo (PDF-texto/escaneado/EPUB); usa sumário (TOC) ou densidade de termos
    - Saída: para cada assunto {paginas, confianca, metodo}
@@ -172,11 +196,27 @@ NotebookLM — ver "Ponte NotebookLM".
    - Este documento é exibido no site (concurso-publica) antes da lista de assuntos.
 
 4. Gerar o arcabouço .md por assunto   [Subsistema B]
-   - scripts/build_subject_md.py --mapa mapa-localizacao.json --out-dir <assuntos/> \
+   - COM livro:
+     scripts/build_subject_md.py --mapa mapa-localizacao.json --out-dir <assuntos/> \
        --concurso <concurso> --fontes "<nome da fonte>" --nivel <padrao|detalhado> \
+       --materia "<matéria>" --materia-id <slug> \
+       --topico-id <slug-do-topico> --topico "<N. Título do tópico>" \
        [--prioridades prioridades.json]
+   - SEM fonte externa:
+     scripts/build_subject_md.py --assuntos assuntos.txt --proprio --out-dir <assuntos/> \
+       --concurso <concurso> --nivel <padrao|detalhado> \
+       --materia "<matéria>" --materia-id <slug> \
+       --topico-id <slug-do-topico> --topico "<N. Título do tópico>"
+     (`assuntos.txt` = um assunto por linha; identidade vira {nivel}--proprio)
    - SEMPRE passe --fontes e --nivel: eles definem a identidade do aprofundamento
      ({nivel}--{fonte}) e permitem que o mesmo assunto tenha várias versões.
+     Com --proprio, --fontes é ignorado e a identidade é {nivel}--proprio.
+   - SEMPRE passe --topico-id: é o que liga o assunto ao plano do edital e o que
+     permite ao site agrupar por tópico. Sem ele o script avisa e o assunto fica
+     num balde "ainda sem tópico". Vindo do assuntos_do_topico.py, ele já está no JSON.
+   - NÃO sobrescreve arcabouço existente: assunto que já tem .md é PULADO e
+     reportado em `ja_existiam`. É o .md que guarda o resumo escrito à mão.
+     Regerar de propósito exige --forcar, que faz backup .md.bak antes.
    - Se o usuário não disser o nível, pergunte OU use `padrao` e avise que existe
      o `detalhado`. Se ele pedir "mais completo/aprofundado/detalhado", use `detalhado`.
    - Cria assuntos/{assunto}/{nivel}--{fonte}/{assunto}--{nivel}--{fonte}--{CONCURSO}.md
@@ -212,6 +252,18 @@ NotebookLM — ver "Ponte NotebookLM".
    > localização (páginas) e trechos curtos citados. Não reproduzir a obra.
    > Isso vale IGUALMENTE no nível detalhado — mais profundidade significa mais
    > análise própria, NUNCA mais transcrição da obra.
+
+   COM `--proprio` (templates assunto-proprio*.md.tpl):
+   - Não há `CITACOES` nem `⚓ Trechos-âncora`: sem obra, não há o que citar.
+   - Entra `ONDE_CONFERIR`: a norma, o dispositivo ou o enunciado oficial que
+     permite ao estudante checar o que está escrito.
+
+   > Regra de honestidade sem fonte: **não inventar número de lei, artigo,
+   > súmula ou jurisprudência**. Sem livro para ancorar, a única defesa contra
+   > erro é a citação verificável — e o que não for seguro vira pendência
+   > explícita, nunca vai para o texto. É o mesmo princípio de "não inventar
+   > página": material sem fonte não é licença para chutar, é obrigação de
+   > escrever só o que se sustenta.
 
 6. Gerar flashcards nativos por assunto  [se flashcards=true]
    - O Claude produz cards.json (front/back/tag) a partir do conteúdo redigido
@@ -316,3 +368,5 @@ Em `scripts/`:
 - **Direitos autorais (Modelo 2).** O resumo é original; do livro entram só páginas e trechos curtos citados. A skill não extrai o texto integral da obra.
 - **Degradação graciosa.** Sem OCR, PDFs-imagem viram pendência com aviso. Sem `notebooklm-py`, a ponte fica manual.
 - **Preservar trabalho do usuário.** Re-execuções não sobrescrevem resumos/cards já preenchidos sem aviso.
+- **Sem fonte externa é uma escolha declarada, não a ausência de argumentos.** `--proprio` grava `{nivel}--proprio`; deixar a lista de fontes vazia sem a flag significa que a derivação FALHOU, e o script avisa. Confundir os dois faria material deliberado parecer erro de configuração — e o inverso.
+- **Sem fonte, não inventar dispositivo.** Número de lei, artigo, súmula ou jurisprudência de que não se tenha certeza vira pendência, não texto.
