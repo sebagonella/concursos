@@ -813,6 +813,208 @@ def test_secoes_numeradas_viram_paginas_com_anexos():
         assert not orfas, orfas
 
 
+def test_mapa_de_materia_vira_aba_plano():
+    """Item 4 do pedido. Uma matéria, duas visões: Plano (o mapa do edital) e Estudo
+    (os assuntos aprofundados)."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+
+        assert 'data-visao-alvo="plano"' in h and 'data-visao-alvo="estudo"' in h
+        assert 'data-visao="plano"' in h and 'data-visao="estudo"' in h
+        # os dois tópicos do mapa do fixture, com seus subtópicos
+        assert h.count('class="topico"') == 2
+        assert "Emprego do acento indicativo de crase" in h
+        assert "Regra geral" in h and "Casos proibidos" in h
+        # rótulos com variante (⚠️ Pegadinhas, Subtópicos derivados — TEORIA) foram lidos
+        assert "Narração" in h
+        # emoji de prioridade sai do título e vira selo
+        assert "🔴" not in h
+        quebrados, orfas = _auditar_links(out)
+        assert not quebrados, quebrados
+        assert not orfas, orfas
+
+
+def test_mapa_descarta_meu_resumo_e_conta_progresso_separado():
+    """`✍️ Meu resumo` está vazio em 16 dos 24 mapas do vault e nos outros 8 é
+    exercício de preenchimento — na web rende cabeçalho seguido de nada.
+
+    E o progresso do mapa é contado à parte: os 24 mapas somam 2.220 checkboxes
+    nenhum marcado, e misturá-los com os ~200 do aprofundamento apagaria a única
+    barra que hoje significa algo."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        assert "Meu resumo" not in h
+        assert "Conceitos-chave" not in h
+        assert "itens do plano" in h        # progresso do mapa, rotulado como tal
+
+        m = sc.coletar_concurso(base)
+        mat = _materias(m)[0]
+        # o progresso do assunto (3 itens, 1 feito) não foi contaminado pelo mapa
+        assert mat["assuntos"][0]["progresso"] == {"total": 3, "feitos": 1}
+        assert mat["mapa"]["progresso"]["total"] >= 3
+
+
+def test_topico_do_mapa_linka_so_com_casamento_exato():
+    """Derivar o link tópico→assunto por slugificação daria link errado na maioria:
+    dos 203 tópicos dos 24 mapas do vault, só ~18% casam. E o falso negativo é pior
+    que a ausência — tópico sem link lido como "não tem aprofundamento" quando existe
+    com outro nome esconde trabalho já feito. Sem casamento, a página não afirma nada.
+    """
+    materia = {"assuntos": [{"slug": "crase"}, {"slug": "regencia"}],
+               "aliases_mapa": {}}
+    # casa exato
+    assert sb.assuntos_do_topico({"titulo": "Crase", "slug": "crase"}, materia) \
+        == ["crase"]
+    # não casa: nenhum palpite
+    assert sb.assuntos_do_topico(
+        {"titulo": "Domínio da estrutura morfossintática", "slug": "dominio-da-estrutura"},
+        materia) == []
+    # alias opcional resolve o 1:N que o slug não alcança
+    materia_alias = dict(materia, aliases_mapa={
+        "dominio da estrutura morfossintatica": ["crase", "regencia"]})
+    assert sb.assuntos_do_topico(
+        {"titulo": "Domínio da estrutura morfossintática", "slug": "x"},
+        materia_alias) == ["crase", "regencia"]
+    # alias apontando para assunto inexistente não inventa link
+    materia_ruim = dict(materia, aliases_mapa={"crase": ["nao-existe"]})
+    assert sb.assuntos_do_topico({"titulo": "Crase", "slug": "crase"},
+                                 materia_ruim) == []
+
+
+def test_pagina_sem_topico_nao_afirma_falta_de_aprofundamento():
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+        for frase in ("sem aprofundamento", "não aprofundado", "nao aprofundado"):
+            assert frase.lower() not in h.lower(), frase
+
+
+def test_materia_so_com_mapa_nao_e_descartada():
+    """`coletar_materia()` devolvia None sem `assuntos/`, então matéria que só tem
+    plano de estudo era descartada em silêncio — sumia o plano inteiro do cargo."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # mapa de matéria sem nenhum aprofundamento correspondente
+        (base / "CARGO-X" / "03-MAPAS-MATERIAS" / "02-matematica.md").write_text(
+            '---\ntipo: mapa-materia\nmateria: "Matemática"\n---\n'
+            '# Mapa — Matemática\n\n## 1. Porcentagens\n\n'
+            '### Subtópicos derivados\n\n- [ ] Regra de três\n', encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        assert (_dir_materia(out, "teste_2026", "matematica") / "index.html").exists()
+        h = (_dir_materia(out, "teste_2026", "matematica")
+             / "index.html").read_text(encoding="utf-8")
+        assert "Porcentagens" in h
+        # sem aprofundamento, não há por que oferecer a aba
+        assert 'data-visao-alvo="estudo"' not in h
+        quebrados, orfas = _auditar_links(out)
+        assert not quebrados and not orfas
+
+
+def test_materia_homonima_em_escopos_diferentes_nao_colide():
+    """Regressão: a navegação usava o índice de NOMES, que resolve por basename e o
+    primeiro registro vence — com `portugues` no cargo e no comum, o hub do cargo
+    apontava para a matéria do comum e a própria ficava órfã. Link de navegação é
+    sempre explícito; o índice é só para wikilink."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        outra = base / "_COMUM" / "03-APROFUNDAMENTO" / "portugues" / "assuntos" / "crase"
+        outra.mkdir(parents=True)
+        (outra / "crase.md").write_text('---\ntitle: "Crase (comum)"\n---\nx\n',
+                                        encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        assert (_dir_materia(out, "teste_2026", "portugues", "comum")
+                / "index.html").exists()
+        assert (_dir_materia(out, "teste_2026", "portugues", "cargo-x")
+                / "index.html").exists()
+        hub = (out / "teste_2026" / "cargo-x" / "index.html").read_text(encoding="utf-8")
+        assert 'href="materias/portugues/index.html"' in hub
+        quebrados, orfas = _auditar_links(out)
+        assert not quebrados, quebrados
+        assert not orfas, orfas
+
+
+def test_pacote_notebooklm_vira_pagina_com_prompts():
+    """Item 3 do pedido. O vault tem 92 pacotes prontos e um único assunto com mídia
+    de verdade: o gargalo não é ter o roteiro, é executá-lo — daí a página existir
+    para dar o prompt a um toque."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        pack = _mat_vault(base) / "assuntos" / "crase" / "_fonte-notebooklm.md"
+        pack.write_text(
+            "---\ntipo: fonte-notebooklm\nnotebooklm_status: nao-criado\n---\n"
+            "# Pacote\n\n## 1. Fontes para subir no notebook\n\n"
+            "1. **`crase.md`** — o resumo curado.\n\n"
+            "## 2. 🎧 Podcast (Audio Overview)\n\n"
+            "- Studio → **Audio Overview** → **Customize**.\n"
+            "- Formato: Deep Dive\n\n```\nFoque em Crase para concurso.\n```\n\n"
+            "## 3. 🧠 Mapa Mental (Mind Map)\n\n```\nConstrua o mapa mental.\n```\n\n"
+            "## 7. 💬 Perguntas úteis no chat\n\n- O que mais cai?\n\n"
+            "## ✅ Checklist\n\n- [ ] Criar notebook\n- [x] Subir fontes\n",
+            encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+
+        p = _dir_assunto(out, "teste_2026", "crase") / "notebooklm" / "index.html"
+        assert p.exists()
+        h = p.read_text(encoding="utf-8")
+        assert h.count('class="cartao prompt"') == 2      # podcast e mapa mental
+        assert h.count("data-copiar") == 2
+        assert "Foque em Crase para concurso." in h
+        assert "Studio → Audio Overview → Customize." in h   # roteiro de cliques
+        assert "O que mais cai?" in h
+        assert 'class="tarefa feito"' in h and 'class="tarefa aberto"' in h
+        # sem URL salva, orienta em vez de oferecer botão morto
+        assert "Abrir no NotebookLM" not in h
+        assert "notebooklm_url" in h
+        # a página do assunto oferece o caminho para cá
+        ha = (_dir_assunto(out, "teste_2026", "crase")
+              / "index.html").read_text(encoding="utf-8")
+        assert "Pacote NotebookLM" in ha
+
+        quebrados, orfas = _auditar_links(out)
+        assert not quebrados, quebrados
+        assert not orfas, orfas
+
+
+def test_pacote_notebooklm_e_por_assunto_com_abas():
+    """Uma página por ASSUNTO, não por pacote: entre `padrao--X` e `detalhado--X` só
+    o prompt de áudio difere, e 92 páginas com ~95% de repetição não se justificam."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = _mat_vault(base) / "assuntos" / "crase"
+        for nome in ("padrao--pestana", "detalhado--pestana"):
+            p = alvo / nome
+            p.mkdir(parents=True)
+            (p / f"crase--{nome}.md").write_text(
+                '---\ntitle: "Crase"\nfontes: "Pestana"\n---\nx\n', encoding="utf-8")
+            (p / "_fonte-notebooklm.md").write_text(
+                "---\ntipo: fonte-notebooklm\n---\n# P\n\n"
+                "## 2. 🎧 Podcast\n\n```\nprompt " + nome + "\n```\n",
+                encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "crase") / "notebooklm"
+             / "index.html").read_text(encoding="utf-8")
+        # três abas: os dois aprofundamentos novos + o legado (arquivo solto na pasta
+        # do assunto), que a skill continua lendo de propósito
+        assert h.count('data-alvo="') == 3
+        assert 'data-alvo="original"' in h
+        assert "prompt padrao--pestana" in h and "prompt detalhado--pestana" in h
+        # uma página só para o assunto, não uma por pacote
+        assert len(list((_dir_assunto(out, "teste_2026", "crase")
+                         / "notebooklm").glob("**/index.html"))) == 1
+
+
 def test_documento_longo_ganha_sumario_lateral():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")

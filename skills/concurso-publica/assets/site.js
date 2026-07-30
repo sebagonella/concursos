@@ -127,21 +127,76 @@
   /* ---------------- Seletor de aprofundamentos ----------------
      Um assunto pode ter vários aprofundamentos (fontes/níveis diferentes).
      As abas alternam qual está visível — corpo e lateral juntos. */
+  /* Pega TODOS os seletores, não só o primeiro: a página de matéria tem o seletor
+     de visão (Plano/Estudo) e a de assunto o de aprofundamento — e desde a aba de
+     visão podem coexistir na mesma página. */
   function iniciarSeletorAprof() {
-    var seletor = document.querySelector(".seletor-aprof");
-    if (!seletor) return;
-    var abas = seletor.querySelectorAll(".aba");
+    document.querySelectorAll(".seletor-aprof").forEach(function (seletor) {
+      var abas = seletor.querySelectorAll(".aba");
+      abas.forEach(function (aba) {
+        aba.addEventListener("click", function () {
+          var alvo = aba.getAttribute("data-alvo");
+          var visao = aba.getAttribute("data-visao-alvo");
+          abas.forEach(function (b) { b.classList.toggle("ativa", b === aba); });
 
-    abas.forEach(function (aba) {
-      aba.addEventListener("click", function () {
-        var alvo = aba.getAttribute("data-alvo");
-        abas.forEach(function (b) { b.classList.toggle("ativa", b === aba); });
-        document.querySelectorAll(".aprof").forEach(function (bloco) {
-          bloco.classList.toggle("ativo", bloco.getAttribute("data-aprof") === alvo);
+          if (visao) {
+            document.querySelectorAll(".visao").forEach(function (bloco) {
+              bloco.classList.toggle("ativo",
+                bloco.getAttribute("data-visao") === visao);
+            });
+          } else {
+            document.querySelectorAll(".aprof").forEach(function (bloco) {
+              bloco.classList.toggle("ativo",
+                bloco.getAttribute("data-aprof") === alvo);
+            });
+          }
+          // pausa mídia do bloco que saiu de vista
+          document.querySelectorAll(
+            ".aprof:not(.ativo) audio, .aprof:not(.ativo) video," +
+            ".visao:not(.ativo) audio, .visao:not(.ativo) video"
+          ).forEach(function (m) { try { m.pause(); } catch (e) {} });
         });
-        // pausa mídia do aprofundamento que saiu de vista
-        document.querySelectorAll(".aprof:not(.ativo) audio, .aprof:not(.ativo) video")
-          .forEach(function (m) { try { m.pause(); } catch (e) {} });
+      });
+    });
+  }
+
+  /* ---------------- Copiar prompt ----------------
+     O pacote NotebookLM existe para ser EXECUTADO: o prompt vai daqui para o campo
+     "Customize" do Estúdio. Um toque, sem seleção manual. */
+  function iniciarCopiar() {
+    document.querySelectorAll("[data-copiar]").forEach(function (botao) {
+      botao.addEventListener("click", function () {
+        var cartao = botao.closest(".prompt");
+        var pre = cartao && cartao.querySelector(".texto-prompt");
+        if (!pre) return;
+        var texto = pre.textContent;
+        var original = botao.textContent;
+
+        function ok() {
+          botao.textContent = "✓ Copiado";
+          setTimeout(function () { botao.textContent = original; }, 2000);
+        }
+        function copiaManual() {
+          // fallback para navegador sem clipboard API ou fora de contexto seguro
+          var area = document.createElement("textarea");
+          area.value = texto;
+          area.setAttribute("readonly", "");
+          area.style.position = "fixed";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          area.select();
+          try { document.execCommand("copy"); ok(); } catch (e) {
+            botao.textContent = "Selecione e copie";
+            setTimeout(function () { botao.textContent = original; }, 2000);
+          }
+          document.body.removeChild(area);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(texto).then(ok, copiaManual);
+        } else {
+          copiaManual();
+        }
       });
     });
   }
@@ -149,6 +204,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     iniciarTema();
     iniciarSeletorAprof();
+    iniciarCopiar();
     document.querySelectorAll(".quiz").forEach(iniciarQuiz);
     iniciarLightbox();
   });

@@ -428,6 +428,58 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
   margin: .25rem 0 0; font-size: .88rem; color: var(--grafite-fraco);
 }
 
+/* ---------- visões da matéria (Plano | Estudo) ----------
+   Mesmo mecanismo das abas de aprofundamento: só a ativa aparece. */
+.visao { display: none; }
+.visao.ativo { display: block; }
+
+/* ---------- aba Plano: os tópicos do edital ---------- */
+.lista-topicos { list-style: none; padding: 0; margin: 1rem 0 0; counter-reset: t; }
+.lista-topicos .topico { padding: .9rem 0; border-bottom: 1px solid var(--pauta); }
+.lista-topicos .topico:last-child { border-bottom: 0; }
+.lista-topicos .linha {
+  display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap;
+}
+.lista-topicos .num {
+  font-family: var(--fonte-dado); font-size: .78rem; color: var(--grafite-fraco);
+  flex: none; min-width: 1.7em; text-align: right;
+}
+.lista-topicos h3 { margin: 0; font-size: 1.02rem; }
+.lista-topicos .ir { margin-left: auto; font-size: .8rem; }
+.lista-topicos .subtopicos {
+  margin: .45rem 0 0 2.3rem; padding: 0; list-style: none;
+  columns: 2; column-gap: 1.5rem;
+}
+@media (max-width: 700px) { .lista-topicos .subtopicos { columns: 1; } }
+.lista-topicos .subtopicos li {
+  font-size: .88rem; color: var(--grafite-fraco); padding: .1rem 0;
+  break-inside: avoid;
+}
+.lista-topicos .subtopicos li::before { content: "· "; }
+.lista-topicos .meta {
+  display: block; margin: .4rem 0 0 2.3rem;
+  font-family: var(--fonte-dado); font-size: .72rem; color: var(--grafite-fraco);
+}
+
+/* ---------- pacote NotebookLM ---------- */
+.grade-prompts {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem; margin-top: 1.25rem;
+}
+.prompt .texto-prompt {
+  white-space: pre-wrap; font-size: .8rem; line-height: 1.5; margin: 0;
+  max-height: 15rem; overflow-y: auto;
+}
+.prompt .roteiro {
+  list-style: none; padding: 0; margin: .7rem 0 0;
+  font-size: .78rem; color: var(--grafite-fraco);
+}
+.prompt .roteiro li { padding: .15rem 0; }
+.prompt .roteiro li::before { content: "→ "; color: var(--tinta); }
+.copiar { cursor: pointer; background: transparent; font-family: var(--fonte-texto); }
+.fontes-pack { padding-left: 1.2rem; font-size: .92rem; }
+.fontes-pack p { margin: 0; }
+
 /* ---------- sumário do documento (lateral) ---------- */
 .sumario ul { list-style: none; padding: 0; margin: 0; }
 .sumario li { padding: .2rem 0; font-size: .86rem; line-height: 1.4; }

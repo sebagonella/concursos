@@ -268,14 +268,10 @@ def coletar_aprofundamento(subdir: Path, slug_assunto: str,
         "n_cards": contar_cards(fc_md) if fc_md.exists() else 0,
     }
 
-    # link NotebookLM interativo (Decisão 5): só se preenchido no pack
-    nb_url = None
+    # pacote NotebookLM: roteiro + prompts, e o link interativo se preenchido
+    pack_info = coletar_pack_notebooklm(subdir)
+    nb_url = pack_info["url"] if pack_info else None
     pack = subdir / "_fonte-notebooklm.md"
-    if pack.exists():
-        nb_fm = ler_frontmatter(pack)
-        url = nb_fm.get("notebooklm_url", "").strip()
-        if url and url.lower() not in ("", "null", "~"):
-            nb_url = url
 
     # prioridade: frontmatter primeiro; senão deriva do guia da matéria
     prioridade = normalizar_prioridade(fm.get("prioridade", ""))
@@ -311,9 +307,104 @@ def coletar_aprofundamento(subdir: Path, slug_assunto: str,
         "notebooklm_url": nb_url,
         "progresso": contar_progresso(corpo),
         "tem_pack_notebooklm": pack.exists(),
+        "pack_notebooklm": pack_info,
     }
 
 
+
+
+# --------------------------------------------------------------------------- #
+# pacote NotebookLM
+# --------------------------------------------------------------------------- #
+# O `_fonte-notebooklm.md` tem template rígido: as mesmas 9 seções nos 92 arquivos
+# do vault e ZERO H3. A extração é determinística por isso — e o que interessa são
+# os 4 blocos de código, que são prompts para copiar e colar no Estúdio.
+PROMPTS_PACK = (
+    ("podcast",     re.compile(r"podcast|audio overview", re.I), "🎧", "Podcast"),
+    ("mapa_mental", re.compile(r"mapa mental|mind map", re.I),   "🧠", "Mapa mental"),
+    ("video",       re.compile(r"v[ií]deo|video overview", re.I), "🎬", "Vídeo"),
+    ("report",      re.compile(r"report|relat[oó]rio", re.I),    "📄", "Relatório"),
+)
+
+
+def coletar_pack_notebooklm(subdir: Path) -> dict | None:
+    """Extrai do pacote o que é ACIONÁVEL: fontes a subir e os prompts a colar.
+
+    O levantamento do vault mostrou 92 pacotes prontos e **um** assunto com mídia
+    de verdade. O gargalo do fluxo não é ter o roteiro, é executá-lo 92 vezes — daí
+    a página existir para dar o prompt a um toque, não para ser lida.
+
+    Os 4 wikilinks da seção "Arquivos gerados" NÃO são parseados: dos 368 do vault,
+    só 6 têm arquivo. A presença de mídia continua vindo de `detectar_midias()`.
+    """
+    pack = subdir / "_fonte-notebooklm.md"
+    if not pack.exists():
+        return None
+    fm = ler_frontmatter(pack)
+    corpo = fm.get("_corpo", "")
+
+    # cada bloco cercado é um prompt; o rótulo vem do H2 que o precede
+    prompts = []
+    for bloco in re.split(r"^##\s+", corpo, flags=re.MULTILINE)[1:]:
+        linhas = bloco.split("\n")
+        titulo = re.sub(r"^\d+\.\s*", "", linhas[0].strip())
+        fences = re.findall(r"^```\s*\n(.*?)^```", "\n".join(linhas[1:]),
+                            re.MULTILINE | re.DOTALL)
+        if not fences:
+            continue
+        chave = icone = rotulo = None
+        for k, padrao, ic, rot in PROMPTS_PACK:
+            if padrao.search(titulo):
+                chave, icone, rotulo = k, ic, rot
+                break
+        prompts.append({
+            "chave": chave or slug_doc(titulo),
+            "icone": icone or "✨",
+            "rotulo": rotulo or titulo,
+            "titulo_secao": titulo,
+            "prompt": fences[0].strip(),
+            "roteiro": _roteiro_do_bloco("\n".join(linhas[1:])),
+        })
+
+    fontes = re.findall(r"^\d+\.\s+(.*)$",
+                        _secao_do_pack(corpo, r"fontes para subir"), re.MULTILINE)
+    perguntas = re.findall(r"^[-*]\s+(.*)$",
+                           _secao_do_pack(corpo, r"perguntas [uú]teis"), re.MULTILINE)
+    checklist = re.findall(r"^\s*-\s*\[([ xX])\]\s*(.+)$",
+                           _secao_do_pack(corpo, r"checklist"), re.MULTILINE)
+
+    return {
+        "caminho": str(pack),
+        "status": (fm.get("notebooklm_status") or "").strip() or "nao-criado",
+        "url": _url_do_pack(fm),
+        "fontes": [re.sub(r"\*\*", "", f).strip() for f in fontes],
+        "prompts": prompts,
+        "perguntas": [re.sub(r"\*\*", "", p).strip() for p in perguntas],
+        "checklist": [{"feito": m[0].lower() == "x", "texto": m[1].strip()}
+                      for m in checklist],
+        "progresso": contar_progresso(corpo),
+    }
+
+
+def _secao_do_pack(corpo: str, padrao: str) -> str:
+    for bloco in re.split(r"^##\s+", corpo, flags=re.MULTILINE)[1:]:
+        linhas = bloco.split("\n")
+        if re.search(padrao, linhas[0], re.I):
+            return "\n".join(linhas[1:])
+    return ""
+
+
+def _roteiro_do_bloco(texto: str) -> list[str]:
+    """As linhas de "onde clicar" — o que o pacote chama de roteiro do Estúdio."""
+    return [re.sub(r"\*\*", "", l).strip(" -*")
+            for l in texto.split("\n")
+            if re.match(r"^[-*]\s+\*?\*?(Studio|Formato|Dura|Idioma|Estilo|Generate|Download)",
+                        l.strip(), re.I)]
+
+
+def _url_do_pack(fm: dict) -> str | None:
+    url = (fm.get("notebooklm_url") or "").strip()
+    return url if url and url.lower() not in ("", "null", "~") else None
 
 
 ORDEM_NIVEL = {"detalhado": 0, "padrao": 1}
@@ -463,6 +554,19 @@ def coletar_materia(materia_dir: Path) -> dict | None:
 
     mapa_loc = materia_dir / "mapa-localizacao.json"
     doc_banca = achar_doc_banca(materia_dir)
+
+    # Aliases OPCIONAIS tópico-do-mapa → assunto(s), preenchidos à mão quando o
+    # usuário quiser o link fino. Ausente = sem links extras, e nenhum palpite: o
+    # casamento automático só vale quando o slug bate exatamente.
+    aliases = {}
+    alias_f = materia_dir / "mapa-aliases.json"
+    if alias_f.exists():
+        try:
+            bruto = json.loads(alias_f.read_text(encoding="utf-8"))
+            aliases = {norm(k): (v if isinstance(v, list) else [v])
+                       for k, v in bruto.items()}
+        except (json.JSONDecodeError, AttributeError):
+            aliases = {}
     return {
         "nome": nome,
         "doc_banca": doc_banca,
@@ -470,6 +574,7 @@ def coletar_materia(materia_dir: Path) -> dict | None:
         "dir": str(materia_dir),
         "docs_apoio": docs,
         "mapa_localizacao": mapa_loc.name if mapa_loc.exists() else None,
+        "aliases_mapa": aliases,
         "assuntos": assuntos,
         "n_assuntos": len(assuntos),
         "n_com_podcast": sum(1 for a in assuntos if a["midias"]["podcast"]),
@@ -607,6 +712,127 @@ def coletar_secao(secao_dir: Path, info: tuple) -> dict:
     }
 
 
+# --------------------------------------------------------------------------- #
+# mapa de matéria (a aba "Plano")
+# --------------------------------------------------------------------------- #
+# O template do mapa é rígido a ~98%, mas os rótulos de H3 variam: "Pegadinhas"
+# aparece em três formas ("### Pegadinhas…", "### ⚠️ Pegadinhas…", "### Pegadinhas da
+# Quadrix…") e "Subtópicos derivados" às vezes leva sufixo temático ("— TEORIA").
+# Por isso o casamento é por PREFIXO/BUSCA, nunca por igualdade — igualdade
+# silenciosamente perderia a seção e o conteúdo sumiria da página.
+H3_MAPA = (
+    ("topicos_edital", re.compile(r"t[oó]picos do edital", re.I)),
+    ("subtopicos",     re.compile(r"^subt[oó]picos derivados", re.I)),
+    ("material",       re.compile(r"^material recomendado", re.I)),
+    ("pegadinhas",     re.compile(r"pegadinhas", re.I)),
+    ("meta",           re.compile(r"^meta\b", re.I)),
+)
+
+# `✍️ Meu resumo` existe em 23 dos 24 mapas e está VAZIO em 16 — só rótulos em
+# negrito seguidos de um `-` solto. Nos outros 8 é exercício de preenchimento
+# (`- CRAS →`, tabela de memorização com células vazias). Numa página web rende
+# cabeçalho seguido de nada, ou um exercício que o site não pode receber.
+H2_DESCARTAR = re.compile(r"meu resumo", re.I)
+
+# emoji de prioridade embutido no título: `## 19. LGPD 🔴`
+PRIORIDADE_EMOJI = {"🔴": "alta", "🟠": "alta", "🟡": "media", "🟢": "base"}
+
+TOPICO_NUMERADO = re.compile(r"^(\d+)\.\s*(.+)$")
+
+
+def _prioridade_do_titulo(titulo: str) -> tuple[str, str | None]:
+    """Separa o emoji de prioridade do título. Devolve (título limpo, prioridade)."""
+    prio = None
+    for emoji, valor in PRIORIDADE_EMOJI.items():
+        if emoji in titulo:
+            prio = valor
+            titulo = titulo.replace(emoji, "")
+            break
+    titulo = re.sub(r"\s*\((BLOCO [^)]+)\)\s*$", "", titulo, flags=re.I)
+    return re.sub(r"\s{2,}", " ", titulo).strip(" —-·"), prio
+
+
+def coletar_mapa(md: Path) -> dict | None:
+    """Extrai do mapa de matéria os tópicos do edital, com seus subtópicos.
+
+    É o insumo da aba **Plano**: o que o edital exige, com ou sem aprofundamento
+    pronto. O progresso daqui é contado SEPARADAMENTE do aprofundamento — os 24
+    mapas do vault somam 2.220 checkboxes, nenhum marcado, e misturá-los com os ~200
+    do aprofundamento apagaria a única barra que hoje significa algo.
+    """
+    fm = ler_frontmatter(md)
+    corpo = fm.get("_corpo", "")
+    if PLACEHOLDER_RE.search(corpo):
+        return None
+
+    topicos, auxiliares = [], []
+    for bloco in re.split(r"^##\s+", corpo, flags=re.MULTILINE)[1:]:
+        linhas = bloco.split("\n")
+        titulo_bruto = linhas[0].strip()
+        conteudo = "\n".join(linhas[1:])
+        if H2_DESCARTAR.search(titulo_bruto):
+            continue
+
+        m = TOPICO_NUMERADO.match(titulo_bruto)
+        if not m:
+            auxiliares.append({"titulo": _prioridade_do_titulo(titulo_bruto)[0],
+                               "corpo": conteudo.strip()})
+            continue
+
+        titulo, prio = _prioridade_do_titulo(m.group(2))
+        secoes: dict[str, str] = {}
+        for sub in re.split(r"^###\s+", conteudo, flags=re.MULTILINE)[1:]:
+            slinhas = sub.split("\n")
+            rotulo = slinhas[0].strip()
+            texto = "\n".join(slinhas[1:]).strip()
+            for chave, padrao in H3_MAPA:
+                if padrao.search(rotulo):
+                    secoes[chave] = texto
+                    break
+        subtopicos = re.findall(r"^\s*-\s*\[[ xX]\]\s*(.+)$",
+                                secoes.get("subtopicos", ""), re.MULTILINE)
+        topicos.append({
+            "numero": int(m.group(1)),
+            "titulo": titulo,
+            "slug": slug_doc(titulo),
+            "prioridade": prio,
+            "subtopicos": [re.sub(r"\*\*", "", s).strip() for s in subtopicos],
+            "secoes": secoes,
+            "progresso": contar_progresso(conteudo),
+        })
+
+    if not topicos and not auxiliares:
+        return None
+    prog = contar_progresso(corpo)
+    return {
+        "arquivo": md.name,
+        "caminho": str(md),
+        "titulo": fm.get("materia") or titulo_doc(md, fm, corpo),
+        "topicos": topicos,
+        "auxiliares": auxiliares,
+        "n_topicos": len(topicos),
+        "progresso": prog,
+    }
+
+
+def achar_mapas(escopo_dir: Path) -> dict[str, Path]:
+    """Mapas de matéria do escopo, indexados pelo slug da matéria.
+
+    `03-MAPAS-MATERIAS` (por cargo) e `03-MAPAS-COMUNS` (o que o SEDES usa no
+    _COMUM) são dois nomes para a mesma coisa.
+    """
+    achados: dict[str, Path] = {}
+    for nome in ("03-MAPAS-MATERIAS", "03-MAPAS-COMUNS"):
+        pasta = escopo_dir / nome
+        if not pasta.is_dir():
+            continue
+        for md in sorted(pasta.glob("*.md")):
+            if DOCS_NAO_PUBLICAVEIS.match(md.stem):
+                continue
+            achados.setdefault(slug_doc(md.name), md)
+    return achados
+
+
 def progresso_do_status(escopo_dir: Path) -> dict:
     """Progresso declarado no `99-Status.md` — lido, mas não republicado."""
     for md in escopo_dir.glob("99-Status*.md"):
@@ -634,10 +860,32 @@ def coletar_escopo(escopo_dir: Path) -> dict:
     # tolera o layout atual (`03-APROFUNDAMENTO/{materia}/assuntos/`) e os
     # anteriores, sem o site quebrar por material que o usuário não migrou.
     materias = []
+    por_slug: dict[str, dict] = {}
     for materia_dir in achar_materias(escopo_dir):
         m = coletar_materia(materia_dir)
         if m:
             materias.append(m)
+            por_slug[m["slug"]] = m
+
+    # Uma matéria, duas visões: o mapa (Plano) e o aprofundamento (Estudo) casam
+    # pelo slug. Mapa sem aprofundamento vira matéria só com Plano — antes
+    # `coletar_materia()` devolvia None sem `assuntos/` e a matéria era descartada
+    # em silêncio, o que sumia com o plano de estudo inteiro do cargo.
+    for slug, md_mapa in achar_mapas(escopo_dir).items():
+        mapa = coletar_mapa(md_mapa)
+        if not mapa:
+            continue
+        if slug in por_slug:
+            por_slug[slug]["mapa"] = mapa
+        else:
+            materias.append({
+                "nome": mapa["titulo"], "slug": slug, "dir": str(md_mapa.parent),
+                "doc_banca": None, "docs_apoio": [], "mapa_localizacao": None,
+                "assuntos": [], "n_assuntos": 0,
+                "n_com_podcast": 0, "n_com_flashcards": 0,
+                "por_prioridade": {p: 0 for p in PRIORIDADES},
+                "mapa": mapa,
+            })
     materias.sort(key=lambda m: m["slug"])
 
     secoes.sort(key=lambda s: (s["ordinal"], s["slug"]))
@@ -664,6 +912,42 @@ def coletar_escopo(escopo_dir: Path) -> dict:
         "progresso_documentos": prog_docs,
         "progresso_status": progresso_do_status(escopo_dir),
     }
+
+
+def cruzar_materias_comuns(escopos: list[dict]) -> None:
+    """Liga as duas metades de uma matéria que vive em escopos diferentes.
+
+    Caso real e frequente: no BB o mapa de Língua Portuguesa está na pasta de CADA
+    cargo, mas o aprofundamento está no `_COMUM`; no SEDES, o mapa de Serviço Social
+    está no ASSISTENTE-SOCIAL e o aprofundamento no `_COMUM`. Sem cruzar, a página
+    do cargo mostraria um plano sem conteúdo e a do comum um conteúdo sem plano,
+    ambas parecendo incompletas quando o material está todo lá.
+
+    É a decisão "espelho + atalhos": a estrutura continua a do vault, e o atalho
+    torna a origem explícita em vez de duplicar material.
+    """
+    comum = next((e for e in escopos if e["tipo"] == "comum"), None)
+    if not comum:
+        return
+    por_slug = {m["slug"]: m for m in comum["materias"]}
+
+    for escopo in escopos:
+        if escopo is comum:
+            continue
+        for mat in escopo["materias"]:
+            irma = por_slug.get(mat["slug"])
+            if not irma:
+                continue
+            if not mat["assuntos"] and irma["assuntos"]:
+                mat["aprofundamento_em"] = {
+                    "escopo_slug": comum["slug"], "escopo_nome": comum["nome"],
+                    "materia_slug": irma["slug"], "n_assuntos": irma["n_assuntos"],
+                }
+            if not irma.get("mapa") and mat.get("mapa"):
+                irma["mapa_em"] = {
+                    "escopo_slug": escopo["slug"], "escopo_nome": escopo["nome"],
+                    "materia_slug": mat["slug"],
+                }
 
 
 def achar_escopos(base: Path) -> list[Path]:
@@ -748,6 +1032,7 @@ def coletar_concurso(base: Path) -> dict:
 
     # `_COMUM` primeiro (é o que vale para todos), cargos em ordem alfabética
     escopos.sort(key=lambda e: (e["tipo"] != "comum", e["nome"]))
+    cruzar_materias_comuns(escopos)
 
     return {
         "concurso": base.name,
