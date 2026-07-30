@@ -561,6 +561,92 @@ def test_auditor_de_links_pega_ancora_e_diretorio_sem_index():
 # --------------------------------------------------------------------------- #
 # prioridade, banca, multi-concurso, mídias e tema
 # --------------------------------------------------------------------------- #
+def test_prefixo_e_relativo_calculados_da_rota():
+    """Substitui os prefixos literais (`"../"`, `"../../"`, `"../../../"`) que
+    estavam espalhados pelos templates. Prefixo errado é a regressão mais comum
+    desta skill, e cada nível de pasta novo exigia acertar todos na mão."""
+    assert sb.prefixo_de("index.html") == ""
+    assert sb.prefixo_de("conc/index.html") == "../"
+    assert sb.prefixo_de("conc/mat/assunto/index.html") == "../../../"
+
+    # irmão na mesma matéria
+    assert sb.relativo("c/m/crase/index.html", "c/m/regencia/index.html") \
+        == "../crase/index.html"
+    # subir até a raiz do site (assets)
+    assert sb.relativo("assets/site.css", "c/m/a/index.html") \
+        == "../../../assets/site.css"
+    # capa a partir da matéria, e índice raiz a partir da capa
+    assert sb.relativo("c/index.html", "c/m/index.html") == "../index.html"
+    assert sb.relativo("index.html", "c/index.html") == "../index.html"
+    # âncora preservada
+    assert sb.relativo("c/m/a/index.html#flashcards", "c/m/b/index.html") \
+        == "../a/index.html#flashcards"
+
+
+def test_rotas_casa_as_convencoes_de_wikilink_do_vault():
+    """Os wikilinks do SEDES usam caminho absoluto do vault e os do BB, nome nu.
+    Reduzir ao basename sem extensão faz as duas caírem na mesma chave."""
+    r = sb.Rotas()
+    r.registrar("c/m/crase/index.html", "crase", "crase--padrao--pestana--SEDES_2026")
+    for alvo in ("crase",
+                 "crase.md",
+                 "CRASE",
+                 "_COMUM/03-APROFUNDAMENTO/lingua-portuguesa/assuntos/crase",
+                 "crase--padrao--pestana--SEDES_2026.md"):
+        assert r.rota_de(alvo) == "c/m/crase/index.html", alvo
+    assert r.rota_de("nao-existe") is None
+
+
+def test_resolvedor_global_atravessa_materia():
+    """O resolvedor anterior era uma closure sobre os assuntos da MESMA matéria, e
+    todo wikilink que atravessava matéria ou apontava para documento morria."""
+    r = sb.Rotas()
+    r.registrar("c/portugues/crase/index.html", "crase")
+    r.registrar("c/suas/loas/index.html", "loas")
+    resolver = r.resolvedor("c/portugues/crase/index.html")
+    assert resolver("loas") == "../../suas/loas/index.html"
+    assert resolver("inexistente") is None
+
+
+def test_rotas_tem_tres_classes_de_alvo():
+    """Nem todo alvo de wikilink é página: flashcards são artefato embutido (viram
+    âncora) e mídia é arquivo copiado. Sem essa distinção os wikilinks de mídia dos
+    pacotes NotebookLM viram parede de link morto."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=True)
+        m = sc.coletar_concurso(base)
+        rotas, plano = sb.montar_rotas(m, "teste_2026")
+
+        # página
+        assert rotas.rota_de("crase") == "teste_2026/portugues/crase/index.html"
+        # artefato embutido -> âncora na página que o hospeda
+        assert rotas.rota_de("flashcards-crase") \
+            == "teste_2026/portugues/crase/index.html#flashcards"
+        # arquivo copiado -> caminho da mídia dentro do site
+        assert rotas.rota_de("podcast-crase.m4a") \
+            == "teste_2026/portugues/crase/media/unico/podcast-crase.m4a"
+        # o plano cobre capa + matéria + os 2 assuntos
+        assert [p["tipo"] for p in plano] == ["capa", "materia", "assunto", "assunto"]
+
+
+def test_wikilink_de_flashcards_aponta_para_a_ancora_do_quiz():
+    """Antes, TODO wikilink morto do site real apontava para flashcards."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "portugues" / "assuntos" / "crase"
+        md = alvo / "crase.md"
+        md.write_text(md.read_text(encoding="utf-8")
+                      + "\nVer [[flashcards-crase]].\n", encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(
+            encoding="utf-8")
+        assert 'href="index.html#flashcards"' in h
+        assert 'id="flashcards"' in h
+        quebrados, _ = _auditar_links(out)
+        assert not quebrados, quebrados
+
+
 def test_escopo_vem_do_primeiro_componente_do_caminho():
     """Regressão do bug do `_GERAL`. A versão anterior procurava o segmento
     `03-MAPAS` no caminho e devolvia o componente anterior — mas o aprofundamento

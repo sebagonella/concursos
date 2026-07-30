@@ -24,7 +24,7 @@ import re
 import shutil
 import sys
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
@@ -51,6 +51,99 @@ def nome_legivel(slug: str) -> str:
     return re.sub(r"\s{2,}", " ", s).strip()
 
 
+# --------------------------------------------------------------------------- #
+# rotas: onde cada página mora, decidido ANTES de renderizar
+# --------------------------------------------------------------------------- #
+# Toda rota é um caminho POSIX relativo à raiz do site, e todo link emitido é
+# relativo — é o que permite servir o mesmo site na raiz ou num subpath.
+def prefixo_de(rota: str) -> str:
+    """Caminho da página até a raiz: `a/b/index.html` → `../../`."""
+    return "../" * (len(PurePosixPath(rota).parts) - 1)
+
+
+def relativo(destino: str, de_rota: str) -> str:
+    """URL relativa da página em `de_rota` até `destino` (rota, âncora opcional).
+
+    Substitui os prefixos literais (`"../"`, `"../../"`, `"../../../"`) que
+    estavam espalhados pelos templates. Cada nível novo de pasta exigia acertar
+    todos eles na mão, e prefixo errado é historicamente a regressão mais comum
+    desta skill.
+    """
+    alvo, _, frag = destino.partition("#")
+    partes = PurePosixPath(alvo).parts
+    dir_alvo, nome_alvo = partes[:-1], partes[-1]
+    dir_atual = PurePosixPath(de_rota).parts[:-1]
+    i = 0
+    while i < len(dir_atual) and i < len(dir_alvo) and dir_atual[i] == dir_alvo[i]:
+        i += 1
+    passos = [".."] * (len(dir_atual) - i) + list(dir_alvo[i:]) + [nome_alvo]
+    return "/".join(passos) + (f"#{frag}" if frag else "")
+
+
+class Rotas:
+    """Índice `nome-de-arquivo-do-vault → rota no site`.
+
+    Existe por causa do resolvedor de wikilinks: para virar `href`, `[[crase]]`
+    precisa da URL de uma página que talvez ainda não tenha sido gerada. Num passo
+    único isso é impossível — e era justamente por isso que o resolvedor anterior
+    só conseguia ver assuntos irmãos da mesma matéria, deixando morto todo wikilink
+    que atravessasse matéria ou apontasse para documento.
+
+    Três classes de alvo, porque nem todo alvo é página:
+      - **página**       → rota da página;
+      - **artefato embutido** (flashcards) → rota da página que o hospeda + âncora;
+      - **arquivo copiado** (mídia, anexo) → rota do arquivo dentro do site.
+    Sem essa distinção, os 368 wikilinks de mídia dos pacotes NotebookLM viravam
+    parede de link morto.
+    """
+
+    EXTENSOES = re.compile(
+        r"\.(md|png|jpe?g|svg|webp|pdf|m4a|mp3|wav|ogg|mp4|webm|mov|csv|tsv|txt|pptx)$",
+        re.IGNORECASE)
+
+    def __init__(self) -> None:
+        self._por_nome: dict[str, str] = {}
+
+    @classmethod
+    def chave(cls, nome: str) -> str:
+        """Último segmento, sem extensão, minúsculo — como o Obsidian casa.
+
+        Os wikilinks do SEDES usam caminho absoluto do vault
+        (`[[_COMUM/03-APROFUNDAMENTO/…/crase]]`) e os do BB, nome nu (`[[crase]]`).
+        Reduzir os dois ao basename faz as duas convenções caírem na mesma chave.
+        """
+        base = (nome or "").strip().rstrip("/").split("/")[-1]
+        return cls.EXTENSOES.sub("", base).lower()
+
+    def registrar(self, rota: str, *nomes: str, ancora: str = "") -> None:
+        """Associa nomes do vault a uma rota. O primeiro registro vence, para uma
+        página não ser sequestrada por um homônimo registrado depois."""
+        destino = rota + (f"#{ancora}" if ancora else "")
+        for nome in nomes:
+            chave = self.chave(nome)
+            if chave:
+                self._por_nome.setdefault(chave, destino)
+
+    def rota_de(self, nome: str) -> str | None:
+        return self._por_nome.get(self.chave(nome))
+
+    def resolvedor(self, rota_atual: str):
+        """Closure no formato que o `md2html` espera: `alvo → href | None`."""
+        def resolver(alvo: str) -> str | None:
+            destino = self._por_nome.get(self.chave(alvo))
+            return relativo(destino, rota_atual) if destino else None
+        return resolver
+
+
+def ident_aprof(ap: dict, indice: int = 0) -> str:
+    """Identificador do aprofundamento usado em pasta de mídia e em `data-aprof`.
+    Vive numa função só porque o builder o calculava em dois lugares — e os dois
+    tinham de continuar concordando, ou a mídia ia para uma pasta e o HTML
+    apontava para outra."""
+    return re.sub(r"[^A-Za-z0-9_+-]+", "-",
+                  ap.get("aprofundamento") or f"a{indice}")
+
+
 def nome_escopo(nome: str) -> str:
     """Rótulo de exibição do escopo (`_COMUM` ou um cargo).
 
@@ -66,9 +159,11 @@ def nome_escopo(nome: str) -> str:
     return nome
 
 
-def pagina(titulo: str, trilha_html: str, corpo: str, prefixo: str,
+def pagina(titulo: str, trilha_html: str, corpo: str, rota: str,
            descricao: str = "") -> str:
-    """Esqueleto comum. `prefixo` é o caminho relativo até a raiz do site."""
+    """Esqueleto comum. `rota` é o caminho da própria página relativo à raiz do
+    site; o prefixo até os assets sai dela, em vez de ser contado à mão."""
+    prefixo = prefixo_de(rota)
     ano = datetime.now().strftime("%d/%m/%Y às %H:%M")
     return f"""<!doctype html>
 <html lang="pt-BR">
@@ -181,7 +276,9 @@ def bloco_quiz(cards: list[dict], link_vault: str | None) -> str:
     if not cards:
         return ""
     dados = json.dumps(cards, ensure_ascii=False)
-    return f"""<section class="cartao quiz">
+    # id âncora: os flashcards não são página própria, então os wikilinks que
+    # apontam para o `.md` do baralho são resolvidos para cá (ver Rotas)
+    return f"""<section class="cartao quiz" id="flashcards">
   <h3>Flashcards ({len(cards)})</h3>
   <div class="carta" role="button" aria-label="Cartão — clique para virar">
     <span class="frente"></span><span class="verso"></span>
@@ -222,23 +319,17 @@ def rotulo_aprof(ap: dict) -> str:
 
 
 def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Path,
-                         indice: int, ativo: bool) -> tuple[str, str]:
+                         indice: int, ativo: bool,
+                         rotas: "Rotas", rota: str) -> tuple[str, str]:
     """Renderiza UM aprofundamento: corpo (coluna esquerda) + cartões (lateral)."""
     origem_dir = Path(ap["resumo_md"]).parent
-    irmaos = {a["slug"] for a in materia["assuntos"]}
-
-    def resolver(alvo: str) -> str | None:
-        base = alvo.split("/")[-1].replace(".md", "")
-        base = base.split("--")[0]
-        if base in irmaos and base != assunto["slug"]:
-            return f"../{base}/index.html"
-        return None
 
     corpo_md = Path(ap["resumo_md"]).read_text(encoding="utf-8")
-    corpo_html = md2html.converter(corpo_md, wikilink_resolver=resolver)
+    corpo_html = md2html.converter(corpo_md,
+                                   wikilink_resolver=rotas.resolvedor(rota))
 
     # mídias deste aprofundamento vão para media/<id>/ (não colidem entre si)
-    ident = re.sub(r"[^A-Za-z0-9_+-]+", "-", ap.get("aprofundamento") or f"a{indice}")
+    ident = ident_aprof(ap, indice)
     midia_dir = destino_dir / "media" / ident
     blocos = []
 
@@ -310,8 +401,10 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
         rep = m["report"]
         if rep.lower().endswith((".md", ".txt")):
             src = copiar(rep)
-            corpo_html += (f'\n<h2>Relatório {baixar(src, "baixar")}</h2>\n'
-                           + md2html.converter((origem_dir / rep).read_text(encoding="utf-8")))
+            corpo_html += (f'\n<h2 id="relatorio">Relatório {baixar(src, "baixar")}</h2>\n'
+                           + md2html.converter(
+                               (origem_dir / rep).read_text(encoding="utf-8"),
+                               wikilink_resolver=rotas.resolvedor(rota)))
         else:
             src = copiar(rep)
             blocos.append(f'<section class="cartao">{cabecalho("Relatório", src)}'
@@ -337,17 +430,19 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
 
 
 def pagina_assunto(assunto: dict, materia: dict, concurso: str,
-                   destino_dir: Path) -> str:
+                   destino_dir: Path, rotas: "Rotas", rota: str,
+                   rota_materia: str, rota_capa: str) -> str:
     titulo = assunto["titulo"]
     aprofs = assunto.get("aprofundamentos") or []
 
     corpos, laterais, abas = [], [], []
     for i, ap in enumerate(aprofs):
         ativo = (i == 0)
-        c, l = bloco_aprofundamento(ap, materia, assunto, destino_dir, i, ativo)
+        c, l = bloco_aprofundamento(ap, materia, assunto, destino_dir, i, ativo,
+                                    rotas, rota)
         corpos.append(c)
         laterais.append(l)
-        ident = re.sub(r"[^A-Za-z0-9_+-]+", "-", ap.get("aprofundamento") or f"a{i}")
+        ident = ident_aprof(ap, i)
         abas.append(f'<button class="aba{" ativa" if ativo else ""}" '
                     f'data-alvo="{esc(ident)}" type="button">{esc(rotulo_aprof(ap))}</button>')
 
@@ -374,8 +469,9 @@ def pagina_assunto(assunto: dict, materia: dict, concurso: str,
   </aside>
 </div>"""
 
-    trilha = (f'<a href="../../index.html">{esc(nome_legivel(concurso))}</a> › '
-              f'<a href="../index.html">{esc(materia["nome"])}</a> › {esc(titulo)}')
+    trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a> › '
+              f'<a href="{relativo(rota_materia, rota)}">{esc(materia["nome"])}</a> › '
+              f'{esc(titulo)}')
     descricao = ""
     if aprofs:
         try:
@@ -383,7 +479,7 @@ def pagina_assunto(assunto: dict, materia: dict, concurso: str,
                 Path(aprofs[0]["resumo_md"]).read_text(encoding="utf-8"), limite=180)
         except Exception:
             descricao = ""
-    return pagina(f"{titulo} — {nome_legivel(concurso)}", trilha, corpo, "../../../",
+    return pagina(f"{titulo} — {nome_legivel(concurso)}", trilha, corpo, rota,
                   descricao)
 
 
@@ -440,10 +536,10 @@ def selos_aprofundamento(assunto: dict) -> str:
     return f'<div class="selos-aprof">{"".join(partes)}</div>'
 
 
-def card_assunto(a: dict) -> str:
+def card_assunto(a: dict, href: str) -> str:
     pag = (f'<span class="meta">págs. {esc(a["paginas_livro"])}</span>'
            if a.get("paginas_livro") else "")
-    return f"""<a class="item" href="{esc(a["slug"])}/index.html">
+    return f"""<a class="item" href="{esc(href)}">
   <h3>{esc(a["titulo"])}</h3>
   {pag}
   {selos_aprofundamento(a)}
@@ -452,7 +548,12 @@ def card_assunto(a: dict) -> str:
 </a>"""
 
 
-def pagina_materia(materia: dict, concurso: str, materia_dir: Path) -> str:
+def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
+                   rotas: "Rotas", rota: str, rota_capa: str) -> str:
+    def href_de(a: dict) -> str:
+        alvo = rotas.rota_de(a["slug"]) or f'{a["slug"]}/index.html'
+        return relativo(alvo, rota)
+
     # agrupar por prioridade, na ordem alta -> média -> base -> sem classificação
     grupos = []
     for prio in PRIORIDADES:
@@ -460,7 +561,7 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path) -> str:
         if not doss:
             continue
         titulo, explica = ROTULOS_PRIORIDADE[prio]
-        cards = "".join(card_assunto(a) for a in doss)
+        cards = "".join(card_assunto(a, href_de(a)) for a in doss)
         grupos.append(f"""<section class="grupo-prioridade" data-prio="{prio}">
   <header><h2>{esc(titulo)}</h2><span class="quantos">{len(doss)} assuntos</span></header>
   <p class="explica">{esc(explica)}</p>
@@ -469,7 +570,7 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path) -> str:
 
     sem_prio = [a for a in materia["assuntos"] if not a.get("prioridade")]
     if sem_prio:
-        cards = "".join(card_assunto(a) for a in sem_prio)
+        cards = "".join(card_assunto(a, href_de(a)) for a in sem_prio)
         grupos.append(f"""<section class="grupo-prioridade" data-prio="sem">
   <header><h2>Demais assuntos</h2><span class="quantos">{len(sem_prio)} assuntos</span></header>
   <div class="grade">{cards}</div>
@@ -480,8 +581,10 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path) -> str:
     if materia.get("doc_banca"):
         try:
             texto = (materia_dir / materia["doc_banca"]).read_text(encoding="utf-8")
-            bloco_banca = (f'<section class="papel" style="margin-top:1.25rem">'
-                           f'{md2html.converter(texto)}</section>')
+            bloco_banca = (
+                f'<section class="papel" style="margin-top:1.25rem">'
+                f'{md2html.converter(texto, wikilink_resolver=rotas.resolvedor(rota))}'
+                f'</section>')
         except Exception:
             bloco_banca = ""
 
@@ -507,11 +610,12 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path) -> str:
 {bloco_banca}
 {"".join(grupos)}
 {docs}"""
-    trilha = f'<a href="../index.html">{esc(nome_legivel(concurso))}</a> › {esc(materia["nome"])}'
-    return pagina(f'{materia["nome"]} — {nome_legivel(concurso)}', trilha, corpo, "../../")
+    trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a>'
+              f' › {esc(materia["nome"])}')
+    return pagina(f'{materia["nome"]} — {nome_legivel(concurso)}', trilha, corpo, rota)
 
 
-def pagina_capa(modelo: dict) -> str:
+def pagina_capa(modelo: dict, rotas: "Rotas", rota: str) -> str:
     meta = modelo.get("meta", {})
     campos = []
     if meta.get("banca"):
@@ -543,7 +647,9 @@ def pagina_capa(modelo: dict) -> str:
     for cargo in modelo["cargos"]:
         itens = []
         for mat in cargo["materias"]:
-            itens.append(f"""<a class="item" href="{esc(mat["slug"])}/index.html">
+            href = relativo(rotas.rota_de(mat["slug"]) or f'{mat["slug"]}/index.html',
+                            rota)
+            itens.append(f"""<a class="item" href="{esc(href)}">
   <h3>{esc(mat["nome"])}</h3>
   <div class="meta">{mat["n_assuntos"]} assuntos · {mat["n_com_podcast"]} com podcast</div>
 </a>""")
@@ -562,7 +668,8 @@ def pagina_capa(modelo: dict) -> str:
   <p>{r["n_materias"]} matéria(s) · {r["n_assuntos"]} assuntos aprofundados</p>
 </div>
 <div style="margin-top:1.25rem">{"".join(blocos)}</div>"""
-    return pagina(nome_legivel(modelo["concurso"]), '<a href="../index.html">Concursos</a>', corpo, "../")
+    trilha = f'<a href="{relativo("index.html", rota)}">Concursos</a>'
+    return pagina(nome_legivel(modelo["concurso"]), trilha, corpo, rota)
 
 
 # --------------------------------------------------------------------------- #
@@ -573,7 +680,7 @@ def pagina_raiz(concursos: list[dict]) -> str:
     if not concursos:
         corpo = ('<div class="papel"><h1>Nenhum concurso publicado</h1>'
                  '<p>Gere um concurso com a skill <code>concurso-publica</code>.</p></div>')
-        return pagina("Estudo para concursos", "", corpo, "")
+        return pagina("Estudo para concursos", "", corpo, "index.html")
 
     def cartao(c: dict) -> str:
         etiquetas = []
@@ -625,7 +732,7 @@ def pagina_raiz(concursos: list[dict]) -> str:
   <p>{len(concursos)} concurso(s) em {len(por_orgao)} órgão(s), publicados a partir do vault.</p>
 </div>
 <div style="margin-top:1.25rem">{"".join(itens)}</div>"""
-    return pagina("Estudo para concursos", "", corpo, "")
+    return pagina("Estudo para concursos", "", corpo, "index.html")
 
 
 def ler_manifestos(raiz: Path) -> list[dict]:
@@ -638,6 +745,60 @@ def ler_manifestos(raiz: Path) -> list[dict]:
         except json.JSONDecodeError:
             continue
     return achados
+
+
+def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
+    """Passo 1 do build: decide onde cada página mora e indexa os nomes do vault.
+
+    Roda ANTES de qualquer renderização, porque o resolvedor de wikilinks precisa
+    conhecer a URL de páginas que ainda não existem. Devolve o índice de rotas e o
+    plano de renderização (a lista do que gerar, na ordem).
+    """
+    rotas = Rotas()
+    plano: list[dict] = []
+
+    rota_capa = f"{slug_conc}/index.html"
+    # o 00-INDICE do vault é o índice do concurso: quem aponta para ele vai à capa
+    rotas.registrar(rota_capa, modelo["concurso"], "00-INDICE")
+    plano.append({"rota": rota_capa, "tipo": "capa"})
+
+    for escopo in modelo.get("escopos") or modelo["cargos"]:
+        for materia in escopo["materias"]:
+            rota_mat = f'{slug_conc}/{materia["slug"]}/index.html'
+            rotas.registrar(rota_mat, materia["slug"],
+                            f'00-INDICE-{materia["slug"]}')
+            plano.append({"rota": rota_mat, "tipo": "materia", "materia": materia})
+
+            for assunto in materia["assuntos"]:
+                rota_a = f'{slug_conc}/{materia["slug"]}/{assunto["slug"]}/index.html'
+                aprofs = assunto.get("aprofundamentos") or []
+                # 1ª classe — página: o slug da pasta e o nome de cada .md de
+                # aprofundamento (o Obsidian resolve por nome de arquivo, e o nome
+                # completo é `{assunto}--{nivel}--{fonte}--{CONCURSO}`)
+                nomes = [assunto["slug"]] + [Path(a["resumo_md"]).stem for a in aprofs]
+                rotas.registrar(rota_a, *nomes)
+
+                for i, ap in enumerate(aprofs):
+                    ident = ident_aprof(ap, i)
+                    # 2ª classe — artefato embutido: flashcards não são página,
+                    # então o wikilink do baralho vai para a âncora do quiz
+                    for chave in ("obsidian", "anki"):
+                        fc = (ap.get("flashcards") or {}).get(chave)
+                        if fc:
+                            rotas.registrar(rota_a, fc, ancora="flashcards")
+                    # 3ª classe — arquivo copiado: mídia vive em media/<ident>/.
+                    # A rota é determinística, então dá para registrar aqui, antes
+                    # da cópia — e é o que impede os 368 wikilinks de mídia dos
+                    # pacotes NotebookLM de virarem parede de link morto.
+                    for nome in (ap.get("midias") or {}).values():
+                        if nome:
+                            rotas.registrar(
+                                f'{slug_conc}/{materia["slug"]}/{assunto["slug"]}'
+                                f'/media/{ident}/{nome}', nome)
+
+                plano.append({"rota": rota_a, "tipo": "assunto", "assunto": assunto,
+                              "materia": materia, "rota_materia": rota_mat})
+    return rotas, plano
 
 
 def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
@@ -673,25 +834,28 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
         if origem.exists():
             shutil.copy2(origem, dest_assets / nome)
 
+    # ---- passo 1: decidir as rotas ----------------------------------------- #
+    rotas, plano = montar_rotas(modelo, slug_conc)
+
+    # ---- passo 2: renderizar ---------------------------------------------- #
     n_paginas = 0
-    (base / "index.html").write_text(pagina_capa(modelo), encoding="utf-8")
-    n_paginas += 1
-
-    for cargo in modelo["cargos"]:
-        for materia in cargo["materias"]:
-            mat_dir = base / materia["slug"]
-            mat_dir.mkdir(parents=True, exist_ok=True)
-            (mat_dir / "index.html").write_text(
-                pagina_materia(materia, concurso, Path(materia["dir"])), encoding="utf-8")
-            n_paginas += 1
-
-            for assunto in materia["assuntos"]:
-                a_dir = mat_dir / assunto["slug"]
-                a_dir.mkdir(parents=True, exist_ok=True)
-                (a_dir / "index.html").write_text(
-                    pagina_assunto(assunto, materia, concurso, a_dir),
-                    encoding="utf-8")
-                n_paginas += 1
+    rota_capa = f"{slug_conc}/index.html"
+    for item in plano:
+        rota = item["rota"]
+        alvo = destino / rota
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        if item["tipo"] == "capa":
+            html_pag = pagina_capa(modelo, rotas, rota)
+        elif item["tipo"] == "materia":
+            html_pag = pagina_materia(item["materia"], concurso,
+                                      Path(item["materia"]["dir"]),
+                                      rotas, rota, rota_capa)
+        else:
+            html_pag = pagina_assunto(item["assunto"], item["materia"], concurso,
+                                      alvo.parent, rotas, rota,
+                                      item["rota_materia"], rota_capa)
+        alvo.write_text(html_pag, encoding="utf-8")
+        n_paginas += 1
 
     # manifesto deste concurso (alimenta o índice raiz)
     meta = modelo.get("meta", {})
