@@ -6,21 +6,19 @@ topico_id: {TOPICO_ID}
 topico: {TOPICO}
 concurso: "{CONCURSO}"
 tipo: assunto-aprofundado
-localizacao_livro: "{LIVRO} — págs. {PAGINAS}"
-confianca_localizacao: {CONFIANCA}
 prioridade: {PRIORIDADE}
 aprofundamento: "{APROFUNDAMENTO}"
 nivel: detalhado
-fontes: "{FONTES}"
-tags: [concurso/aprofundamento{TAG_MATERIA}, {TAG_ASSUNTO}, nivel/detalhado]
+fontes: "material próprio"
+tags: [concurso/aprofundamento{TAG_MATERIA}, {TAG_ASSUNTO}, nivel/detalhado, fonte/proprio]
 status: nao-iniciado
 ---
 
 # {ASSUNTO} — estudo detalhado
 
-> 📍 **Fontes:** {FONTES}
-> 📖 **No livro:** *{LIVRO}*, páginas **{PAGINAS}** ({METODO_LOCALIZACAO}, confiança {CONFIANCA}).
-> {AVISO_CONFERIR}
+> ✍️ **Material próprio.** Escrito do zero para este concurso, sem livro de
+> referência. Não há página para conferir — o que dá segurança aqui é a norma
+> oficial listada em *Onde conferir*.
 > 🎯 **Nível detalhado** — tratamento exaustivo. Para revisão rápida, veja a versão padrão.
 
 ## 🎯 Por que este assunto cai na prova
@@ -49,9 +47,14 @@ status: nao-iniciado
 
 {SUBTOPICOS}
 
-## ⚓ Trechos-âncora das fontes
+## 📚 Onde conferir
 
-{CITACOES}
+> A fonte primária verificável deste assunto: a norma, o dispositivo, o
+> enunciado oficial. Sem livro para ancorar, é aqui que a informação se checa.
+> **Nada de número de lei, artigo ou súmula do qual não se tenha certeza** —
+> o que estiver em dúvida vai para a lista de pendências, não para cá.
+
+{ONDE_CONFERIR}
 
 ## ⚠️ Pegadinhas e pontos de atenção
 
@@ -61,10 +64,6 @@ status: nao-iniciado
 
 {QUESTOES_COMENTADAS}
 
-## 🔀 Divergências entre autores (se houver)
-
-{DIVERGENCIAS}
-
 ## 🔗 Conexões
 
 - Assuntos relacionados: {RELACIONADOS}
@@ -72,11 +71,8 @@ status: nao-iniciado
 
 ## 📝 Para estudar depois
 
-- [ ] Ler as páginas {PAGINAS} das fontes
+- [ ] Conferir os dispositivos citados em *Onde conferir* no texto oficial
 - [ ] Revisar os flashcards ([[flashcards-{SLUG_ASSUNTO}]])
 - [ ] Refazer os exemplos resolvidos sem olhar a resposta
 - [ ] Resolver questões da banca sobre {ASSUNTO}
 - [ ] (Etapa NotebookLM) Gerar podcast/mapa mental a partir deste .md
-
----
-<!-- fonte-notebooklm: insumo para a Etapa NotebookLM. Ver _fonte-notebooklm.md -->

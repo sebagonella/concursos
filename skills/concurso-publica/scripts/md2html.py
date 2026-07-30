@@ -36,13 +36,20 @@ _FRONTMATTER = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 
 
-def _headings(md: str, pular_frontmatter=True) -> list[tuple[int, str, str]]:
+def _headings(md: str, pular_frontmatter=True,
+              prefixo_id="") -> list[tuple[int, str, str]]:
     """Headings do documento, em ordem: (nível, texto, id).
 
     Ignora `#` dentro de bloco de código cercado — senão um comentário Python
     viraria heading. Desambigua ids repetidos com sufixo numérico, e é a **única**
     fonte de ids: `converter()` consome esta lista, para o sumário e o corpo nunca
     divergirem.
+
+    `prefixo_id` existe porque a aba Plano converte vários trechos SOLTOS na mesma
+    página — um por tópico do mapa. A desambiguação por sufixo só enxerga o trecho
+    que está convertendo, então o `#### Proteção Social Básica (PSB)` de dois
+    tópicos diferentes sairia com o mesmo `id`: HTML inválido e âncora que pula
+    para o tópico errado. Quem converte trecho solto passa `t{n}-`.
     """
     if pular_frontmatter:
         md = _FRONTMATTER.sub("", md, count=1)
@@ -62,7 +69,7 @@ def _headings(md: str, pular_frontmatter=True) -> list[tuple[int, str, str]]:
         base = slug_ancora(texto)
         vistos[base] = vistos.get(base, 0) + 1
         ident = base if vistos[base] == 1 else f"{base}-{vistos[base]}"
-        achados.append((len(m.group(1)), texto, ident))
+        achados.append((len(m.group(1)), texto, prefixo_id + ident))
     return achados
 
 
@@ -82,6 +89,25 @@ def sumario(md: str, niveis=(2, 3)) -> list[dict]:
 # que antes deixava um "!" solto na frente do link.
 #   1 = alvo · 2 = âncora · 3 = rótulo
 WIKILINK_RE = re.compile(r"!?\[\[([^\]|#]+?)(?:#([^\]|]*))?(?:\\?\|([^\]]*))?\]\]")
+
+# O texto já vem escapado, então `&` da query string chega como `&amp;` — que é
+# exatamente a forma correta dentro de um href.
+_URL_NUA = re.compile(r"https?://[^\s<>\"'\]]+")
+
+
+def _autolink(m) -> str:
+    """URL nua -> <a>. A pontuação final fica FORA do link: no vault a URL costuma
+    fechar a frase (`…/questoes.`) e engolir o ponto levaria a um 404."""
+    url = m.group(0)
+    cauda = ""
+    while url and url[-1] in ".,;:!?)":
+        cauda = url[-1] + cauda
+        url = url[:-1]
+    if not url or url.endswith("//"):
+        return m.group(0)
+    return f'<a href="{url}">{url}</a>{cauda}'
+
+
 def _inline(texto: str, wikilink_resolver=None) -> str:
     """Aplica formatação inline. O texto JÁ deve estar escapado."""
     # código inline primeiro (protege o conteúdo do resto)
@@ -123,6 +149,23 @@ def _inline(texto: str, wikilink_resolver=None) -> str:
     texto = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", texto)
     texto = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"<em>\1</em>", texto)
 
+    # URL nua vira link. O "Material recomendado" dos mapas escreve
+    # `- Questões: https://qconcursos.com/…` sem sintaxe de link, e sem isto a
+    # linha chega na web como texto morto — justamente na seção cuja razão de
+    # existir é levar o estudante ao material. Os <a>/<img> montados acima são
+    # guardados antes, senão a URL do próprio href viraria link dentro de link.
+    # Marcador próprio (\x01): o do código só é restaurado no fim, e restaurar
+    # aninhado num único passe de re.sub deixaria placeholder cru na página.
+    tags: list[str] = []
+
+    def _guardar_tag(m):
+        tags.append(m.group(0))
+        return f"\x01{len(tags) - 1}\x01"
+
+    texto = re.sub(r"<a\b[^>]*>.*?</a>|<img\b[^>]*>", _guardar_tag, texto)
+    texto = _URL_NUA.sub(_autolink, texto)
+    texto = re.sub(r"\x01(\d+)\x01", lambda m: tags[int(m.group(1))], texto)
+
     # restaurar código
     def _restaurar(m):
         return fragmentos[int(m.group(1))]
@@ -133,13 +176,15 @@ def _inline(texto: str, wikilink_resolver=None) -> str:
 # --------------------------------------------------------------------------- #
 # blocos
 # --------------------------------------------------------------------------- #
-def converter(md: str, wikilink_resolver=None, pular_frontmatter=True) -> str:
+def converter(md: str, wikilink_resolver=None, pular_frontmatter=True,
+              prefixo_id="") -> str:
     if pular_frontmatter:
         md = re.sub(r"^---\s*\n.*?\n---\s*\n", "", md, count=1, flags=re.DOTALL)
 
     # ids dos headings vêm de _headings(), a mesma função que alimenta sumario():
     # calcular aqui de novo abriria espaço para o índice apontar para id inexistente
-    ids = [ident for _n, _t, ident in _headings(md, pular_frontmatter=False)]
+    ids = [ident for _n, _t, ident in _headings(md, pular_frontmatter=False,
+                                                prefixo_id=prefixo_id)]
     prox_id = 0
 
     linhas = md.split("\n")
@@ -195,7 +240,8 @@ def converter(md: str, wikilink_resolver=None, pular_frontmatter=True) -> str:
             fechar_lista()
             nivel = len(m.group(1))
             conteudo = _inline(html.escape(m.group(2)), wikilink_resolver)
-            ident = ids[prox_id] if prox_id < len(ids) else slug_ancora(m.group(2))
+            ident = (ids[prox_id] if prox_id < len(ids)
+                     else prefixo_id + slug_ancora(m.group(2)))
             prox_id += 1
             out.append(f'<h{nivel} id="{ident}">{conteudo}</h{nivel}>')
             i += 1

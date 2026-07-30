@@ -287,10 +287,177 @@
             "media": 0,
             "base": 0
           },
-          "mapa": null
+          "mapa": {
+            "arquivo": "04-direitos-violacoes-vulnerabilidades.md",
+            "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-MAPAS-MATERIAS/04-direitos-violacoes-vulnerabilidades.md",
+            "titulo": "Direitos e Violações (EDAS)",
+            "n_topicos": 1,
+            "progresso": {
+              "total": 5,
+              "feitos": 1
+            },
+            "rotulos_extras": [
+              "Leis-chave"
+            ],
+            "auxiliares": [
+              {
+                "titulo": "✅ Checklist Final",
+                "corpo": "- [ ] Revisar ECA\n"
+              }
+            ],
+            "topicos": [
+              {
+                "numero": 1,
+                "titulo": "Crianças, adolescentes e juventude",
+                "slug": "criancas-adolescentes-e-juventude",
+                "prioridade": "alta",
+                "progresso": {
+                  "total": 4,
+                  "feitos": 1
+                },
+                "subtopicos": [
+                  {
+                    "texto": "Conceitos-base do ECA",
+                    "feito": true,
+                    "subgrupo": "",
+                    "grupo": "TEORIA"
+                  },
+                  {
+                    "texto": "Prioridade absoluta",
+                    "feito": false,
+                    "subgrupo": "Princípios",
+                    "grupo": "TEORIA · Princípios"
+                  },
+                  {
+                    "texto": "Guarda × tutela × adoção",
+                    "feito": false,
+                    "subgrupo": "",
+                    "grupo": "LEI 8.069/1990"
+                  },
+                  {
+                    "texto": "Observação sem checkbox",
+                    "feito": null,
+                    "subgrupo": "",
+                    "grupo": "LEI 8.069/1990"
+                  }
+                ],
+                "blocos": [
+                  {
+                    "chave": "topicos_edital",
+                    "rotulo": "Tópicos do edital (literais)",
+                    "sufixo": "(literais)",
+                    "markdown": "> \"Crianças, adolescentes e juventude: ECA, SINASE…\"",
+                    "itens": [],
+                    "n_itens": 0
+                  },
+                  {
+                    "chave": "extra",
+                    "rotulo": "Leis-chave",
+                    "sufixo": "",
+                    "markdown": "- **Lei 8.069/1990** — ECA\n",
+                    "itens": [
+                      {
+                        "texto": "Lei 8.069/1990 — ECA",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 1
+                  },
+                  {
+                    "chave": "subtopicos",
+                    "rotulo": "Subtópicos derivados — TEORIA",
+                    "sufixo": "TEORIA",
+                    "markdown": "- [x] Conceitos-base do ECA\n\n#### Princípios\n\n- [ ] Prioridade absoluta\n",
+                    "itens": [
+                      {
+                        "texto": "Conceitos-base do ECA",
+                        "feito": true,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Prioridade absoluta",
+                        "feito": false,
+                        "subgrupo": "Princípios"
+                      }
+                    ],
+                    "n_itens": 2
+                  },
+                  {
+                    "chave": "subtopicos",
+                    "rotulo": "Subtópicos derivados — LEI 8.069/1990",
+                    "sufixo": "LEI 8.069/1990",
+                    "markdown": "- [ ] Guarda × tutela × adoção\n- Observação sem checkbox\n",
+                    "itens": [
+                      {
+                        "texto": "Guarda × tutela × adoção",
+                        "feito": false,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Observação sem checkbox",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 2
+                  },
+                  {
+                    "chave": "material",
+                    "rotulo": "Material recomendado",
+                    "sufixo": "",
+                    "markdown": "- Livro/lei: ECA — texto atualizado.\n- Questões: https://www.qconcursos.com/\n",
+                    "itens": [
+                      {
+                        "texto": "Livro/lei: ECA — texto atualizado.",
+                        "feito": null,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Questões: https://www.qconcursos.com/",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 2
+                  },
+                  {
+                    "chave": "pegadinhas",
+                    "rotulo": "Pegadinhas da Quadrix neste tópico",
+                    "sufixo": "da Quadrix neste tópico",
+                    "markdown": "- Trocar idade de criança/adolescente.\n",
+                    "itens": [
+                      {
+                        "texto": "Trocar idade de criança/adolescente.",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 1
+                  },
+                  {
+                    "chave": "meta",
+                    "rotulo": "Meta",
+                    "sufixo": "",
+                    "markdown": "- [ ] ___ questões resolvidas de ECA/SINASE\n",
+                    "itens": [
+                      {
+                        "texto": "___ questões resolvidas de ECA/SINASE",
+                        "feito": false,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 1
+                  }
+                ]
+              }
+            ]
+          }
         }
-      ]
+      ],
+      "n_materias": 1,
+      "n_assuntos": 6
     }
   ],
-  "_nota": "cargos[] existe como alias de escopos[] para compatibilidade de --modelo"
+  "_nota": "cargos[] existe como alias de escopos[] para compatibilidade de --modelo; topicos[].blocos[] substituiu o dict topicos[].secoes da 0.7.x, que o builder ainda aceita"
 }

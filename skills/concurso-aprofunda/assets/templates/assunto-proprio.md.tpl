@@ -6,20 +6,19 @@ topico_id: {TOPICO_ID}
 topico: {TOPICO}
 concurso: "{CONCURSO}"
 tipo: assunto-aprofundado
-localizacao_livro: "{LIVRO} — págs. {PAGINAS}"
-confianca_localizacao: {CONFIANCA}
 prioridade: {PRIORIDADE}
 aprofundamento: "{APROFUNDAMENTO}"
 nivel: {NIVEL}
-fontes: "{FONTES}"
-tags: [concurso/aprofundamento{TAG_MATERIA}, {TAG_ASSUNTO}]
+fontes: "material próprio"
+tags: [concurso/aprofundamento{TAG_MATERIA}, {TAG_ASSUNTO}, fonte/proprio]
 status: nao-iniciado
 ---
 
 # {ASSUNTO}
 
-> 📍 **No livro:** *{LIVRO}*, páginas **{PAGINAS}** ({METODO_LOCALIZACAO}, confiança {CONFIANCA}).
-> {AVISO_CONFERIR}
+> ✍️ **Material próprio.** Escrito do zero para este concurso, sem livro de
+> referência. Não há página para conferir — o que dá segurança aqui é a norma
+> oficial listada em *Onde conferir*.
 
 ## 🎯 Por que este assunto cai na prova
 
@@ -33,11 +32,14 @@ status: nao-iniciado
 
 {SUBTOPICOS}
 
-## ⚓ Trechos-âncora do livro
+## 📚 Onde conferir
 
-> Citações curtas para localizar e memorizar os pontos-chave. Cada trecho indica a página.
+> A fonte primária verificável deste assunto: a norma, o dispositivo, o
+> enunciado oficial. Sem livro para ancorar, é aqui que a informação se checa.
+> **Nada de número de lei, artigo ou súmula do qual não se tenha certeza** —
+> o que estiver em dúvida vai para a lista de pendências, não para cá.
 
-{CITACOES}
+{ONDE_CONFERIR}
 
 ## ⚠️ Pegadinhas e pontos de atenção
 
@@ -50,7 +52,7 @@ status: nao-iniciado
 
 ## 📝 Para estudar depois
 
-- [ ] Ler as páginas {PAGINAS} do livro
+- [ ] Conferir os dispositivos citados em *Onde conferir* no texto oficial
 - [ ] Revisar os flashcards deste assunto ([[flashcards-{SLUG_ASSUNTO}]])
 - [ ] Resolver questões da banca sobre {ASSUNTO}
 - [ ] (Etapa NotebookLM) Gerar podcast/mapa mental a partir deste .md

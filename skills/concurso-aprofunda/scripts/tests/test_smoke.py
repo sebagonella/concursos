@@ -454,6 +454,37 @@ def test_slug_suspeito_pega_ano_e_vazio():
     assert aid.slug_suspeito("")
     assert aid.slug_suspeito("fonte")
     assert not aid.slug_suspeito("pestana")
+    # token reservado: escolha declarada, não derivação que deu errado
+    assert not aid.slug_suspeito(aid.FONTE_PROPRIA)
+
+
+# ---------------- aprofundamento sem fonte externa ---------------- #
+def test_id_aprofundamento_proprio_nos_dois_niveis():
+    """Material escrito do conhecimento do Claude, sem livro nem norma."""
+    assert aid.id_aprofundamento([], "padrao", proprio=True) == "padrao--proprio"
+    assert aid.id_aprofundamento(None, "detalhado", proprio=True) == "detalhado--proprio"
+    info = aid.parse_id("padrao--proprio")
+    assert info["nivel"] == "padrao" and info["fontes"] == ["proprio"]
+    assert aid.eh_pasta_aprofundamento("detalhado--proprio")
+    assert aid.eh_proprio("padrao--proprio")
+    assert not aid.eh_proprio("padrao--pestana")
+
+
+def test_lista_de_fontes_vazia_nao_e_o_mesmo_que_sem_fonte():
+    """A distinção é o ponto: lista vazia significa que a DERIVAÇÃO falhou, e o
+    fallback `fonte` existe para isso ficar visível (`slug_suspeito` o acusa).
+    Sem essa separação, um material deliberadamente sem fonte se disfarçaria de
+    erro de configuração — e o inverso também."""
+    assert aid.id_aprofundamento([], "padrao") == "padrao--fonte"
+    assert aid.slug_suspeito("fonte")
+    assert aid.id_aprofundamento([], "padrao", proprio=True) == "padrao--proprio"
+
+
+def test_rotulo_do_proprio_descreve_o_artefato():
+    """No path o token é `proprio`; na tela vira o que a coisa é."""
+    assert aid.rotulo("padrao--proprio") == "Padrão — material próprio"
+    assert aid.rotulo("detalhado--proprio") == "Detalhado — material próprio"
+    assert aid.rotulo("padrao--pestana") == "Padrão — pestana"
 
 
 # ---------------- flashcards: nome de arquivo casa com o wikilink ---------------- #
@@ -528,6 +559,283 @@ def test_build_subject_md_avisa_quando_slug_da_fonte_e_ruim():
              "--out-dir", str(d / "a"), "--fontes", "2012.pdf"],
             capture_output=True, text=True)
         assert json.loads(out.stdout)["avisos"], "deveria avisar sobre slug suspeito"
+
+
+def _rodar_build(d, extra):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "build_subject_md.py"),
+         "--out-dir", str(d / "assuntos"), "--concurso", "TESTE_2026"] + extra,
+        capture_output=True, text=True)
+
+
+def test_build_subject_md_proprio_dispensa_livro():
+    """Aprofundamento sem fonte externa, nos dois níveis, a partir de uma lista
+    de assuntos — sem `mapa-localizacao.json`, que só o livro produz."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        lista = d / "assuntos.txt"
+        lista.write_text("Crase\n", encoding="utf-8")
+        for nivel in ("padrao", "detalhado"):
+            out = _rodar_build(d, ["--assuntos", str(lista), "--proprio",
+                                   "--nivel", nivel, "--materia", "Português"])
+            assert out.returncode == 0, out.stderr
+            alvo = (d / "assuntos" / "crase" / f"{nivel}--proprio"
+                    / f"crase--{nivel}--proprio--TESTE_2026.md")
+            assert alvo.exists(), list((d / "assuntos").rglob("*"))
+            txt = alvo.read_text(encoding="utf-8")
+            # sem livro não há página nem citação — e o material NÃO pode se
+            # disfarçar de localização que falhou
+            assert "localizacao_livro" not in txt
+            assert "Trechos-âncora" not in txt
+            assert "Ler as páginas" not in txt
+            assert "não localizado" not in txt
+            assert "Onde conferir" in txt
+            assert 'fontes: "material próprio"' in txt
+
+
+def _vault_com_mapa(d: Path) -> Path:
+    base = d / "SEDES_2026"
+    (base / "_COMUM" / "03-MAPAS-COMUNS").mkdir(parents=True)
+    (base / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").write_text(
+        '---\nmateria_id: lingua-portuguesa\n---\n'
+        '# 📚 Mapa de Estudo — Língua Portuguesa\n\n'
+        '## 1. Crase 🔴\n\n### Subtópicos derivados\n\n'
+        '- [ ] Regra geral: quando há artigo\n- [ ] Casos proibidos\n\n'
+        '#### Detalhe\n\n- [ ] Antes de masculino\n\n'
+        '### Material recomendado\n\n- Livro: X.\n\n'
+        '## 2. Pontuação\n\n### Subtópicos derivados — TEORIA\n\n- [ ] Vírgula\n\n'
+        '### Subtópicos derivados — PRÁTICA\n\n- [ ] Ponto e vírgula\n\n'
+        '## 3. Sem subtópicos\n\n### Material recomendado\n\n- Livro: Y.\n',
+        encoding="utf-8")
+    return base
+
+
+def _rodar_topico(base, *extra):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "assuntos_do_topico.py"),
+         "--concurso-dir", str(base), "--materia-id", "lingua-portuguesa"] + list(extra),
+        capture_output=True, text=True)
+
+
+def test_assuntos_do_topico_extrai_so_o_topico_pedido():
+    with tempfile.TemporaryDirectory() as d:
+        base = _vault_com_mapa(Path(d))
+        out = _rodar_topico(base, "--topico", "1")
+        assert out.returncode == 0, out.stderr
+        r = json.loads(out.stdout)
+        assert r["topico_id"] == "crase"
+        assert r["topico"] == "1. Crase"          # emoji de prioridade some
+        assert r["materia"] == "Língua Portuguesa"   # do H1, não do nome do arquivo
+        # "Regra geral: quando há artigo" -> o assunto é o tema antes dos dois-pontos
+        assert r["assuntos"] == ["Regra geral", "Casos proibidos", "Antes de masculino"]
+        assert "Vírgula" not in r["assuntos"]     # não vaza do tópico 2
+
+
+def test_assuntos_do_topico_soma_blocos_com_sufixo():
+    with tempfile.TemporaryDirectory() as d:
+        base = _vault_com_mapa(Path(d))
+        r = json.loads(_rodar_topico(base, "--topico", "2").stdout)
+        assert r["assuntos"] == ["Vírgula", "Ponto e vírgula"]
+
+
+def test_assuntos_do_topico_aceita_numero_slug_e_trecho():
+    with tempfile.TemporaryDirectory() as d:
+        base = _vault_com_mapa(Path(d))
+        for alvo in ("1", "crase", "Crase"):
+            assert json.loads(_rodar_topico(base, "--topico", alvo).stdout)["topico_id"] \
+                == "crase", alvo
+
+
+def test_assuntos_do_topico_falha_alto_quando_nao_existe():
+    """Devolver lista vazia faria a etapa seguinte gerar nada e parecer que o
+    tópico simplesmente não tem assunto."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _vault_com_mapa(Path(d))
+        out = _rodar_topico(base, "--topico", "99")
+        assert out.returncode == 2
+        assert "não encontrado" in out.stderr
+        assert "1. Crase" in out.stderr          # lista o que existe
+
+
+def test_assuntos_do_topico_avisa_quando_topico_nao_tem_subtopicos():
+    with tempfile.TemporaryDirectory() as d:
+        base = _vault_com_mapa(Path(d))
+        out = _rodar_topico(base, "--topico", "3")
+        assert out.returncode == 0
+        assert json.loads(out.stdout)["assuntos"] == []
+        assert "nada a aprofundar" in out.stderr
+
+
+def test_build_subject_md_nao_destroi_resumo_ja_escrito():
+    """Regressão do defeito mais caro possível: o `.md` é onde mora o resumo
+    escrito à mão, e o script gravava por cima SEM PERGUNTAR. Rodar a matéria de
+    novo trocava o texto pronto por arcabouço com os {PLACEHOLDER} de volta — e o
+    modo seletivo (um tópico por vez) é justamente reexecutar a mesma matéria."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        lista = d / "assuntos.txt"
+        lista.write_text("Crase\n", encoding="utf-8")
+        args = ["--assuntos", str(lista), "--proprio", "--materia", "Português"]
+        assert _rodar_build(d, args).returncode == 0
+        alvo = (d / "assuntos" / "crase" / "padrao--proprio"
+                / "crase--padrao--proprio--TESTE_2026.md")
+        alvo.write_text(alvo.read_text(encoding="utf-8").replace(
+            "{RESUMO}", "Resumo que levou horas para escrever."), encoding="utf-8")
+
+        out = _rodar_build(d, args)                    # segunda execução
+        assert out.returncode == 0, out.stderr
+        txt = alvo.read_text(encoding="utf-8")
+        assert "Resumo que levou horas para escrever." in txt
+        assert "{RESUMO}" not in txt
+        rel = json.loads(out.stdout)
+        assert rel["gerados"] == 0 and rel["ja_existiam"], rel
+
+        out = _rodar_build(d, args + ["--forcar"])     # regenerar de propósito
+        assert out.returncode == 0, out.stderr
+        assert "{RESUMO}" in alvo.read_text(encoding="utf-8")
+        assert alvo.with_suffix(".md.bak").exists()
+        assert "Resumo que levou horas" in \
+            alvo.with_suffix(".md.bak").read_text(encoding="utf-8")
+
+
+def test_build_subject_md_aceita_assuntos_em_json():
+    """`book_index.py` consome `{"materia","assuntos":[...]}`; o build lia TXT.
+    Formatos diferentes para a mesma lista obrigavam a converter à mão entre uma
+    etapa e a seguinte."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        spec = d / "assuntos.json"
+        spec.write_text(json.dumps({"materia": "Português", "assuntos": ["Crase"]},
+                                   ensure_ascii=False), encoding="utf-8")
+        out = _rodar_build(d, ["--assuntos", str(spec), "--proprio"])
+        assert out.returncode == 0, out.stderr
+        txt = (d / "assuntos" / "crase" / "padrao--proprio"
+               / "crase--padrao--proprio--TESTE_2026.md").read_text(encoding="utf-8")
+        assert 'materia: "Português"' in txt
+
+
+def test_build_subject_md_exige_mapa_ou_assuntos():
+    with tempfile.TemporaryDirectory() as d:
+        out = _rodar_build(Path(d), ["--proprio"])
+        assert out.returncode != 0
+        assert "--mapa" in out.stderr and "--assuntos" in out.stderr
+
+
+def test_build_subject_md_grava_o_vinculo_com_o_topico():
+    """O elo assunto->tópico do edital: a skill lê o mapa para saber quais
+    assuntos existem, então ela SABE de que tópico cada um veio — só não
+    registrava. Sem isso o site não tem como agrupar por tópico."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        lista = d / "assuntos.txt"
+        lista.write_text("Crase\n", encoding="utf-8")
+        out = _rodar_build(d, ["--assuntos", str(lista), "--proprio",
+                               "--materia", "Português",
+                               "--materia-id", "lingua-portuguesa",
+                               "--topico-id", "estrutura-morfossintatica",
+                               "--topico", "5. Estrutura morfossintática"])
+        assert out.returncode == 0, out.stderr
+        txt = (d / "assuntos" / "crase" / "padrao--proprio"
+               / "crase--padrao--proprio--TESTE_2026.md").read_text(encoding="utf-8")
+        assert "materia_id: lingua-portuguesa" in txt
+        assert "topico_id: [estrutura-morfossintatica]" in txt
+        assert 'topico: ["5. Estrutura morfossintática"]' in txt
+
+
+def test_build_subject_md_sem_topico_emite_lista_vazia_e_avisa():
+    """`[]` é "ainda não vinculado"; `[""]` seria lixo que o leitor teria de
+    aprender a ignorar. E a ausência do vínculo tem de ser dita, não suposta."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        lista = d / "assuntos.txt"
+        lista.write_text("Crase\n", encoding="utf-8")
+        out = _rodar_build(d, ["--assuntos", str(lista), "--proprio",
+                               "--materia", "Português"])
+        txt = (d / "assuntos" / "crase" / "padrao--proprio"
+               / "crase--padrao--proprio--TESTE_2026.md").read_text(encoding="utf-8")
+        assert "topico_id: []" in txt and "topico: []" in txt
+        assert 'tags: [concurso/aprofundamento, portugues, crase' in txt   # sem item vazio
+        assert any("topico-id" in a for a in json.loads(out.stdout)["avisos"])
+
+
+def _vault_falso_com_vinculos(d: Path, topico_id="criancas"):
+    ap = d / "assuntos" / "eca" / "padrao--lei-8069"
+    ap.mkdir(parents=True)
+    md = ap / "eca--padrao--lei-8069--X.md"
+    md.write_text('---\ntitle: "ECA"\nmateria: "Direitos"\nstatus: revisar\n---\n'
+                  "Resumo do usuário.\n- [x] feito\n- [ ] aberto\n", encoding="utf-8")
+    v = d / "v.json"
+    v.write_text(json.dumps({"concurso": "X", "materias": [{
+        "materia_id": "direitos-violacoes-vulnerabilidades",
+        "pasta_aprofundamento": "direitos-violacoes",
+        "mapas_candidatos": [{"slug": "direitos-violacoes-vulnerabilidades",
+                              "topicos": [{"id": "criancas", "numero": 1,
+                                           "titulo": "Crianças e adolescentes"}]}],
+        "assuntos": [{"slug": "eca", "arquivos": [str(md)],
+                      "topico_id": [topico_id] if topico_id else []}],
+    }]}, ensure_ascii=False), encoding="utf-8")
+    return md, v
+
+
+def _rodar_aplicar(v, *extra):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "aplicar_vinculos.py"), "--vinculos", str(v)]
+        + list(extra), capture_output=True, text=True)
+
+
+def test_aplicar_vinculos_dry_run_nao_escreve():
+    with tempfile.TemporaryDirectory() as d:
+        md, v = _vault_falso_com_vinculos(Path(d))
+        antes = md.read_text(encoding="utf-8")
+        out = _rodar_aplicar(v)
+        assert out.returncode == 0, out.stderr
+        assert md.read_text(encoding="utf-8") == antes
+        assert not md.with_suffix(".bak.md").exists()
+
+
+def test_aplicar_vinculos_grava_e_preserva_o_trabalho_do_usuario():
+    """Dentro desses arquivos mora o resumo escrito à mão e o progresso (os
+    checkboxes). O script só acrescenta metadado — corpo passa intacto, e há
+    backup porque reescrever arquivo do usuário sem rede é como se perde coisa."""
+    with tempfile.TemporaryDirectory() as d:
+        md, v = _vault_falso_com_vinculos(Path(d))
+        out = _rodar_aplicar(v, "--aplicar")
+        assert out.returncode == 0, out.stderr
+        txt = md.read_text(encoding="utf-8")
+        assert "materia_id: direitos-violacoes-vulnerabilidades" in txt
+        assert "topico_id: [criancas]" in txt
+        assert 'topico: ["1. Crianças e adolescentes"]' in txt
+        assert "Resumo do usuário." in txt
+        assert "- [x] feito" in txt and "- [ ] aberto" in txt
+        # `.md.bak`, e não `.bak.md`: o collector do site varre `*.md` e escolhe
+        # o principal por ordem alfabética — `x.bak.md` vinha ANTES de `x.md` e
+        # era servido no lugar do arquivo real, sem o vínculo recém-gravado
+        assert md.with_suffix(".md.bak").exists()
+        assert not md.with_suffix(".bak.md").exists()
+        assert len(list(md.parent.glob("*.md"))) == 1
+
+
+def test_aplicar_vinculos_recusa_topico_inexistente():
+    """Gravar um id que o mapa não tem faria o site agrupar por um tópico que
+    não existe — e ninguém veria, porque o assunto simplesmente sumiria da
+    lista. Vira pendência ruidosa, com exit code."""
+    with tempfile.TemporaryDirectory() as d:
+        md, v = _vault_falso_com_vinculos(Path(d), topico_id="topico-inventado")
+        out = _rodar_aplicar(v, "--aplicar")
+        assert out.returncode == 2
+        assert "inexistente" in out.stderr
+        assert "materia_id" not in md.read_text(encoding="utf-8")
+
+
+def test_aplicar_vinculos_aceita_assunto_sem_topico():
+    """`[]` é estado legítimo — "ainda não vinculado" — e o site tem um balde
+    visível para ele. Não é erro e não pode virar exceção."""
+    with tempfile.TemporaryDirectory() as d:
+        md, v = _vault_falso_com_vinculos(Path(d), topico_id=None)
+        out = _rodar_aplicar(v, "--aplicar")
+        assert out.returncode == 0, out.stderr
+        assert "topico_id: []" in md.read_text(encoding="utf-8")
+        assert "SEM tópico" in out.stdout
 
 
 def test_parse_id_ainda_le_o_formato_anterior():

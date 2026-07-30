@@ -137,9 +137,20 @@
         aba.addEventListener("click", function () {
           var alvo = aba.getAttribute("data-alvo");
           var visao = aba.getAttribute("data-visao-alvo");
+          var eixo = aba.getAttribute("data-eixo-alvo");
           abas.forEach(function (b) { b.classList.toggle("ativa", b === aba); });
 
-          if (visao) {
+          if (eixo) {
+            /* O seletor de eixo vive DENTRO da visão Estudo. Alternar `.eixo`
+               no documento inteiro seria o mesmo erro que a busca global de
+               `.visao` cometeria ao existir um segundo eixo: um seletor
+               desligaria o bloco do outro. Limita-se ao contêiner do seletor. */
+            var caixa = seletor.parentElement || document;
+            caixa.querySelectorAll(":scope > .eixo").forEach(function (bloco) {
+              bloco.classList.toggle("ativo",
+                bloco.getAttribute("data-eixo") === eixo);
+            });
+          } else if (visao) {
             document.querySelectorAll(".visao").forEach(function (bloco) {
               bloco.classList.toggle("ativo",
                 bloco.getAttribute("data-visao") === visao);
@@ -201,10 +212,41 @@
     });
   }
 
+  /* ---------------- detalhes do tópico (aba Plano) ----------------
+     O <details> é nativo de propósito: abre sem JavaScript, imprime e é o que
+     faz o Ctrl+F do Chrome saltar para dentro do tópico. Este punhado de linhas
+     existe pelo que o nativo NÃO cobre: o Firefox não expande na busca da
+     página, e quem manda imprimir quer o plano inteiro, não só os títulos.
+     Nada é persistido — é preferência de leitura, e o progresso mora no vault. */
+  function iniciarDetalhesDoPlano() {
+    var caixas = document.querySelectorAll(".mais-topico");
+    if (!caixas.length) return;
+
+    var botao = document.querySelector("[data-expandir]");
+    if (botao) {
+      botao.addEventListener("click", function () {
+        var abrir = botao.getAttribute("data-expandir") === "abrir";
+        caixas.forEach(function (d) { d.open = abrir; });
+        botao.setAttribute("data-expandir", abrir ? "fechar" : "abrir");
+        botao.textContent = abrir ? "Recolher tudo" : "Expandir tudo";
+      });
+    }
+
+    var antes = [];
+    window.addEventListener("beforeprint", function () {
+      antes = [];
+      caixas.forEach(function (d) { antes.push(d.open); d.open = true; });
+    });
+    window.addEventListener("afterprint", function () {
+      caixas.forEach(function (d, i) { d.open = !!antes[i]; });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     iniciarTema();
     iniciarSeletorAprof();
     iniciarCopiar();
+    iniciarDetalhesDoPlano();
     document.querySelectorAll(".quiz").forEach(iniciarQuiz);
     iniciarLightbox();
   });

@@ -95,6 +95,36 @@ recorte por ângulos diferentes: o mapa é o plano do edital (tópicos e checkli
 aprofundamento é o conteúdo (resumo, páginas do livro, flashcards). Ficam na mesma
 página, em abas. Separá-los em duas seções obrigaria a saber em qual procurar.
 
+**O tópico se abre por camadas, e a divisão não é estética.** Cada tópico do mapa
+carrega cinco subseções — o literal do edital, os subtópicos derivados, o material
+recomendado, as pegadinhas da banca e a meta — mais o que o autor do mapa tiver
+escrito além disso. Publicá-las todas inline resolveria o problema errado: a maior
+matéria do vault tem 24 tópicos, e cinco blocos densos em cada um viram um documento
+em que nada se acha. Ficam sempre à vista o **literal do edital**, que é a autoridade
+da página e ocupa uma linha, e o **checklist de subtópicos**, que é a superfície de
+varredura; o resto vai para um `<details>` cujo resumo **conta o que há dentro**
+(`⚠️ 7 pegadinhas · 📚 3 materiais`) — dobra muda obrigaria a abrir 24 tópicos para
+descobrir onde está o que interessa. `<details>` nativo, e não acordeão em
+JavaScript, porque abre sem JS, imprime e é o que faz o Ctrl+F do Chrome saltar para
+dentro do tópico; o botão *Expandir tudo* existe porque o Firefox não faz isso na
+busca da página.
+
+**Nada escrito no tópico se perde em silêncio.** O parser reconhece cinco rótulos de
+H3, mas o vault escreve mais: `Leis-chave`, `Conceitos-chave / fórmulas`,
+`Referência legal` e blocos mnemônicos 🧠 somam 50 blocos dentro de tópicos
+numerados. Antes eles não casavam nenhum padrão e eram descartados sem aviso —
+justamente o conteúdo mais trabalhoso de escrever. Rótulo desconhecido passa a ser
+publicado com o texto do vault **e avisado na geração**: publicar sem avisar
+esconderia que o template e o vault divergiram; avisar sem publicar era o bug.
+
+**Cada bloco é uma lista, não um dicionário.** Guardar as subseções num dict
+chave→markdown era lossy por construção: um tópico com `### Subtópicos derivados —
+TEORIA` e `— LEI 8.662/1993` tinha o primeiro sobrescrito pelo segundo. Eram 57
+subtópicos em 5 tópicos, e o sintoma estava na página: uma lista com 1 item sob um
+rodapé dizendo `0/22 itens do plano`. Vale como regra geral — **a lista exibida e o
+contador têm de contar a mesma coisa**, e há teste que trava esse invariante em
+todos os tópicos.
+
 **O link fino tópico→assunto não é derivável, e por isso não é inventado.** Dos 203
 tópicos dos 24 mapas do vault, cerca de 18% casam com o slug de um assunto. As
 causas são legítimas: um tópico do edital pode explodir em vários assuntos (no SEDES,

@@ -269,7 +269,8 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
   .cartao { padding: .85rem .9rem; }
   .ficha { grid-template-columns: 1fr 1fr; gap: .7rem; }
   /* o recuo do subtópico não cabe: alinha com o título do tópico */
-  .lista-topicos .subtopicos, .lista-topicos .meta { margin-left: 0; }
+  .lista-topicos .subtopicos, .lista-topicos .meta,
+  .lista-topicos .literal-edital, .lista-topicos .mais-topico { margin-left: 0; }
   .lista-secoes li { flex-wrap: wrap; }
   .lista-secoes .meta { margin-left: 1.6em; text-align: left; width: 100%; }
 }
@@ -452,6 +453,77 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
 .visao { display: none; }
 .visao.ativo { display: block; }
 
+/* eixo de agrupamento DENTRO da visão Estudo (por tópico | por prioridade) */
+.eixo { display: none; }
+.eixo.ativo { display: block; }
+.seletor-eixo { margin-top: 1.25rem; }
+
+/* de onde veio o plano, quando a matéria é compartilhada entre escopos */
+.origem-plano { margin: .25rem 0 0; font-style: italic; }
+
+/* ---------- grupos por tópico do edital ----------
+   Mesma gramática dos grupos de prioridade, com o número do tópico à esquerda
+   para amarrar visualmente à lista da aba Plano. */
+.grupo-topico { margin-top: 1.75rem; }
+.grupo-topico > header {
+  display: flex; align-items: baseline; gap: .6rem; margin-bottom: .8rem;
+  padding-bottom: .35rem; border-bottom: 2px solid var(--pauta);
+}
+.grupo-topico > header .num {
+  font-family: var(--fonte-dado); font-size: .78rem; color: var(--grafite-fraco);
+  flex: none; min-width: 1.7em; text-align: right;
+}
+.grupo-topico h2 { margin: 0; border: 0; padding: 0; font-size: 1.2rem; }
+.grupo-topico .quantos {
+  margin-left: auto; font-family: var(--fonte-dado); font-size: .76rem;
+  color: var(--grafite-fraco);
+}
+.grupo-topico .explica { font-size: .84rem; color: var(--grafite-fraco); margin: 0 0 .9rem; }
+/* o balde do que ainda não tem vínculo fica sóbrio: é pendência, não erro */
+.grupo-topico.sem-topico > header { border-bottom-style: dashed; }
+
+/* ---------- cobertura do edital ----------
+   Duas medidas separadas e ambas contáveis: quanto do plano tem aprofundamento,
+   e o que existe no que já foi feito. Sem nota sintética — os sinais que a
+   comporiam estão saturados, e nota constante disfarçada de métrica engana. */
+.cobertura-edital { margin-top: 1.25rem; }
+.barra-cobertura {
+  height: 8px; border-radius: 4px; overflow: hidden;
+  background: var(--pauta); margin: .5rem 0 .35rem;
+}
+.barra-cobertura > span { display: block; height: 100%; background: var(--confere); }
+.barra-cobertura.pequena { height: 5px; margin: .5rem 0 .25rem; }
+.cobertura-edital .lacunas > summary {
+  cursor: pointer; list-style: none; min-height: 40px; display: flex;
+  align-items: center; gap: .4rem;
+  font-family: var(--fonte-dado); font-size: .74rem; color: var(--grafite-fraco);
+}
+.cobertura-edital .lacunas > summary::-webkit-details-marker { display: none; }
+.cobertura-edital .lacunas > summary::before { content: "▸"; color: var(--tinta); }
+.cobertura-edital .lacunas[open] > summary::before { content: "▾"; }
+.cobertura-edital .lacunas ul { margin: .3rem 0 0; padding-left: 0; list-style: none; }
+.cobertura-edital .lacunas li { font-size: .88rem; padding: .12rem 0; }
+.cobertura-edital .lacunas .num {
+  font-family: var(--fonte-dado); font-size: .74rem; color: var(--grafite-fraco);
+  display: inline-block; min-width: 2em;
+}
+
+/* o que existe no assunto, no card: contagem e ausência, nunca julgamento */
+.item .sinais {
+  display: block; font-family: var(--fonte-dado); font-size: .68rem;
+  color: var(--grafite-fraco); margin-top: .15rem;
+}
+
+/* grade corrida: quando o edital é plano e cada tópico tem um assunto só, o
+   cabeçalho por tópico vira moldura sem conteúdo — o tópico desce para o card */
+.selo-topico {
+  display: block; font-family: var(--fonte-dado); font-size: .66rem;
+  letter-spacing: .04em; color: var(--grafite-fraco);
+  margin-bottom: .25rem; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item:hover .selo-topico { color: var(--tinta); }
+
 /* ---------- aba Plano: os tópicos do edital ---------- */
 .lista-topicos { list-style: none; padding: 0; margin: 1rem 0 0; counter-reset: t; }
 .lista-topicos .topico { padding: .9rem 0; border-bottom: 1px solid var(--pauta); }
@@ -465,19 +537,109 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
 }
 .lista-topicos h3 { margin: 0; font-size: 1.02rem; }
 .lista-topicos .ir { margin-left: auto; font-size: .8rem; }
-.lista-topicos .subtopicos {
-  margin: .45rem 0 0 2.3rem; padding: 0; list-style: none;
-  columns: 2; column-gap: 1.5rem;
+
+/* cabeçalho da aba, com o botão que abre todos os tópicos de uma vez */
+.cabeca-plano {
+  display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap;
 }
-@media (max-width: 700px) { .lista-topicos .subtopicos { columns: 1; } }
-.lista-topicos .subtopicos li {
+.cabeca-plano .meta { margin: 0; }
+.expandir {
+  margin-left: auto; background: none; color: var(--tinta);
+  border: 1px solid var(--pauta); border-radius: var(--raio);
+  font-family: var(--fonte-dado); font-size: .72rem;
+  padding: .3rem .6rem; cursor: pointer; min-height: 40px;
+}
+.expandir:hover { border-color: var(--tinta); }
+
+/* o literal do edital: é a autoridade da página, mas em registro de citação —
+   quem lê o plano quer o texto oficial à mão, não competindo com o título */
+.lista-topicos .literal-edital { margin: .35rem 0 .1rem 2.3rem; }
+.lista-topicos .literal-edital blockquote {
+  margin: 0; padding: .05rem 0 .05rem .7rem;
+  border-left: 3px solid var(--marcatexto);
+  font-size: .86rem; color: var(--grafite-fraco);
+}
+.lista-topicos .literal-edital p { margin: .3rem 0 0; font-size: .84rem; }
+
+/* checklist derivado: a bolha do cartão-resposta carrega o estado vindo do vault */
+.lista-topicos .subtopicos { margin: .45rem 0 0 2.3rem; }
+.lista-topicos .subtopicos .grupo-sub {
+  margin: .55rem 0 .15rem; font-family: var(--fonte-dado); font-size: .68rem;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--grafite-fraco);
+}
+.lista-topicos .subtopicos ul.tarefas {
+  margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 1.5rem;
+}
+@media (max-width: 700px) { .lista-topicos .subtopicos ul.tarefas { columns: 1; } }
+.lista-topicos .subtopicos .tarefa,
+.lista-topicos .subtopicos .livre {
   font-size: .88rem; color: var(--grafite-fraco); padding: .1rem 0;
   break-inside: avoid;
 }
-.lista-topicos .subtopicos li::before { content: "· "; }
+/* item que não é checkbox no vault: marcador de lista, nunca bolha — a bolha do
+   cartão-resposta significa "marcável", e usá-la aqui inflava a lista contra o
+   contador do rodapé */
+.lista-topicos .subtopicos .livre::before { content: "· "; }
+
+/* ---------- o resto do tópico, sob divulgação progressiva ----------
+   <details> nativo: funciona sem JS, imprime e é o que faz o Ctrl+F do Chrome
+   abrir o tópico certo. O resumo conta o que há dentro — dobra muda obrigaria a
+   abrir 24 tópicos para descobrir onde está o que interessa. */
+.mais-topico { margin: .5rem 0 0 2.3rem; }
+.mais-topico > summary {
+  cursor: pointer; list-style: none; display: flex; flex-wrap: wrap;
+  align-items: center; gap: .4rem; padding: .35rem 0; min-height: 40px;
+  font-family: var(--fonte-dado); font-size: .72rem; color: var(--grafite-fraco);
+}
+.mais-topico > summary::-webkit-details-marker { display: none; }
+.mais-topico > summary::before { content: "▸"; color: var(--tinta); }
+.mais-topico[open] > summary::before { content: "▾"; }
+.mais-topico > summary:hover { color: var(--tinta); }
+.mais-topico > summary:focus-visible { outline: 2px solid var(--tinta); outline-offset: 2px; }
+.mais-topico .pistas { display: flex; flex-wrap: wrap; gap: .3rem; }
+.mais-topico .pista {
+  border: 1px solid var(--pauta); border-radius: 2px; padding: .05rem .35rem;
+}
+.secoes-topico {
+  margin: .5rem 0 .2rem; padding: .85rem 1rem;
+  background: var(--superficie); border: 1px solid var(--pauta);
+  border-radius: var(--raio);
+}
+.secao-topico + .secao-topico { margin-top: .95rem; }
+.secao-topico h4 {
+  margin: 0 0 .35rem; font-family: var(--fonte-dado); font-size: .71rem;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--grafite-fraco);
+}
+.secao-topico ul, .secao-topico ol { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
+.secao-topico ul.tarefas { padding-left: 0; list-style: none; }
+.secao-topico table { font-size: .86rem; margin: .5rem 0 0; }
+/* caneta vermelha: a pegadinha é o que corrige o erro ANTES da prova */
+.secao-topico[data-secao="pegadinhas"] {
+  border-left: 2px solid var(--correcao); padding-left: .85rem;
+}
+
 .lista-topicos .meta {
   display: block; margin: .4rem 0 0 2.3rem;
   font-family: var(--fonte-dado); font-size: .72rem; color: var(--grafite-fraco);
+}
+
+/* ---------- prioridade do TÓPICO ----------
+   Classe própria: reusar `.selo-aprof.nivel-alta` emprestava a semântica de
+   "profundidade do aprofundamento" para "prioridade do tópico", e ainda por cima
+   `nivel-alta` nunca teve regra — o selo saía sem estilo nenhum. */
+.selo-prio {
+  display: inline-flex; align-items: center;
+  font-family: var(--fonte-dado); font-size: .68rem; letter-spacing: .04em;
+  padding: .15rem .45rem; border-radius: 2px;
+  color: var(--grafite-fraco); border: 1px solid var(--pauta);
+}
+.selo-prio.prio-alta  { color: var(--correcao); border-color: var(--correcao); }
+.selo-prio.prio-media { color: var(--tinta); border-color: var(--tinta-clara); }
+
+/* impressão: o plano sai inteiro, sem o affordance de dobra */
+@media print {
+  .mais-topico > summary, .expandir { display: none; }
+  .secoes-topico { background: none; border: 0; padding: 0; }
 }
 
 /* ---------- pacote NotebookLM ---------- */
@@ -533,3 +695,23 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
 /* no cabeçalho da página do assunto os selos ficam um pouco maiores */
 .cabecalho-assunto .selos-aprof { margin-top: .6rem; }
 .cabecalho-assunto .selo-aprof { font-size: .74rem; padding: .25rem .55rem; }
+
+/* ---------- material por tópico ----------
+   Consolidação do que já está nos mapas: o mesmo item, visto pela matéria
+   inteira em vez de um <details> por tópico. */
+.material-topicos { margin-top: 1.25rem; }
+.mat-topico { margin-top: 1.1rem; }
+.mat-topico h3 {
+  margin: 0 0 .3rem; font-size: .98rem;
+  display: flex; align-items: baseline; gap: .5rem;
+}
+.mat-topico h3 .num {
+  font-family: var(--fonte-dado); font-size: .74rem; color: var(--grafite-fraco);
+  min-width: 1.7em; text-align: right;
+}
+.mat-topico ul { margin: 0; padding-left: 2.2rem; list-style: none; }
+.mat-topico li {
+  font-size: .9rem; padding: .12rem 0;
+  display: flex; align-items: baseline; gap: .45rem;
+}
+.mat-topico .ic { color: var(--grafite-fraco); flex: none; min-width: 1em; }

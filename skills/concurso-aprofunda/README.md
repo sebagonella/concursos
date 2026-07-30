@@ -118,4 +118,5 @@ A localização vem com score. Assuntos não encontrados ou de baixa confiança 
 O histórico de versões vive no [CHANGELOG.md](CHANGELOG.md) — antes havia um roadmap
 aqui que repetia e contradizia o changelog.
 
-Versão atual: **0.4.1** (o pacote NotebookLM passa a emitir `notebooklm_url:`, herdando o valor digitado à mão nas regenerações).
+Versão atual: **0.6.0** (aprofundar **um tópico por vez**; e o arcabouço deixa de
+sobrescrever resumo já escrito — regerar exige `--forcar`, com backup).

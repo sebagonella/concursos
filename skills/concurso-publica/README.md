@@ -20,7 +20,10 @@ python -m http.server -d out/site 8000     # conferir localmente
 
 A saída espelha o vault: `{concurso}/{comum|cargo}/`, com as seções numeradas e
 `materias/{materia}/{assunto}/`. Cada matéria tem duas visões — **Plano** (o mapa do
-edital) e **Estudo** (os assuntos aprofundados).
+edital) e **Estudo** (os assuntos aprofundados). No Plano, cada tópico traz o literal
+do edital e o checklist derivado à vista, e a um clique o material recomendado, as
+pegadinhas da banca, a meta de questões e o que mais o mapa tiver escrito.
 
-Versão atual: **0.7.0** (escopos COMUM/cargo, todo o conteúdo do concurso, mapas de
-matéria na aba Plano e pacote NotebookLM como página).
+Versão atual: **0.10.0** (cobertura do edital em % por matéria, com as lacunas
+nomeadas; o que existe em cada assunto; e todo o material recomendado consolidado
+por tópico).

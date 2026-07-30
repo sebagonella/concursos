@@ -54,7 +54,12 @@ services:
     mem_reservation: 32m
 
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/healthz"]
+      # 127.0.0.1, NÃO localhost: o nginx.conf faz `listen 80` (só IPv4), e dentro
+      # da imagem alpine `localhost` resolve para ::1 — o wget ia de IPv6 e levava
+      # "connection refused" enquanto o site respondia 200 normalmente. Ficou 832
+      # falhas seguidas marcando de unhealthy um container saudável, o que é pior
+      # que não ter healthcheck: ensina a ignorar o alarme.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
       interval: 30s
       timeout: 3s
       retries: 3

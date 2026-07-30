@@ -49,8 +49,78 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import (  # noqa: E402
-    eh_pasta_aprofundamento, parse_id, rotulo,
+    eh_pasta_aprofundamento, parse_id, rotulo, FONTE_PROPRIA,
 )
+
+
+def cobertura_da_materia(materia: dict, assuntos=None) -> dict:
+    """Quantos tópicos do edital têm pelo menos um assunto aprofundado.
+
+    É **contagem**, não estimativa: usa o `topico_id` gravado na Etapa 2, o mesmo
+    que alimenta o agrupamento. Nada aqui é inferido por slug.
+
+    Deliberadamente NÃO existe nota de qualidade. Os sinais que poderiam compô-la
+    estão saturados no vault real — placeholders não preenchidos: 0 arquivos;
+    `status`: todos `revisar`; `confianca_localizacao: baixa`: 0 de 92 — então a
+    nota seria uma constante disfarçada de métrica. O que se mede é cobertura; o
+    que se mostra além disso é o que EXISTE em cada assunto (ver `sinais_do_assunto`).
+    """
+    mapa = materia.get("mapa")
+    if not mapa:
+        return {}
+    # `assuntos` pode vir de fora: a matéria do cargo costuma ter o MAPA enquanto o
+    # aprofundamento vive no _COMUM. Contar só os próprios daria 0% numa matéria
+    # inteiramente aprofundada, do outro lado do atalho.
+    ass = materia["assuntos"] if assuntos is None else assuntos
+    vinculados = {t for a in ass for t in (a.get("topico_id") or [])}
+
+    # Guarda contra o falso zero: se HÁ assuntos e NENHUM tem vínculo, a
+    # cobertura é desconhecida, não zero. Reportar 0% aqui diria "nada foi
+    # aprofundado" sobre uma matéria inteiramente aprofundada, só que sem o
+    # `topico_id` gravado — que é o falso negativo que este projeto proíbe desde
+    # a regra do link tópico→assunto.
+    if ass and not vinculados:
+        return {"vinculo_ausente": True, "n_assuntos": len(ass)}
+    sem = [{"numero": t["numero"], "titulo": t["titulo"]}
+           for t in mapa["topicos"] if t["slug"] not in vinculados]
+    n_top = mapa["n_topicos"]
+    n_cob = n_top - len(sem)
+    return {
+        "n_topicos": n_top,
+        "n_cobertos": n_cob,
+        "pct": round(100 * n_cob / n_top) if n_top else 0,
+        "topicos_sem": sem,
+        # profundidade do que existe — contagem, não julgamento
+        "n_detalhado": sum(1 for a in ass if "detalhado" in (a.get("niveis") or [])),
+        "n_com_midia": sum(1 for a in ass if any((a.get("midias") or {}).values())),
+    }
+
+
+def sinais_do_assunto(aprofs: list[dict], principal: dict) -> dict:
+    """O que EXISTE neste assunto — tudo verificável no disco.
+
+    Sem score: cada campo é contagem ou presença, e o leitor tira a conclusão.
+    """
+    return {
+        "n_cards": max((a.get("flashcards") or {}).get("n_cards", 0) for a in aprofs)
+        if aprofs else 0,
+        "tem_ancoras": any(a.get("tem_ancoras") for a in aprofs),
+        "palavras": max((a.get("palavras") or 0) for a in aprofs) if aprofs else 0,
+    }
+
+
+def fontes_externas(aprofs: list[dict]) -> set[str]:
+    """Fontes de verdade do assunto, ignorando o material próprio.
+
+    "material próprio" ocupa o campo `fontes:` do frontmatter porque o template
+    precisa preencher alguma coisa — mas não é fonte, é a declaração de que não
+    há nenhuma. Somá-lo faria o card dizer "2 fontes" onde há uma norma e um
+    texto escrito do zero.
+    """
+    return {f.strip()
+            for a in aprofs
+            if (a.get("fontes_id") or []) != [FONTE_PROPRIA]
+            for f in (a.get("fontes") or "").split(",") if f.strip()}
 
 
 # --------------------------------------------------------------------------- #
@@ -59,6 +129,22 @@ from aprofundamento_id import (  # noqa: E402
 def norm(texto: str) -> str:
     nfkd = unicodedata.normalize("NFKD", texto or "")
     return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
+
+
+def lista_yaml(valor) -> list[str]:
+    """Lê uma lista YAML inline (`[a, b]`) do frontmatter, que o parser daqui
+    entrega como string crua.
+
+    `[]` e ausência dão a mesma coisa — lista vazia significa "ainda não
+    vinculado", e é um estado legítimo que o site precisa saber distinguir de
+    um vínculo errado.
+    """
+    if isinstance(valor, list):
+        return [str(v).strip() for v in valor if str(v).strip()]
+    s = (valor or "").strip()
+    if s.startswith("[") and s.endswith("]"):
+        s = s[1:-1]
+    return [p.strip().strip('"').strip("'") for p in s.split(",") if p.strip()]
 
 
 def ler_frontmatter(md: Path) -> dict:
@@ -299,6 +385,10 @@ def coletar_aprofundamento(subdir: Path, slug_assunto: str,
         "fontes": fm.get("fontes", ""),
         "titulo": fm.get("title", slug_assunto),
         "prioridade": prioridade,
+        # o vínculo com o plano do edital, GRAVADO na Etapa 2 — não inferido aqui
+        "materia_id": (fm.get("materia_id") or "").strip(),
+        "topico_id": lista_yaml(fm.get("topico_id")),
+        "topico": lista_yaml(fm.get("topico")),
         "status": fm.get("status", "?"),
         "paginas_livro": extrair_paginas(fm),
         "resumo_md": str(principal),
@@ -306,6 +396,13 @@ def coletar_aprofundamento(subdir: Path, slug_assunto: str,
         "flashcards": flashcards,
         "notebooklm_url": nb_url,
         "progresso": contar_progresso(corpo),
+        # sinais verificáveis do que existe neste aprofundamento: 33 dos 92
+        # assuntos do vault não têm trechos-âncora, e o tamanho do resumo varia
+        # de 840 a 4.217 palavras — os dois discriminam, ao contrário de
+        # `status` e `confianca`, que estão saturados
+        "tem_ancoras": bool(re.search(r"^##.*(Trechos-âncora|Artigos-chave)", corpo,
+                                      re.MULTILINE | re.IGNORECASE)),
+        "palavras": len(corpo.split()),
         "tem_pack_notebooklm": pack.exists(),
         "pack_notebooklm": pack_info,
     }
@@ -498,16 +595,24 @@ def coletar_assunto(subdir: Path, mapa_prio: dict | None = None) -> dict | None:
         "paginas_livro": principal.get("paginas_livro"),
         "n_aprofundamentos": len(aprofs),
         "niveis": sorted({a["nivel"] for a in aprofs}),
-        # fontes distintas entre todos os aprofundamentos deste assunto
-        "fontes": sorted({f.strip() for a in aprofs
-                          for f in (a.get("fontes") or "").split(",") if f.strip()}),
-        "n_fontes": len({f.strip() for a in aprofs
-                         for f in (a.get("fontes") or "").split(",") if f.strip()}),
+        # Fontes distintas entre todos os aprofundamentos deste assunto.
+        # O material próprio NÃO conta como fonte: ele é a ausência de fonte
+        # externa. Contá-lo fazia o card anunciar "2 fontes" para um assunto com
+        # uma norma e um texto escrito do zero — que é afirmar o que não é.
+        "fontes": sorted(fontes_externas(aprofs)),
+        "n_fontes": len(fontes_externas(aprofs)),
         "aprofundamentos": aprofs,
+        # o vínculo com o tópico é do ASSUNTO, então vale a união do que os
+        # aprofundamentos declararam: basta um deles saber o tópico para o
+        # assunto saber. Ordem estável para o site não oscilar entre gerações.
+        "materia_id": next((a["materia_id"] for a in aprofs if a.get("materia_id")), ""),
+        "topico_id": sorted({t for a in aprofs for t in a.get("topico_id") or []}),
+        "topico": sorted({t for a in aprofs for t in a.get("topico") or []}),
         # agregados do CONJUNTO de aprofundamentos: presença de mídia e de
         # flashcards não podem vir do principal (ver uniao_midias)
         "midias": uniao_midias(aprofs),
         "flashcards": uniao_flashcards(aprofs, principal),
+        "sinais": sinais_do_assunto(aprofs, principal),
         # atalhos do principal
         "resumo_md": principal["resumo_md"],
         "notebooklm_url": principal.get("notebooklm_url"),
@@ -569,6 +674,13 @@ def coletar_materia(materia_dir: Path) -> dict | None:
             aliases = {}
     return {
         "nome": nome,
+        # `materia_id` é o join com o mapa do edital, e existe porque o nome da
+        # pasta NÃO serve: no vault a mesma matéria aparece como
+        # `direitos-violacoes` (aprofundamento) e `direitos-violacoes-vulnerabilidades`
+        # (mapa), com três grafias diferentes do nome. Casar por pasta falhava em
+        # 5 das 9 matérias aprofundadas.
+        "materia_id": next((a["materia_id"] for a in assuntos if a.get("materia_id")),
+                           materia_dir.name),
         "doc_banca": doc_banca,
         "slug": materia_dir.name,
         "dir": str(materia_dir),
@@ -748,6 +860,96 @@ PRIORIDADE_EMOJI = {"🔴": "alta", "🟠": "alta", "🟡": "media", "🟢": "ba
 
 TOPICO_NUMERADO = re.compile(r"^(\d+)\.\s*(.+)$")
 
+# H3 que não casa NENHUM padrão de `H3_MAPA`. Eram descartados em silêncio — e não
+# são ruído: `Leis-chave`, `Conceitos-chave / fórmulas`, `Referência legal` e os
+# blocos mnemônicos 🧠 (vários com tabela) somam 50 blocos dentro de tópicos
+# numerados do vault. É o conteúdo mais trabalhoso de escrever, e era o que sumia.
+CHAVE_EXTRA = "extra"
+
+_SUFIXO_RE = re.compile(r"^\s*[—–:-]\s*")
+_CHECK_RE = re.compile(r"^\s*[-*]\s*\[([ xX])\]\s*(.+)$")
+_BULLET_RE = re.compile(r"^\s*[-*]\s+(?!\[[ xX]\])(.+)$")
+
+
+def _chave_do_h3(rotulo: str) -> tuple[str, str]:
+    """(chave canônica, sufixo temático) de um H3 de tópico.
+
+    O sufixo é o que sobra do rótulo depois do trecho reconhecido: em
+    `### Subtópicos derivados — LEI 8.662/1993 (DECORAR ARTIGOS)` ele é o que diz
+    de que bloco aquele checklist é. Perdê-lo transformava quatro listas distintas
+    numa só, sem dizer de quê.
+    """
+    for chave, padrao in H3_MAPA:
+        m = padrao.search(rotulo)
+        if m:
+            return chave, _SUFIXO_RE.sub("", rotulo[m.end():]).strip()
+    return CHAVE_EXTRA, ""
+
+
+_H4_RE = re.compile(r"^\s*####\s+(.+?)\s*$")
+
+# Os mapas fecham cada tópico com `---`. Como o separador vem depois do último H3,
+# ele é absorvido por aquele bloco (quase sempre a `Meta`) e virava um `<hr>` solto
+# dentro da seção, com um vão embaixo. É pontuação do documento, não conteúdo.
+_SEPARADOR_FINAL = re.compile(r"(?:\n[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*)+\s*$")
+
+
+def _itens_do_bloco(md: str) -> list[dict]:
+    """Itens de um bloco, EM ORDEM: checkbox com estado, bullet com `feito: None`.
+
+    Linha a linha, e não dois `findall`, por duas razões. A ordem: varrer checkbox
+    e bullet em passes separados juntava todos os checkbox antes de todos os
+    bullets, embaralhando um bloco misto. E o `#### `: dentro de `Subtópicos
+    derivados` o vault usa H4 para subdividir (`#### Proteção Social Básica (PSB) —
+    ofertada no CRAS`), e como a lista só recolhe bullets, o H4 sumia junto com a
+    informação de a que parte cada item pertence.
+    """
+    itens: list[dict] = []
+    subgrupo = ""
+    for linha in md.split("\n"):
+        m = _H4_RE.match(linha)
+        if m:
+            subgrupo = re.sub(r"\*\*", "", m.group(1)).strip()
+            continue
+        m = _CHECK_RE.match(linha)
+        if m:
+            itens.append({"texto": re.sub(r"\*\*", "", m.group(2)).strip(),
+                          "feito": m.group(1).lower() == "x", "subgrupo": subgrupo})
+            continue
+        m = _BULLET_RE.match(linha)
+        if m:
+            itens.append({"texto": re.sub(r"\*\*", "", m.group(1)).strip(),
+                          "feito": None, "subgrupo": subgrupo})
+    return itens
+
+
+def blocos_do_topico(conteudo: str) -> list[dict]:
+    """Todos os H3 de um tópico, na ordem do documento.
+
+    Substitui o `dict` chave->markdown que existia aqui. O dict era lossy por
+    construção: um tópico com `### Subtópicos derivados — TEORIA` e
+    `### Subtópicos derivados — LEI 8.662/1993` tinha o primeiro sobrescrito pelo
+    segundo. São 5 tópicos e 57 subtópicos do vault, e dava para ver na página: o
+    tópico 2 de `servico-social` listava 1 item e o rodapé dizia `0/22 itens do
+    plano`.
+    """
+    blocos = []
+    for sub in re.split(r"^###\s+", conteudo, flags=re.MULTILINE)[1:]:
+        linhas = sub.split("\n")
+        rotulo = linhas[0].strip()
+        markdown = _SEPARADOR_FINAL.sub("", "\n".join(linhas[1:])).strip()
+        chave, sufixo = _chave_do_h3(rotulo)
+        itens = _itens_do_bloco(markdown)
+        blocos.append({
+            "chave": chave,
+            "rotulo": rotulo,          # literal do vault: "Pegadinhas da Quadrix…"
+            "sufixo": sufixo,
+            "markdown": markdown,
+            "itens": itens,
+            "n_itens": len(itens),
+        })
+    return blocos
+
 
 def _prioridade_do_titulo(titulo: str) -> tuple[str, str | None]:
     """Separa o emoji de prioridade do título. Devolve (título limpo, prioridade)."""
@@ -802,24 +1004,21 @@ def coletar_mapa(md: Path) -> dict | None:
             continue
 
         titulo, prio = _prioridade_do_titulo(m.group(2))
-        secoes: dict[str, str] = {}
-        for sub in re.split(r"^###\s+", conteudo, flags=re.MULTILINE)[1:]:
-            slinhas = sub.split("\n")
-            rotulo = slinhas[0].strip()
-            texto = "\n".join(slinhas[1:]).strip()
-            for chave, padrao in H3_MAPA:
-                if padrao.search(rotulo):
-                    secoes[chave] = texto
-                    break
-        subtopicos = re.findall(r"^\s*-\s*\[[ xX]\]\s*(.+)$",
-                                secoes.get("subtopicos", ""), re.MULTILINE)
+        blocos = blocos_do_topico(conteudo)
+        # de TODOS os blocos de subtópicos, cada item carregando de qual bloco veio.
+        # O grupo junta o sufixo do H3 e o H4 interno: os dois dizem de que parte da
+        # matéria aquele checklist é, e sem eles quatro listas viram uma só.
+        subtopicos = [dict(i, grupo=" · ".join(p for p in (b["sufixo"],
+                                                           i.get("subgrupo")) if p))
+                      for b in blocos if b["chave"] == "subtopicos"
+                      for i in b["itens"]]
         topicos.append({
             "numero": int(m.group(1)),
             "titulo": titulo,
             "slug": slug_doc(titulo),
             "prioridade": prio,
-            "subtopicos": [re.sub(r"\*\*", "", s).strip() for s in subtopicos],
-            "secoes": secoes,
+            "subtopicos": subtopicos,
+            "blocos": blocos,
             "progresso": contar_progresso(conteudo),
         })
 
@@ -829,11 +1028,18 @@ def coletar_mapa(md: Path) -> dict | None:
     return {
         "arquivo": md.name,
         "caminho": str(md),
+        "materia_id": (fm.get("materia_id") or "").strip() or slug_doc(md.name),
         "titulo": fm.get("materia") or nome_materia_do_mapa(md, fm, corpo),
         "topicos": topicos,
         "auxiliares": auxiliares,
         "n_topicos": len(topicos),
         "progresso": prog,
+        # rótulos de H3 fora do template. São publicados do mesmo jeito; ficam
+        # listados aqui para a geração poder AVISAR que apareceu forma nova — é
+        # como se descobre que um mapa novo inventou uma seção.
+        "rotulos_extras": sorted({b["rotulo"] for t in topicos
+                                  for b in t["blocos"]
+                                  if b["chave"] == CHAVE_EXTRA}),
     }
 
 
@@ -893,15 +1099,21 @@ def coletar_escopo(escopo_dir: Path) -> dict:
     # pelo slug. Mapa sem aprofundamento vira matéria só com Plano — antes
     # `coletar_materia()` devolvia None sem `assuntos/` e a matéria era descartada
     # em silêncio, o que sumia com o plano de estudo inteiro do cargo.
+    por_materia_id = {m["materia_id"]: m for m in materias if m.get("materia_id")}
     for slug, md_mapa in achar_mapas(escopo_dir).items():
         mapa = coletar_mapa(md_mapa)
         if not mapa:
             continue
-        if slug in por_slug:
-            por_slug[slug]["mapa"] = mapa
+        # `materia_id` primeiro, nome de pasta como reserva: é o id que resolve o
+        # caso real de o mapa e o aprofundamento usarem slugs diferentes para a
+        # mesma matéria.
+        alvo = por_materia_id.get(mapa["materia_id"]) or por_slug.get(slug)
+        if alvo is not None:
+            alvo["mapa"] = mapa
         else:
             materias.append({
                 "nome": mapa["titulo"], "slug": slug, "dir": str(md_mapa.parent),
+                "materia_id": mapa["materia_id"],
                 "doc_banca": None, "docs_apoio": [], "mapa_localizacao": None,
                 "assuntos": [], "n_assuntos": 0,
                 "n_com_podcast": 0, "n_com_flashcards": 0,
@@ -952,12 +1164,15 @@ def cruzar_materias_comuns(escopos: list[dict]) -> None:
     if not comum:
         return
     por_slug = {m["slug"]: m for m in comum["materias"]}
+    por_id = {m["materia_id"]: m for m in comum["materias"] if m.get("materia_id")}
 
     for escopo in escopos:
         if escopo is comum:
             continue
         for mat in escopo["materias"]:
-            irma = por_slug.get(mat["slug"])
+            # o id vem primeiro: é ele que casa `direitos-violacoes` (aprofundamento
+            # no comum) com `direitos-violacoes-vulnerabilidades` (mapa no cargo)
+            irma = por_id.get(mat.get("materia_id")) or por_slug.get(mat["slug"])
             if not irma:
                 continue
             if not mat["assuntos"] and irma["assuntos"]:
@@ -966,10 +1181,23 @@ def cruzar_materias_comuns(escopos: list[dict]) -> None:
                     "materia_slug": irma["slug"], "n_assuntos": irma["n_assuntos"],
                 }
             if not irma.get("mapa") and mat.get("mapa"):
+                # ANEXAR o mapa, não só apontar para ele. `mapa_em` sozinho era
+                # dado morto: gravado e nunca lido, então a matéria do comum
+                # aparecia sem aba Plano mesmo com o plano existindo no cargo —
+                # que é exatamente o caso de "Direitos e Violações (EDAS)".
+                irma["mapa"] = mat["mapa"]
                 irma["mapa_em"] = {
                     "escopo_slug": escopo["slug"], "escopo_nome": escopo["nome"],
                     "materia_slug": mat["slug"],
                 }
+            elif irma.get("mapa") and mat.get("mapa") and irma is not mat:
+                # mesma matéria mapeada em mais de um cargo (o `especificos-cargo`
+                # do SEDES atende Agente e Cuidador): registrar os outros para a
+                # página poder oferecê-los, em vez de escolher um em silêncio
+                irma.setdefault("mapas_extras", []).append({
+                    "escopo_slug": escopo["slug"], "escopo_nome": escopo["nome"],
+                    "mapa": mat["mapa"],
+                })
 
 
 def achar_escopos(base: Path) -> list[Path]:
@@ -1022,6 +1250,40 @@ def cargo_de(materia_dir: Path, base: Path) -> str:
     return partes[0] if len(partes) >= 2 else "_GERAL"
 
 
+def calcular_cobertura(escopos: list[dict]) -> None:
+    """Cobertura de cada matéria, DEPOIS que mapa e aprofundamento se acharam.
+
+    Rodar antes do cruzamento dava 0% em `direitos-violacoes` e `servico-social`:
+    o mapa está no cargo e os assuntos no _COMUM, e cada metade sozinha não sabe
+    da outra.
+    """
+    por_id = {}
+    for e in escopos:
+        for m in e["materias"]:
+            if m["assuntos"]:
+                por_id.setdefault(m.get("materia_id") or m["slug"], m["assuntos"])
+    for e in escopos:
+        for m in e["materias"]:
+            irma = por_id.get(m.get("materia_id") or m["slug"])
+            m["cobertura"] = cobertura_da_materia(
+                m, m["assuntos"] if m["assuntos"] else irma)
+
+
+def avisar_rotulos_extras(escopos: list[dict]) -> list[str]:
+    """Avisa quais H3 do mapa saíram do template. Publicar sem avisar esconderia
+    que o template e o vault divergiram; avisar sem publicar era o bug antigo."""
+    extras: dict[str, int] = {}
+    for e in escopos:
+        for mat in e["materias"]:
+            for rot in ((mat.get("mapa") or {}).get("rotulos_extras") or []):
+                extras[rot] = extras.get(rot, 0) + 1
+    if extras:
+        lista = ", ".join(f"{r} ({n}×)" for r, n in sorted(extras.items()))
+        sys.stderr.write(f"AVISO: seções de tópico fora do template do mapa "
+                         f"(publicadas assim mesmo): {lista}\n")
+    return sorted(extras)
+
+
 def coletar_concurso(base: Path) -> dict:
     meta = {}
     meta_path = base / ".meta.json"
@@ -1055,6 +1317,8 @@ def coletar_concurso(base: Path) -> dict:
     # `_COMUM` primeiro (é o que vale para todos), cargos em ordem alfabética
     escopos.sort(key=lambda e: (e["tipo"] != "comum", e["nome"]))
     cruzar_materias_comuns(escopos)
+    calcular_cobertura(escopos)
+    avisar_rotulos_extras(escopos)
 
     return {
         "concurso": base.name,

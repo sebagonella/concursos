@@ -50,6 +50,13 @@ import unicodedata
 NIVEIS = ("padrao", "detalhado")
 SEP_FONTES = "+"
 
+# Aprofundamento escrito do conhecimento próprio, sem fonte externa. É um token
+# RESERVADO, e precisa ser estado de primeira classe em vez de "ausência de fonte":
+# sem ele, `id_aprofundamento([], nivel)` caía em `padrao--fonte` — que
+# `slug_suspeito()` marca como derivação ruim — e o modo sem fonte ficava
+# indistinguível de um erro ao adivinhar o nome do livro.
+FONTE_PROPRIA = "proprio"
+
 # ordem importa: o mais específico primeiro (Lei Complementar antes de Lei)
 _REGRAS_NORMA = [
     (r"\blei\s+complementar\s+n?[º°o]?\s*([\d.]+)", "lc-{}"),
@@ -142,19 +149,32 @@ def slug_suspeito(s: str) -> bool:
     """True quando o slug derivado provavelmente não identifica a fonte.
 
     Serve para os scripts avisarem e pedirem --fontes-slug explícito, em vez de
-    gravar um path ruim no vault (ex.: 'brasil' para o Código de Ética do BB)."""
+    gravar um path ruim no vault (ex.: 'brasil' para o Código de Ética do BB).
+
+    `proprio` é o token reservado do aprofundamento sem fonte externa: é uma
+    escolha declarada, não uma derivação que deu errado."""
+    if s == FONTE_PROPRIA:
+        return False
     return (not s or s == "fonte" or len(s) < 3 or bool(_TOKEN_RUIM.match(s)))
 
 
-def id_aprofundamento(fontes, nivel: str, fontes_slug=None) -> str:
+def id_aprofundamento(fontes, nivel: str, fontes_slug=None, proprio=False) -> str:
     """Monta o identificador da PASTA: {nivel}--{fonte1}[+{fonte2}...]
 
     fontes      : lista de nomes de fonte (a ordem é preservada)
     nivel       : padrao | detalhado
     fontes_slug : lista opcional de slugs já resolvidos, sobrepõe a derivação
+    proprio     : material escrito sem fonte externa -> {nivel}--proprio
+
+    `proprio` é explícito de propósito. Deixar a lista de fontes vazia NÃO
+    significa "sem fonte": significa que a derivação falhou, e o fallback
+    (`fonte`) existe para isso ficar visível. Confundir os dois faria um material
+    deliberadamente sem fonte parecer um erro de configuração.
     """
     if nivel not in NIVEIS:
         raise ValueError(f"nível inválido: {nivel!r} (esperado: {' | '.join(NIVEIS)})")
+    if proprio:
+        return f"{nivel}--{FONTE_PROPRIA}"
     nomes = [f for f in (fontes or []) if str(f).strip()]
     if fontes_slug:
         slugs = [slug(s) for s in fontes_slug if str(s).strip()]
@@ -217,10 +237,19 @@ def eh_pasta_aprofundamento(nome_pasta: str) -> bool:
     return parse_id(nome_pasta) is not None
 
 
+def eh_proprio(aprof_id: str) -> bool:
+    """True quando o aprofundamento foi escrito sem fonte externa."""
+    info = parse_id(aprof_id)
+    return bool(info) and info["fontes"] == [FONTE_PROPRIA]
+
+
 def rotulo(aprof_id: str) -> str:
     """Rótulo legível para exibir no site/índice: 'Detalhado — pestana'."""
     info = parse_id(aprof_id)
     if not info:
         return aprof_id
     nivel = "Detalhado" if info["nivel"] == "detalhado" else "Padrão"
+    if info["fontes"] == [FONTE_PROPRIA]:
+        # "proprio" é o token do path; na tela ele vira a descrição do artefato
+        return f"{nivel} — material próprio"
     return f"{nivel} — {' + '.join(info['fontes'])}"

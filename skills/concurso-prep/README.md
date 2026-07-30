@@ -370,7 +370,7 @@ concurso-prep/
 
 ## 📜 Changelog
 
-Histórico de versões em [CHANGELOG.md](CHANGELOG.md). Versão atual: **1.3.1** (correções no validador: soma por cargo, wikilinks com pipe escapado, metadata em YAML legado; `diff_editais.py` aceita a pasta do concurso).
+Histórico de versões em [CHANGELOG.md](CHANGELOG.md). Versão atual: **1.5.0** (levantamento de material com piso por matéria e por tópico, e a norma oficial como fonte primária em tópico jurídico).
 
 ---
 

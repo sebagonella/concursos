@@ -1,6 +1,6 @@
 ---
 name: concurso-prep
-version: 1.3.1
+version: 1.5.0
 description: Use quando o usuário fornecer um edital de concurso público (PDF/DOCX/MD) e pedir para montar a estrutura de estudos completa, OU quando pedir para começar a estudar para um concurso ainda SEM edital/data (concurso previsto/esperado — usa o edital anterior como proxy), OU quando o edital oficial sair/for retificado e for preciso reconciliar/atualizar o que já foi gerado. Triggers comuns - "preparar concurso", "analisar edital", "montar cronograma de concurso", "estudar para concurso da {órgão}", "concurso previsto sem edital", "começar antes do edital", "edital saiu, atualizar", "edital foi retificado", "reconciliar edital". Gera no vault Obsidian estrutura completa - cronograma adaptativo (ou relativo sem datas no modo previsto), mapas por matéria, materiais de referência (leis baixadas em Markdown E PDF), histórico do órgão, provas anteriores e concursos com sinergia. Suporta multi-cargo (pasta única com subpastas por cargo), modo previsto (--modo previsto) e reconciliação/retificação (--reconciliar).
 ---
 
@@ -242,14 +242,36 @@ Output esperado (JSON salvo em pasta temporária):
 
 Para cada matéria do edital, despachar um subagent `materia-mapper` em paralelo via múltiplas chamadas Task na mesma resposta. Input para cada um:
 - nome da matéria
+- **`materia_id`** (slug estável da matéria — é o que liga o mapa ao aprofundamento)
 - subitem do edital
 - tópicos literais do edital
 - banca (para perfil de cobrança)
 - cargo (para contexto)
 
-Output: arquivo markdown em `{OUTPUT_DIR}/{CARGO_SLUG_UPPER}/03-MAPAS-MATERIAS/{NN}-{materia-slug}.md`
+**Onde gravar — a regra do escopo.** Uma matéria pertence a `cargos[]` (quais cargos a
+cobram, da Etapa 2):
+
+| `cargos[]` | Destino |
+|---|---|
+| mais de um cargo | `{OUTPUT_DIR}/_COMUM/03-MAPAS-COMUNS/{NN}-{materia-slug}.md` |
+| um cargo só | `{OUTPUT_DIR}/{CARGO_SLUG_UPPER}/03-MAPAS-MATERIAS/{NN}-{materia-slug}.md` |
+
+Quando a matéria vale para mais de um cargo mas **não para todos**, gravar em `_COMUM` do
+mesmo jeito e declarar a aplicabilidade no `00-INDICE.md` da pasta (ex.: "⚠️ Só TDAS —
+Agente e Cuidador Social").
+
+> Esta regra existe porque a ausência dela custou caro. A skill escrevia **sempre** por
+> cargo, então num concurso multi-cargo a mesma matéria comum era mapeada N vezes — no BB
+> viraram 5 matérias × 2 cargos = 10 arquivos quase idênticos — e o `_COMUM/03-MAPAS-COMUNS/`
+> que o README, o `SETUP-VAULT.md` e o `site_collector.py` leem **nunca era escrito**. O
+> consumidor lia o que o produtor não produzia, e o efeito visível era matéria aprofundada
+> aparecendo no site sem aba Plano.
 
 **Importante**: rodar todos os mapeamentos em paralelo na mesma mensagem (uma chamada Task por matéria). Para 8 matérias = 8 chamadas Task simultâneas.
+
+**Ao terminar, conferir a cobertura**: toda matéria do edital tem de ter mapa. O
+`validate_output.py` checa isso na Etapa 10, mas um subagent que falhou (2 retries e
+segue) é mais barato de reprocessar agora do que depois.
 
 ### Etapa 6 — Coleta de materiais (subagent `material-collector`)
 

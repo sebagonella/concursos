@@ -13,6 +13,11 @@ Para UMA matéria do edital, gerar um arquivo markdown completo que sirva como r
 ## Inputs esperados
 
 - `materia_nome`: ex: "Língua Portuguesa"
+- `materia_id`: slug estável e curto, ex: `lingua-portuguesa`. **Grave-o no frontmatter**
+  (`materia_id:`) — é ele que liga este mapa ao aprofundamento e ao site. Sem ele o
+  vínculo volta a ser por nome de arquivo, que diverge do nome da pasta do
+  aprofundamento em boa parte dos casos reais.
+- `cargos`: lista dos cargos que cobram a matéria. Grave em `cargos: [...]`.
 - `tipo`: `gerais` | `especificos_comuns` | `especificos_cargo`
 - `subitem_edital`: ex: "20.2.2.1"
 - `topicos_literais`: lista de strings (tópicos exatos do edital)
@@ -55,12 +60,24 @@ Critérios:
 - 🟡 Média: matéria importante mas com peso moderado
 - 🟢 Baixa: matéria com poucas questões esperadas e baixo impacto
 
-### Passo 5 — Sugerir materiais ESPECÍFICOS para a matéria
+### Passo 5 — Sugerir materiais ESPECÍFICOS de cada TÓPICO
 
-Para cada bloco:
-- Livro de referência (apenas título + autor + editora, SEM reprodução de conteúdo)
-- Canal YouTube gratuito
-- Plataforma de questões com filtro pela banca
+Atenção ao nível: o material vai **dentro de cada tópico**, não da matéria. O que
+se pede aqui é o que serve para estudar *aquele* item do edital.
+
+Para cada tópico:
+- **Livro** — reaproveite a bibliografia da matéria (`_COMUM/04-MATERIAIS/livros-recomendados.md`)
+  em vez de inventar outra, e aponte o capítulo/parte quando souber. Só título +
+  autor + editora, sem reprodução de conteúdo.
+- **Fonte gratuita** — canal, playlist ou material oficial, específico do tópico.
+- **Questões** — plataforma com filtro pela banca E pelo tema do tópico.
+- **Norma oficial**, sempre que o tópico for jurídico: a lei/resolução em si, com
+  número e ano. Para tópico de legislação, a norma é a fonte primária — o livro é
+  o comentário.
+
+Um tópico pode ter mais de um item por categoria. Se não houver material bom para
+alguma delas, **diga que não há** em vez de preencher com genérico: linha inútil
+ocupa espaço e ensina a ignorar a seção.
 
 ### Passo 6 — Montar markdown usando template
 
@@ -91,9 +108,10 @@ Estrutura final:
 ...
 
 ### Material recomendado
-- Livro: {LIVRO + AUTOR}
+- Livro: {LIVRO + AUTOR + EDITORA} — {capítulo/parte, se souber}
 - YouTube: {CANAL + LINK}
-- Questões: {URL_FILTRADA}
+- Questões: {URL_FILTRADA_POR_BANCA_E_TEMA}
+- Norma: {LEI/RESOLUÇÃO Nº/ANO}   ← quando o tópico for jurídico
 
 ### Pegadinhas da banca neste tópico
 - {PEGADINHA_1}

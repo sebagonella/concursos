@@ -2,6 +2,59 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.10.0] - 2026-07-30
+
+### Adicionado
+- **Cobertura do edital, por matéria**: barra e fração `15/24 tópicos (62%)`, com as **lacunas nomeadas** num `<details>` — quais tópicos ainda não têm aprofundamento. A mesma fração aparece no card da matéria, no hub do escopo. É **contagem** do `topico_id` gravado na Etapa 2, nunca estimativa. No vault real: 60 de 151 tópicos = 40%.
+- **O que existe em cada assunto**, no card: nº de cards e ausência de trechos-âncora. Contagem e presença, nunca julgamento.
+- **Material por tópico**, consolidado na aba Plano: os 458 itens que já estavam nos mapas, na ordem do edital, com marcador por tipo (livro, vídeo, questões, norma). **Derivado**, não redigitado — antes só dava para vê-los abrindo um `<details>` por tópico.
+
+### Decidido — sem nota de qualidade
+Uma nota sintética foi descartada por medição, não por gosto: no vault real os sinais que a comporiam estão **saturados** — placeholders não preenchidos em 0 arquivos, `status` `revisar` em todos, `confianca_localizacao: baixa` em 0 de 92. A nota seria uma constante disfarçada de métrica, que é o oposto da regra de nunca fingir precisão. Mede-se cobertura (contável) e mostra-se o que existe (verificável).
+
+### Corrigido
+- **Falso zero de cobertura.** Matéria com assuntos e **nenhum** `topico_id` gravado tinha cobertura desconhecida, não zero — reportar 0% diria "nada foi aprofundado" sobre uma matéria inteiramente aprofundada. Agora esse caso não afirma nada, e há teste que trava.
+- A cobertura é calculada **depois** do cruzamento entre escopos: rodar antes dava 0% em `direitos-violacoes` e `servico-social`, cujo mapa está no cargo e os assuntos no `_COMUM`.
+
+## [0.9.0] - 2026-07-30
+
+### Adicionado
+- **Aba Plano em toda matéria que tenha mapa em qualquer escopo**, com a origem dita quando o plano vem do escopo vizinho ("Plano do edital de …, esta matéria é compartilhada").
+- **Visão Estudo com dois eixos**: por **tópico do edital** (na ordem do plano) e por prioridade. Assunto ainda sem vínculo vai para um balde visível — escondê-lo faria a matéria parecer menor do que é.
+- **Aprofundamento sem fonte externa aparece como o que é**: a aba do assunto diz "Material próprio · Detalhado" (a cascata genérica faria title-case e sairia "Proprio"), a ficha mostra `Fonte: material próprio` sem a linha "No livro", e a seção `Onde conferir` toma o lugar dos trechos-âncora. Verificado de ponta a ponta, com as duas versões do mesmo assunto lado a lado.
+- **"material próprio" não conta como fonte.** Ele ocupa o campo `fontes:` porque o template precisa preencher algo, mas é a declaração de que NÃO há fonte externa — contá-lo fazia o card anunciar "2 fontes" num assunto com uma norma e um texto escrito do zero.
+- `materia_id` e `topico_id` lidos do frontmatter: o join entre mapa e aprofundamento passa a ser por id, e não por nome de pasta.
+
+### Corrigido
+- **`mapa_em` era dado morto**: gravado e nunca lido, então a matéria do comum aparecia sem aba Plano mesmo com o plano existindo no cargo — exatamente o caso de "Direitos e Violações (EDAS)". Agora o mapa é **anexado**, não só apontado. No vault real isso já leva o BB de 2 matérias sem plano para zero.
+- **Casar por nome de pasta falhava em 5 das 9 matérias aprofundadas** — a mesma matéria é `direitos-violacoes` no aprofundamento e `direitos-violacoes-vulnerabilidades` no mapa, com três grafias do nome. `materia_id` resolve.
+- **Dois seletores de aba na mesma página brigavam**: o JS alternava `.visao` no documento inteiro, então um segundo eixo dentro da Estudo desligaria a visão inteira. A troca de eixo é escopada ao contêiner.
+- Mesma matéria mapeada em mais de um cargo passa a registrar os mapas extras, em vez de escolher um em silêncio.
+
+## [0.8.0] - 2026-07-30
+
+### Adicionado
+- **Todas as subseções do tópico vão para a web.** O mapa de matéria escreve, por tópico, o literal do edital, os subtópicos derivados, o material recomendado, as pegadinhas da banca e a meta de questões. O coletor já lia as cinco desde a 0.7.0 — o `bloco_plano` usava só os subtópicos e **descartava o resto na renderização**. Agora tudo passa por `md2html`, então tabela do mnemônico vira tabela, negrito da lei aparece e wikilink do material vira link.
+- **Divulgação progressiva por tópico**, com `<details>` nativo: o literal do edital e o checklist ficam à vista (o primeiro é a autoridade, o segundo é por onde se passa o olho); material, pegadinhas, meta e complementos ficam a um clique. Nativo porque abre sem JavaScript, imprime e é o que faz o Ctrl+F do Chrome saltar para dentro do tópico. Matéria com até 8 tópicos nasce aberta; acima disso, recolhida com botão **Expandir tudo** — o Firefox não expande na busca da página, e quem imprime quer o plano inteiro (o JS abre tudo no `beforeprint` e restaura depois).
+- **O resumo da dobra conta o que há dentro** (`⚠️ 7 pegadinhas · 📚 3 materiais`). Dobra muda obrigaria a abrir 24 tópicos para achar o que interessa.
+- **H3 fora do template deixa de ser descartado em silêncio.** `Leis-chave`, `Conceitos-chave / fórmulas`, `Referência legal` e os blocos mnemônicos 🧠 somam 50 blocos dentro de tópicos numerados do vault — o conteúdo que dá mais trabalho para escrever, e o que sumia. Entram como `extra`, com o rótulo do vault, e a geração **avisa no stderr** quais rótulos saíram do template.
+- **URL nua vira link** no `md2html`. `- Questões: https://…` é o formato do "Material recomendado", e sem isso a linha chegava como texto morto justamente na seção cuja razão de existir é levar ao material.
+- `md2html.converter(..., prefixo_id=)`, para converter trechos soltos da mesma página sem colidir `id`.
+
+### Corrigido
+- **Subtópicos sobrescritos: 57 itens em 5 tópicos não chegavam à página.** `secoes[chave] = texto` fazia o último bloco vencer, então um tópico com `### Subtópicos derivados — TEORIA` e `— LEI 8.662/1993` perdia o primeiro inteiro. Dava para ver: o tópico 2 de `servico-social` listava **1** subtópico enquanto o rodapé dizia **`0/22 itens do plano`** — a página se contradizia sozinha. Agora são 21, em 4 grupos rotulados.
+- **O sufixo temático do bloco some do rótulo, não do dado**: `— LEI 8.662/1993 (DECORAR ARTIGOS)` vira o título do grupo no checklist. Sem ele, quatro listas distintas viravam uma só, sem dizer de quê.
+- **Estado do checkbox preservado.** `- [x]` era descartado: item estudado ficava idêntico a não começado, enquanto o contador do rodapé dizia o contrário.
+- **`#### ` dentro de um bloco de subtópicos não some.** O vault usa H4 para subdividir (`#### Proteção Social Básica (PSB) — ofertada no CRAS`); como a lista só recolhia bullets, o H4 sumia junto com a informação de a que parte cada item pertence.
+- **Bolha só no que é marcável.** Bullet simples dentro de um bloco de subtópicos ganhava a bolha do cartão-resposta e parecia checkbox em aberto — a lista mostrava mais itens do que o contador conta. Pego contra o vault real, não pelo fixture: 2 tópicos misturam bullet e checkbox no mesmo bloco. Há teste que trava o invariante "bolhas == denominador do rodapé" em todos os tópicos.
+- **Ordem dos itens dentro do bloco.** Varrer checkbox e bullet em dois passes juntava todos os checkbox antes de todos os bullets, embaralhando bloco misto.
+- **O selo de prioridade do tópico tinha classe sem estilo.** `bloco_plano` emitia `.selo-aprof.nivel-alta|media|base` e o CSS só define `nivel-padrao|detalhado|ambos` — o selo saía sem estilo nenhum, e ainda emprestava a semântica de "profundidade do aprofundamento" para "prioridade do tópico". Agora é `.selo-prio.prio-*`, com as cores que já existiam em `.grupo-prioridade`.
+
+### Modificado
+- `mapa.topicos[].secoes` (dict chave→markdown) vira **`blocos[]`** (lista ordenada com `chave`, `rotulo`, `sufixo`, `markdown`, `itens`), e `subtopicos` deixa de ser `list[str]` para ser `list[{texto, feito, grupo}]`. `--modelo site-model.json` é contrato público: o builder continua aceitando o formato da 0.7.x, com teste.
+- **`examples/site-model-exemplo.json` passa a representar o mapa** — trazia `"mapa": null`, ou seja, o contrato justamente da parte que mudou não estava representado. E passa a ser **exercitado por teste**: nada o construía, então podia divergir do código em silêncio, que é o defeito de fixture que este repositório já pagou duas vezes.
+- Página de matéria de 24 tópicos: 25,6 kB → 69,8 kB. HTML do site inteiro: 4,6 MB → 5,1 MB, sem arquivo novo e sem requisição nova.
+
 ## [0.7.0] - 2026-07-30
 
 ### Modificado (deploy)
