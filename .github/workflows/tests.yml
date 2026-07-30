@@ -63,3 +63,50 @@ jobs:
             done
           done
           exit $erro
+
+      # O README é o índice navegável da documentação: link apontando para arquivo
+      # que não existe (ou que foi movido) transforma o índice em armadilha.
+      - name: Links relativos da documentação resolvem
+        run: |
+          python - <<'PY'
+          import pathlib, re, subprocess, sys
+          docs = [l for l in subprocess.run(["git", "ls-files"], capture_output=True,
+                                            text=True).stdout.split("\n") if l.endswith(".md")]
+          quebrados = []
+          for d in docs:
+              p = pathlib.Path(d)
+              for rot, alvo in re.findall(r"\[([^\]]+)\]\(([^)]+)\)",
+                                          p.read_text(encoding="utf-8")):
+                  if alvo.startswith(("http", "mailto:", "#", "<", "{")):
+                      continue
+                  cam = alvo.split("#")[0].strip()
+                  # `[alt](src)` aparece em CHANGELOG como sintaxe citada, não link
+                  if not cam or cam == "src":
+                      continue
+                  if not (p.parent / cam).exists():
+                      quebrados.append(f"{d}: [{rot}]({alvo})")
+          for q in quebrados:
+              print(f"::error::link quebrado — {q}")
+          sys.exit(1 if quebrados else 0)
+          PY
+
+      # O diagrama existe em dois lugares por necessidade: o .mmd é a fonte (e gera o
+      # .png) e o bloco ```mermaid do ARQUITETURA.md é o que o GitHub renderiza.
+      # Duas cópias da mesma informação divergem sem um guarda.
+      - name: Diagrama do fluxo sincronizado entre .mmd e ARQUITETURA.md
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          mmd = pathlib.Path("docs/fluxo-concurso.mmd").read_text(encoding="utf-8")
+          sem_comentario = "\n".join(l for l in mmd.split("\n")
+                                     if not l.strip().startswith("%%")).strip()
+          arq = pathlib.Path("docs/ARQUITETURA.md").read_text(encoding="utf-8")
+          m = re.search(r"```mermaid\n(.*?)\n```", arq, re.S)
+          if not m:
+              print("::error::bloco ```mermaid ausente em docs/ARQUITETURA.md")
+              sys.exit(1)
+          if m.group(1).strip() != sem_comentario:
+              print("::error::docs/ARQUITETURA.md divergiu de docs/fluxo-concurso.mmd "
+                    "— edite o .mmd e cole o bloco (sem as linhas %%)")
+              sys.exit(1)
+          PY

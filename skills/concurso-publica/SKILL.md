@@ -117,7 +117,7 @@ matéria de 11 assuntos, mostrar os 8 tipos em cinza são 88 ícones que afogam 
 título. A grade completa, com os ausentes, fica na página do assunto — onde "falta
 gerar" é acionável, porque é de lá que se chega ao prompt do NotebookLM.
 
-73/73 testes passando.
+Suíte de smoke completa (`bash scripts/test-all.sh`), com uma regressão por defeito já corrigido.
 
 ## Fluxo
 

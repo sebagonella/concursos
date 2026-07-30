@@ -18,7 +18,7 @@ O fluxo tem três etapas encadeadas:
 
 1. **`concurso-prep`** (Etapa 1) — a partir de um edital (PDF/DOCX/MD), monta a estrutura completa de estudos: cronograma, mapas por matéria, análise da banca, histórico do órgão, materiais (leis baixadas em MD+PDF), sinergias entre concursos. Suporta concurso *previsto* (sem edital ainda) e *reconciliação/retificação* quando o edital sai ou muda.
 2. **`concurso-aprofunda`** (Etapa 2) — consome a saída da Etapa 1 + um livro de referência denso. Localiza cada assunto no livro, gera um `.md` por assunto (resumo próprio + ponteiros de página + citações curtas), flashcards nativos e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM.
-3. **`concurso-publica`** (Etapa 3) — transforma a pasta de um concurso em **site estático** com mídias embutidas e quiz de flashcards. Decisões travadas: gerador próprio em Python (sem Node), por concurso, uso local/rede doméstica, **site só leitura** (progresso lido do vault na geração; o vault é a única fonte de verdade), link NotebookLM apenas se `notebooklm_url:` preenchida (sem iframe do Google).
+3. **`concurso-publica`** (Etapa 3) — transforma a pasta de um concurso em **site estático** que espelha a organização do vault (`{concurso}/{comum|cargo}/`) e publica **todo** o conteúdo abaixo do concurso: edital, cronograma, mapas de matéria, materiais e leis, histórico, sinergia, discursiva, títulos e o aprofundamento, com mídias embutidas, quiz de flashcards e uma página por assunto para o pacote NotebookLM. Cada matéria abre em duas visões — **Plano** (o mapa do edital) e **Estudo** (os assuntos aprofundados). Decisões travadas: gerador próprio em Python (sem Node), por concurso, uso local/rede doméstica, **site só leitura** (progresso lido do vault na geração; o vault é a única fonte de verdade), link NotebookLM apenas se `notebooklm_url:` preenchida (sem iframe do Google).
 
 O repositório é versionado no GitHub e instalado localmente no Claude Code do usuário.
 
@@ -40,16 +40,24 @@ skills/
 └── concurso-publica/       # Etapa 3 — concurso → site estático
     ├── SKILL.md
     ├── assets/             # site.css, site.js (sem CDN: o site roda offline)
-    └── scripts/            # site_collector.py, site_builder.py, md2html.py
+    ├── scripts/            # site_collector.py, site_builder.py, md2html.py
+    └── examples/           # site-model-exemplo.json (o contrato entre A e B)
 
 scripts/install.sh          # instalador único (instala/atualiza todas as skills)
 scripts/test-all.sh         # roda as suítes de todas as skills
 deploy/                     # Docker + rsync para servir o site num servidor doméstico
-│   ├── docker-compose.yml  # nginx:alpine, bind mount, porta 8099, 0.5 CPU / 128 MB
-│   ├── nginx.conf          # serve na raiz em concursos.casa:8099
-│   └── deploy.sh           # gera o site do vault e sincroniza via SSH
-docs/                       # documentação do projeto
+├── docker-compose.yml      # nginx:alpine, bind mount, ${CONCURSOS_PORTA:-8099}, 0.5 CPU / 128 MB
+├── nginx.conf              # serve na raiz em concursos.casa:8099
+├── deploy.sh               # gera o site do vault e sincroniza via SSH
+└── README.md               # instalação, troca de porta e troubleshooting
+docs/
+├── ARQUITETURA.md          # decisões de projeto e o porquê + diagrama do fluxo
+├── SETUP-VAULT.md          # preparar o vault Obsidian
+├── fluxo-concurso.mmd      # fonte Mermaid do diagrama
+└── fluxo-concurso.png      # o mesmo diagrama em imagem (referenciado no README)
 ```
+
+> O índice navegável de toda a documentação está no [`README.md`](README.md#documentação).
 
 ## Comandos
 

@@ -2,7 +2,7 @@
 
 Segunda etapa do fluxo de preparação para concursos. Consome a saída da skill **concurso-prep** (assuntos já mapeados no vault) + um **livro de referência** denso e produz estudo aprofundado por assunto.
 
-## O que faz (v0.2.0)
+## O que faz
 
 1. **Localiza no livro** cada assunto já mapeado da matéria — por sumário (TOC) ou, na falta dele, por densidade de termos. Saída: página exata + score de confiança.
 2. **Gera um `.md` por assunto** no vault, no **Modelo 2**: resumo completo próprio + ponteiros de página + trechos-âncora curtos citados. Não copia a obra.
@@ -81,10 +81,15 @@ O `.md` de cada assunto traz um resumo **original** (escrito do zero), a **local
 
 A localização vem com score. Assuntos não encontrados ou de baixa confiança viram **pendências explícitas** para conferência manual — a skill nunca inventa uma página.
 
-## Roadmap
+## O que ainda não existe
 
-- **v0.2.0** (atual): múltiplos aprofundamentos por assunto (fontes e níveis), prioridade, doc da banca, pacote NotebookLM completo.
-- **v0.1.0**: Subsistemas A + B + flashcards nativos.
-- **Próxima**: Ponte NotebookLM em duas camadas (manual garantido + automação opcional via `notebooklm-py`), gerando podcast e mapa mental por assunto.
+- **Automação do NotebookLM.** A camada manual está pronta e é a garantida: a skill
+  gera o pacote com as fontes e os prompts, e a `concurso-publica` publica isso como
+  página com botão de copiar. A automação (via `notebooklm-py`, que usa endpoints
+  internos não-documentados do Google) entraria como camada **opcional** por cima,
+  nunca substituindo o modo manual.
+
+O histórico de versões vive no [CHANGELOG.md](CHANGELOG.md) — antes havia um roadmap
+aqui que repetia e contradizia o changelog.
 
 Versão atual: **0.4.1** (o pacote NotebookLM passa a emitir `notebooklm_url:`, herdando o valor digitado à mão nas regenerações).

@@ -4,24 +4,19 @@
 
 O projeto é uma coleção de skills do Claude Code que produzem material de estudo dentro de um vault Obsidian. Nenhuma delas é um serviço rodando: são **instruções + scripts** que o Claude Code executa sob demanda.
 
-```
-Edital (PDF)  ──[concurso-prep]──▶  Estrutura de estudos no vault
-                                            │
-Livro (PDF/EPUB) ──[concurso-aprofunda]────┤──▶  Assuntos aprofundados
-                                            │      + flashcards
-                                            └──▶  Pacote NotebookLM (manual)
-                                                        │
-                                                   podcast / mapa mental
-                                                   vídeo / report / slides
-                                                        │
-                     vault ──[concurso-publica]────────▶ site estático
-                                                          (deploy/ → Docker)
-```
+Três etapas encadeadas, cada uma consumindo a saída da anterior:
+
+1. **`concurso-prep`** — o edital vira a estrutura de estudo no vault.
+2. **`concurso-aprofunda`** — o livro de referência vira assunto aprofundado, com flashcards e o pacote do NotebookLM.
+3. **`concurso-publica`** — o vault vira site estático, servido por Docker na rede doméstica.
 
 ## O fluxo completo, do edital ao site no ar
 
 Fonte deste diagrama: [`fluxo-concurso.mmd`](fluxo-concurso.mmd) · versão em imagem:
-[`fluxo-concurso.png`](fluxo-concurso.png).
+[`fluxo-concurso.png`](fluxo-concurso.png), que é a usada no [README](../README.md).
+
+> O diagrama ASCII que ficava aqui foi removido: descrevia o mesmo fluxo em paralelo
+> com o Mermaid logo abaixo, e duas versões da mesma informação divergem com o tempo.
 
 ```mermaid
 flowchart TB

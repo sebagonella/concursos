@@ -1,6 +1,6 @@
 # concursos-vault-skills
 
-Skills do [Claude Code](https://claude.com/claude-code) que automatizam a preparação para **concursos públicos brasileiros**, gerando material de estudo estruturado direto num **vault Obsidian**.
+Skills do [Claude Code](https://claude.com/claude-code) que automatizam a preparação para **concursos públicos brasileiros**, gerando material de estudo estruturado direto num **vault Obsidian** — e publicando tudo como site navegável.
 
 ## As skills
 
@@ -8,9 +8,15 @@ Skills do [Claude Code](https://claude.com/claude-code) que automatizam a prepar
 |---|---|---|
 | **`concurso-prep`** | 1 | Do **edital** → estrutura completa de estudos: cronograma em 3 fases, mapas por matéria, análise da banca, histórico do órgão, leis baixadas (MD+PDF), sinergias entre concursos |
 | **`concurso-aprofunda`** | 2 | Do **livro de referência** → um `.md` por assunto (resumo próprio + páginas do livro + citações curtas), flashcards (Obsidian/Anki) e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM |
-| **`concurso-publica`** | 3 | Do **vault** → site estático navegável, com uma página por assunto onde o podcast toca, o vídeo roda, o mapa e o infográfico aparecem e os flashcards viram quiz |
+| **`concurso-publica`** | 3 | Do **vault** → site estático navegável com **todo** o conteúdo do concurso, espelhando a organização em COMUM e cargos: edital, cronograma, mapas de matéria, leis, histórico, sinergia, discursiva e o aprofundamento — com o podcast tocando, o vídeo rodando, flashcards como quiz e os prompts do NotebookLM a um toque |
 
 Cada etapa consome a saída da anterior.
+
+## O fluxo, do edital ao site no ar
+
+![Fluxo completo de um concurso](docs/fluxo-concurso.png)
+
+Versão nativa (com as notas de projeto) em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md#o-fluxo-completo-do-edital-ao-site-no-ar) · fonte Mermaid em [`docs/fluxo-concurso.mmd`](docs/fluxo-concurso.mmd).
 
 ### Destaques
 
@@ -19,7 +25,9 @@ Cada etapa consome a saída da anterior.
 - **Reaproveitamento entre concursos**: se um assunto já foi aprofundado com o mesmo livro em outro concurso, a skill detecta e reaproveita em vez de refazer.
 - **Localização automática no livro**: casa cada assunto do edital com as páginas do livro (via sumário ou densidade de termos), com score de confiança — e marca como pendência o que não achou com segurança.
 - **Vários aprofundamentos por assunto**: o mesmo assunto pode ter versões de fontes diferentes e em dois níveis (padrão para revisão, detalhado para domínio), selecionáveis no site.
-- **Site de estudo**: tema claro/escuro, concursos agrupados por órgão, assuntos agrupados por prioridade (alta/média/base) e download de todas as mídias.
+- **Uma matéria, duas visões**: no site, cada matéria abre em **Plano** (os tópicos do edital, com os subtópicos derivados) ou **Estudo** (os assuntos aprofundados) — o plano e o conteúdo no mesmo lugar.
+- **Pacote NotebookLM acionável**: cada assunto tem uma página com as fontes a subir e os 4 prompts com botão de copiar, para não precisar reescrevê-los a cada geração.
+- **Site de estudo**: tema claro/escuro, concursos por órgão, escopos COMUM/cargo, assuntos por prioridade, wikilinks do vault virando navegação e download de todas as mídias. Roda offline, sem CDN.
 
 ## Instalação
 
@@ -48,6 +56,8 @@ bash scripts/install.sh --list
 ```bash
 pip install -r skills/concurso-prep/requirements.txt
 ```
+
+Todas as dependências Python são **opcionais** e degradam com aviso: sem `reportlab` as leis saem só em `.md`, sem OCR o PDF escaneado vira pendência. A geração do site não tem dependência externa nenhuma — o conversor Markdown→HTML é próprio, justamente para o site funcionar offline.
 
 ## Uso
 
@@ -84,7 +94,51 @@ O site gerado pela Etapa 3 pode ser servido num container Docker enxuto. Tudo em
 ./deploy/deploy.sh --concurso-dir <...> --dry-run      # conferir antes
 ```
 
-O container usa **bind mount**, então atualizar o site é só sincronizar arquivos — sem rebuild de imagem nem restart. Limites dimensionados para ~3 usuários simultâneos (0.5 CPU / 128 MB). Detalhes, snippet do proxy reverso e troubleshooting em [`deploy/README.md`](deploy/README.md).
+O container usa **bind mount**, então atualizar o site é só sincronizar arquivos — sem rebuild de imagem nem restart. Limites dimensionados para ~3 usuários simultâneos (0.5 CPU / 128 MB). Detalhes, troca de porta e troubleshooting em [`deploy/README.md`](deploy/README.md).
+
+## Documentação
+
+### Comece por aqui
+
+| Documento | Para quê |
+|---|---|
+| [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | **As decisões de projeto e o porquê de cada uma**: por que três skills e não uma, por que o site é derivado, como funciona a identidade de um aprofundamento, a arquitetura de informação do site, e o diagrama do fluxo em versão nativa |
+| [`docs/SETUP-VAULT.md`](docs/SETUP-VAULT.md) | Preparar o vault Obsidian: estrutura esperada em `30_AREAS/CARREIRA/CONCURSOS/`, plugins e fluxo de trabalho |
+| [`CLAUDE.md`](CLAUDE.md) | **Convenções invioláveis** — a maioria veio de bug real, e quebrá-las quebra coisa de novo. Leitura obrigatória antes de mexer no código |
+| [`deploy/README.md`](deploy/README.md) | Servir o site num servidor doméstico: Docker, rsync, DNS local, troca de porta e troubleshooting |
+| [`docs/fluxo-concurso.mmd`](docs/fluxo-concurso.mmd) | Fonte Mermaid do diagrama do fluxo (o `.png` é gerado dela) |
+
+### Por skill
+
+Cada skill tem a mesma anatomia: `SKILL.md` é o orquestrador que o Claude executa, `README.md` é a referência de uso para humanos, `CHANGELOG.md` registra o que mudou e **por que**.
+
+| Skill | Orquestrador | Uso | Histórico |
+|---|---|---|---|
+| `concurso-prep` | [`SKILL.md`](skills/concurso-prep/SKILL.md) | [`README.md`](skills/concurso-prep/README.md) | [`CHANGELOG.md`](skills/concurso-prep/CHANGELOG.md) |
+| `concurso-aprofunda` | [`SKILL.md`](skills/concurso-aprofunda/SKILL.md) | [`README.md`](skills/concurso-aprofunda/README.md) | [`CHANGELOG.md`](skills/concurso-aprofunda/CHANGELOG.md) |
+| `concurso-publica` | [`SKILL.md`](skills/concurso-publica/SKILL.md) | [`README.md`](skills/concurso-publica/README.md) | [`CHANGELOG.md`](skills/concurso-publica/CHANGELOG.md) |
+
+### Subagents da Etapa 1
+
+A `concurso-prep` distribui o trabalho entre cinco subagents, cada um com o próprio prompt versionado:
+
+| Subagent | O que faz |
+|---|---|
+| [`edital-parser`](skills/concurso-prep/agents/edital-parser.md) | Transforma o edital em dados estruturados: órgão, banca, datas, vagas, estrutura da prova e conteúdo programático por cargo |
+| [`materia-mapper`](skills/concurso-prep/agents/materia-mapper.md) | Um por matéria, em paralelo: deriva subtópicos, prioridades, pegadinhas da banca e checklists |
+| [`historico-researcher`](skills/concurso-prep/agents/historico-researcher.md) | Bancas e vagas das edições anteriores do órgão, com download dos editais públicos |
+| [`material-collector`](skills/concurso-prep/agents/material-collector.md) | Baixa leis, decretos e resoluções de fonte oficial, em Markdown **e** PDF |
+| [`sinergia-finder`](skills/concurso-prep/agents/sinergia-finder.md) | Acha concursos da mesma banca com matérias em comum e baixa provas para treino |
+
+### Exemplos executáveis
+
+| Exemplo | Cenário |
+|---|---|
+| [`concurso-prep/examples/sedes-2026-mock`](skills/concurso-prep/examples/sedes-2026-mock/README.md) | Caso de teste com o edital real da Sedes/DF 2026 (Instituto Quadrix) |
+| [`concurso-prep/examples/previsto-reconciliacao`](skills/concurso-prep/examples/previsto-reconciliacao/README.md) | O ciclo completo de um concurso esperado ainda sem edital, até a reconciliação |
+| [`concurso-aprofunda/examples/portugues-demo`](skills/concurso-aprofunda/examples/portugues-demo/README.md) | Exercita a Etapa 2 sem precisar de um livro real |
+
+> [`.claude/CLAUDE.md`](.claude/CLAUDE.md) não é documentação de uso: é o contexto que o Claude Code carrega ao abrir o repo, com os caminhos do vault do autor.
 
 ## Desenvolvimento
 
@@ -93,11 +147,13 @@ bash scripts/test-all.sh              # testes de todas as skills
 bash scripts/test-all.sh --only concurso-prep
 ```
 
+Cada skill tem `scripts/tests/test_smoke.py`, que **roda standalone, sem pytest**. Toda correção de bug ganha um teste que a reproduz — vários dos testes atuais existem porque o defeito voltou uma vez.
+
 Convenções e diretrizes de contribuição estão no [`CLAUDE.md`](CLAUDE.md) — vale ler antes de mexer, pois várias regras vieram de bugs reais.
 
 ## Nota sobre direitos autorais
 
-A Etapa 2 trabalha com livros protegidos por direitos autorais e **não extrai o texto integral** deles. Cada arquivo de assunto traz um resumo **original**, a **localização** no livro (páginas) e, no máximo, **trechos curtos citados** com atribuição. O objetivo é orientar o estudo no livro, não substituí-lo.
+A Etapa 2 trabalha com livros protegidos por direitos autorais e **não extrai o texto integral** deles. Cada arquivo de assunto traz um resumo **original**, a **localização** no livro (páginas) e, no máximo, **trechos curtos citados** com atribuição. O objetivo é orientar o estudo no livro, não substituí-lo. O site publica esse material e nunca o livro: nem por cópia, nem por link — o PDF fica fora da árvore servida.
 
 ## Licença
 

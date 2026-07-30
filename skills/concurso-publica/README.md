@@ -23,4 +23,4 @@ A saída espelha o vault: `{concurso}/{comum|cargo}/`, com as seções numeradas
 edital) e **Estudo** (os assuntos aprofundados).
 
 Versão atual: **0.7.0** (escopos COMUM/cargo, todo o conteúdo do concurso, mapas de
-matéria na aba Plano e pacote NotebookLM como página; 73 testes).
+matéria na aba Plano e pacote NotebookLM como página).
