@@ -12,16 +12,26 @@ Segunda etapa do fluxo de preparação para concursos. Consome a saída da skill
 ## Níveis e múltiplos aprofundamentos
 
 Um assunto pode ter **vários aprofundamentos**, cada um na sua pasta, identificados
-por `{nivel}--{N}f--f1-{fonte1}[--f2-{fonte2}]`:
+por `{nivel}--{fonte1}[+{fonte2}]`:
 
 ```
 assuntos/emprego-do-acento-indicativo-de-crase/
-├── padrao--1f--f1-pestana/
-└── detalhado--1f--f1-pestana/
+├── padrao--pestana/
+│   ├── emprego-do-acento-indicativo-de-crase--padrao--pestana--SEDES_2026.md
+│   ├── flashcards-…--padrao--pestana--SEDES_2026.md   (Obsidian)
+│   ├── flashcards-…--padrao--pestana--SEDES_2026.csv  (Anki)
+│   └── _fonte-notebooklm.md
+└── detalhado--pestana/
 ```
 
-O slug da fonte é o sobrenome de um autor (`f1-pestana`) ou o identificador da
-norma (`f1-lei-8742`, `f1-res-cmn-4893`). Detalhe completo no `SKILL.md`.
+O slug da fonte é o sobrenome de um autor (`pestana`) ou o identificador da norma
+(`lei-8742`, `res-cmn-4893`). O identificador carrega **só o que diferencia**: nível,
+fonte e — no nome do arquivo — o concurso. O concurso está ali por motivo empírico:
+18 arquivos colidiam entre `SEDES_2026` e `BB_2027_PREVISTO`, que usam o mesmo livro
+para os mesmos assuntos, e o Obsidian resolve wikilink por nome de arquivo.
+
+A convenção é implementada uma única vez, em `scripts/aprofundamento_id.py`, que é a
+**fonte de verdade**. Detalhe completo no `SKILL.md`.
 
 
 | Nível | Tamanho | Seções extras |
@@ -66,12 +76,28 @@ A skill localiza os assuntos no livro, gera os `.md` por assunto (que o Claude p
 # Localizar assuntos no livro
 python scripts/book_index.py --livro livro.pdf --assuntos assuntos.json --out mapa.json
 
-# Gerar arcabouço .md por assunto
-python scripts/build_subject_md.py --mapa mapa.json --out-dir assuntos/ --concurso SEDES_2026
+# Gerar arcabouço .md por assunto — SEMPRE com --fontes e --nivel: sem eles o
+# script cai no caminho legado e a identidade do aprofundamento não se forma
+python scripts/build_subject_md.py --mapa mapa.json --out-dir assuntos/ \
+  --concurso SEDES_2026 --fontes "A Gramática para Concursos (Pestana)" --nivel padrao
 
-# Flashcards de um assunto
-python scripts/flashcards_gen.py --cards cards.json --out-dir assuntos/crase/
+# Flashcards — a --out-dir é a pasta do APROFUNDAMENTO, não a do assunto, e o
+# nome-base precisa casar com o do .md, senão o wikilink do Obsidian não resolve
+python scripts/flashcards_gen.py --cards cards.json \
+  --out-dir assuntos/crase/padrao--pestana/ \
+  --aprofundamento padrao--pestana --concurso SEDES_2026
+
+# Cobertura do livro vs. edital · pacote NotebookLM · reaproveitamento entre concursos
+python scripts/book_coverage.py --help
+python scripts/notebooklm_pack.py --help
+python scripts/reuse_finder.py --help
+
+# Migrar aprofundamentos de uma convenção de pasta anterior
+python scripts/migrar_aprofundamentos.py --help
 ```
+
+Todos os scripts têm `--help`. O `aprofundamento_id.py` não é executável: é o módulo
+com a convenção de nomes, importado pelos outros.
 
 ## Direitos autorais (Modelo 2)
 

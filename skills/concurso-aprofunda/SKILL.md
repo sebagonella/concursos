@@ -14,7 +14,7 @@ Segunda etapa do fluxo de preparação. Consome a saída da `concurso-prep` (os 
 2. Existe um livro de referência da matéria no vault (PDF com texto, PDF escaneado, ou EPUB).
 3. A matéria tem assuntos mapeados (lista de tópicos no mapa da matéria).
 
-## Aprofundamentos: fontes e níveis (0.4.0)
+## Aprofundamentos: fontes e níveis
 
 Um assunto pode ter **vários aprofundamentos**. Cada um vive na sua própria pasta,
 direto sob a pasta do assunto:
@@ -101,9 +101,12 @@ Nunca sobrescreve pasta de destino existente e recusa migrar quando o slug da
 fonte sai suspeito, reportando pendência em vez de gravar um path ruim.
 É opcional para leitura: o site lê os formatos antigos também.
 
-## Escopo desta versão (0.3.0)
+## Escopo desta versão
 
-Cobre os **Subsistemas A + B + flashcards nativos**. A **Etapa NotebookLM** (podcast, mapa mental) é preparada mas executada numa etapa seguinte (ver "Ponte NotebookLM").
+Cobre a localização no livro, os `.md` de assunto em dois níveis, os flashcards
+nativos (Obsidian + Anki) e o **pacote NotebookLM**, que a `concurso-publica`
+publica como página com prompts copiáveis. A geração da mídia em si é manual, no
+NotebookLM — ver "Ponte NotebookLM".
 
 ## Parâmetros
 
@@ -123,7 +126,8 @@ Cobre os **Subsistemas A + B + flashcards nativos**. A **Etapa NotebookLM** (pod
 
 ```
 1. Ler os assuntos mapeados da matéria
-   - Fonte: {concurso}/{CARGO}/03-MAPAS-MATERIAS/{materia}/ (ou o índice da matéria)
+   - Fonte: os mapas de matéria — .md PLANOS em {concurso}/{CARGO}/03-MAPAS-MATERIAS/
+     ou em {concurso}/_COMUM/03-MAPAS-COMUNS/ (matérias comuns a vários cargos)
    - Montar assuntos.json = {materia, assuntos:[...]}
 
 2. Localizar cada assunto no livro   [Subsistema A]
@@ -214,24 +218,32 @@ Cobre os **Subsistemas A + B + flashcards nativos**. A **Etapa NotebookLM** (pod
    - scripts/flashcards_gen.py --cards cards.json --out-dir <pasta-do-aprofundamento>
    - IMPORTANTE: a --out-dir é a pasta do APROFUNDAMENTO
      (assuntos/{assunto}/{nivel}--{fonte}/), não a do assunto.
-   - Passe --aprofundamento <id> (ou --nome-base): sem isso os arquivos saem com
-     o nome legado e o wikilink do .md não resolve.
+   - Passe --aprofundamento <id> (ou --nome-base) E --concurso: sem eles os
+     arquivos saem com o nome legado e o wikilink do .md não resolve.
      Cada aprofundamento tem seus próprios flashcards, derivados da sua fonte.
    - No nível `detalhado`, gere mais cartões (cobrindo casos especiais e exceções)
    - Saída: flashcards-{slug}.md (Obsidian) + .csv (Anki)
 
-7. Preparar a ponte NotebookLM  [Subsistema C — só o pacote, execução na próxima etapa]
+7. Preparar a ponte NotebookLM  [Subsistema C — o pacote; a geração da mídia é manual]
    - scripts/notebooklm_pack.py --assuntos-dir <assuntos/> --concurso <c> --materia <m> [--leis-dir <...>]
    - Gera um pacote POR APROFUNDAMENTO: fontes diferentes merecem notebooks
      diferentes no NotebookLM (o material de origem não é o mesmo).
-   - Gera _fonte-notebooklm.md por assunto: nome do notebook, fontes a subir,
-     prompt de áudio pronto, roteiro de cliques (podcast/mapa mental/vídeo) e checklist.
+   - Gera _fonte-notebooklm.md: nome do notebook, fontes a subir, os 4 prompts
+     prontos (áudio/mapa mental/vídeo/report), roteiro de cliques e checklist.
    - UM notebook POR ASSUNTO (decisão de design: foco e qualidade; casa com reaproveitamento).
+   - O frontmatter sai com notebooklm_url: "" para o usuário colar o link depois de
+     criar o notebook — é o que faz o botão "Abrir no NotebookLM" aparecer no site.
+   - Reexecutar é SEGURO: herdar_campos() traz notebooklm_url e notebooklm_status do
+     pack antigo. São os dois únicos campos que o gerador não sabe reconstruir; sem
+     esse cuidado a URL digitada à mão iria para o .bak.md e o botão desapareceria
+     do site sem erro nenhum.
+   - Sem --leis-dir a seção de fontes lista só o .md do assunto; passe a pasta de
+     leis-baixadas para as normas relacionadas entrarem como fonte sugerida.
 
 8. Validar e resumir
    - Conferir que nenhum {PLACEHOLDER} sobrou nos .md preenchidos
    - Apresentar: assuntos localizados/gerados, pendências de conferência,
-     flashcards gerados, e o que fica pronto para a Etapa NotebookLM
+     flashcards gerados, e os pacotes NotebookLM prontos para executar
 ```
 
 ## Estrutura gerada
@@ -248,7 +260,7 @@ Cobre os **Subsistemas A + B + flashcards nativos**. A **Etapa NotebookLM** (pod
     │       ├── flashcards-concordancia-verbal-e-nominal--padrao--pestana--SEDES_2026.md
     │       ├── flashcards-concordancia-verbal-e-nominal--padrao--pestana--SEDES_2026.csv
     │       ├── cards.json
-    │       └── _fonte-notebooklm.md    # pacote p/ a próxima etapa
+    │       └── _fonte-notebooklm.md    # fontes + os 4 prompts
     └── emprego-do-acento-indicativo-de-crase/
         ├── padrao--pestana/          # dois aprofundamentos do mesmo assunto,
         └── detalhado--pestana/       # lado a lado
@@ -257,16 +269,31 @@ Cobre os **Subsistemas A + B + flashcards nativos**. A **Etapa NotebookLM** (pod
 > Matéria comum a vários cargos (ex.: Português) fica em `_COMUM/`; matéria
 > específica fica na pasta do cargo.
 
-## Ponte NotebookLM (próxima etapa — arquitetura de duas camadas)
+## Ponte NotebookLM
 
-Esta versão só **prepara** o insumo. A execução (gerar podcast/mapa mental) virá numa etapa seguinte, em duas camadas:
+A ponte é **manual por decisão de projeto**, e o ciclo está fechado:
 
-- **Camada garantida (manual/semi-auto):** a skill gera `_fonte-notebooklm.md` por assunto — um pacote com as fontes sugeridas (o .md do assunto + leis relacionadas) e um roteiro de cliques. O usuário sobe no NotebookLM manualmente.
-- **Camada opcional (automatizada):** se a lib da comunidade `notebooklm-py` estiver instalada e funcionando, um script orquestra a criação do notebook, o upload das fontes e a geração dos artefatos. Como usa endpoints não-oficiais do Google, é frágil por natureza — se falhar, cai na camada manual sem perda.
+1. Esta skill gera o `_fonte-notebooklm.md` por aprofundamento — as fontes a subir (o
+   `.md` do assunto e, com `--leis-dir`, as normas relacionadas) e os prompts prontos.
+2. A `concurso-publica` publica esse pacote como **página do site**, em
+   `…/{assunto}/notebooklm/`, com **botão de copiar** em cada prompt: os prompts vão
+   daqui direto para o campo "Customize" do Estúdio, sem reescrever nada.
+3. O usuário sobe as fontes, gera e baixa a mídia para a pasta do aprofundamento — o
+   site detecta por **presença de arquivo**, sem configuração.
+4. O usuário cola a URL do notebook em **`notebooklm_url:`** no pack, e o site passa a
+   mostrar o botão "Abrir no NotebookLM". Regerar o pack **preserva** esse valor (ver
+   `herdar_campos()` na Etapa 7).
 
 Divisão de responsabilidades por artefato:
-- **Podcast (áudio) e mapa mental** → especialidade do NotebookLM.
-- **Flashcards e resumo esquemático** → gerados nativamente pela própria skill (melhor controle, sem dependência frágil). Já cobertos nesta versão.
+- **Podcast, vídeo, mapa mental e report** → especialidade do NotebookLM.
+- **Flashcards e resumo** → gerados nativamente por esta skill, com melhor controle e
+  sem dependência frágil.
+
+> **Automação continua fora**, e não por falta de tempo: não existe API pública de
+> consumidor do NotebookLM, e a via da comunidade (`notebooklm-py`) usa endpoints
+> internos não-documentados do Google, que quebram sem aviso. Se um dia entrar, será
+> camada **opcional** sobre o modo manual — que é o caminho garantido — nunca em
+> substituição. Nada disso existe no repo hoje.
 
 ## Scripts
 

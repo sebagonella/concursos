@@ -474,7 +474,7 @@ Se a pasta destino já existe:
 ## Tratamento de erros
 
 - **Edital sem dados claros**: pedir confirmação ao usuário (modo interativo)
-- **Lei não encontrada**: registrar em `.logs/pendencias.md` e seguir
+- **Lei não encontrada**: registrar em `.logs/{ORGAO}_{ANO}/pendencias.md` e seguir
 - **Banca desconhecida**: usar perfil genérico + alertar usuário
 - **Subagent timeout**: 2 retries, depois falha graciosa preservando o que já foi feito
 - **Download falho**: registrar em `.logs/downloads-falhos.md` com URL para tentativa manual
@@ -550,7 +550,7 @@ Ao terminar, mostrar:
 
 Próximos passos sugeridos:
 1. Abrir {OUTPUT_DIR}/00-INDICE.md no Obsidian
-2. Revisar o cronograma em 02-Cronograma/
+2. Revisar o cronograma em 02-CRONOGRAMA/
 3. Conferir pendências em .logs/pendencias.md
-4. Começar pelo Capítulo prioritário identificado em 03-Mapas-Materias/
+4. Começar pelo assunto de prioridade alta identificado em 03-MAPAS-MATERIAS/
 ```

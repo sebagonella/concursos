@@ -2,6 +2,12 @@
 
 Skill para Claude Code que gera estrutura completa de preparação para concurso público a partir de um edital, replicando o workflow de análise manual: cronograma adaptativo, mapas detalhados por matéria, materiais de referência baixados, histórico do órgão e identificação de provas com sinergia.
 
+**Etapa 1 de 3.** A saída desta skill é o insumo das outras duas:
+[`concurso-aprofunda`](../concurso-aprofunda/README.md) transforma um livro de
+referência em assuntos aprofundados, e
+[`concurso-publica`](../concurso-publica/README.md) transforma a pasta do concurso em
+site navegável. Visão geral do fluxo no [README da raiz](../../README.md).
+
 ---
 
 ## 🎯 O que faz
@@ -46,25 +52,26 @@ Tudo persistido em **Markdown no vault Obsidian**, sob `30_AREAS/CARREIRA/CONCUR
 
 ### Instalar a skill
 
-```bash
-# Skill global (todos os projetos)
-cp -r concurso-prep ~/.claude/skills/
-
-# OU skill local (só este projeto)
-cp -r concurso-prep .claude/skills/
-```
-
-### Instalar os subagents
+Use o instalador único, na raiz do repositório — ele copia a skill **e os 5
+subagents**, checa os pré-requisitos, roda o smoke test da skill instalada e limpa
+`__pycache__`. Copiar as pastas à mão deixa os subagents para trás.
 
 ```bash
-# Subagents globais
-mkdir -p ~/.claude/agents/
-cp concurso-prep/agents/*.md ~/.claude/agents/
+# global (todos os projetos), todas as skills
+bash scripts/install.sh
 
-# OU subagents locais
-mkdir -p .claude/agents/
-cp concurso-prep/agents/*.md .claude/agents/
+# só esta skill
+bash scripts/install.sh --only concurso-prep
+
+# local: instala no .claude/ do diretório atual em vez de ~/.claude/
+bash scripts/install.sh --local --only concurso-prep
+
+bash scripts/install.sh --list        # o que há disponível e em que versão
+bash scripts/install.sh --uninstall   # remover
 ```
+
+> **Reinicie a sessão do Claude Code** depois de instalar ou atualizar — as skills são
+> lidas no início da sessão.
 
 ### Verificar instalação
 
@@ -110,8 +117,8 @@ cargos "EDAS:Administração,TDAS:Administrativo"
 
 Isso gera uma única pasta `SEDES_2026/` com:
 - `_COMUM/` — edital, materiais, histórico (compartilhados)
-- `EDAS-Administracao/` — cronograma e mapas específicos
-- `TDAS-Administrativo/` — cronograma e mapas específicos
+- `EDAS-ADMINISTRACAO/` — cronograma e mapas específicos
+- `TDAS-ADMINISTRATIVO/` — cronograma e mapas específicos
 
 ---
 
@@ -127,6 +134,9 @@ Isso gera uma única pasta `SEDES_2026/` com:
 │   │   ├── edital-resumo.md
 │   │   ├── cronograma-oficial.md
 │   │   └── analise-banca.md
+│   ├── 03-MAPAS-COMUNS/          # mapas de matéria comuns a vários cargos
+│   │   ├── 00-INDICE.md          # (o código trata como equivalente a
+│   │   └── 01-*.md               #  03-MAPAS-MATERIAS do cargo)
 │   ├── 04-MATERIAIS/
 │   │   ├── livros-recomendados.md
 │   │   ├── canais-youtube.md
@@ -151,6 +161,7 @@ Isso gera uma única pasta `SEDES_2026/` com:
     │   ├── 02-...md
     │   └── ...
     ├── 07-DISCURSIVA/      # se aplicável
+    ├── 08-TITULOS.md       # se o edital tiver prova de títulos
     └── 99-Status.md
 ```
 
@@ -278,7 +289,7 @@ Ao final, a skill roda `scripts/validate_output.py` que checa:
 - [x] Soma de questões por matéria bate com total da prova
 - [x] Cronograma termina antes da prova
 - [x] PDFs baixados têm header `%PDF-` válido
-- [x] Tags Obsidian consistentes
+- [x] Banner `CONTEÚDO PROVISÓRIO` presente, no modo previsto
 
 Problemas vão para `pendencias.md`.
 
@@ -332,7 +343,6 @@ Algumas leis estaduais não estão em portais padronizados. Veja `downloads-falh
 concurso-prep/
 ├── SKILL.md                    # orquestrador principal (10 etapas + reconciliação)
 ├── README.md                   # este arquivo
-├── install.sh                  # instalador (global/local/uninstall)
 ├── agents/
 │   ├── edital-parser.md
 │   ├── materia-mapper.md
@@ -344,11 +354,13 @@ concurso-prep/
 │   └── templates/              # 13 templates .md.tpl
 ├── scripts/
 │   ├── extract_edital.py       # PDF/DOCX/MD → texto
-│   ├── fetch_pdf.py            # download robusto
+│   ├── fetch_lei.py            # lei/decreto de fonte oficial → MD + PDF (item 9)
+│   ├── fetch_pdf.py            # download robusto (fonte que já serve PDF nativo)
 │   ├── slugify.py              # nomes de pasta UPPERCASE
 │   ├── diff_editais.py         # diff de conteúdo programático (reconciliação)
 │   ├── validate_output.py      # validação final
-│   └── log_helper.py           # logging
+│   ├── log_helper.py           # logging
+│   └── tests/test_smoke.py     # suíte standalone (sem pytest)
 └── examples/
     ├── sedes-2026-mock/        # caso modo oficial
     └── previsto-reconciliacao/ # caso modo previsto + reconciliação
