@@ -70,6 +70,13 @@ jobs:
         run: |
           python - <<'PY'
           import pathlib, re, subprocess, sys
+
+          def ancora_github(titulo):
+              """Minúsculas, sem pontuação, espaço->hífen. ACENTO FICA — o GitHub o
+              preserva, e removê-lo faz `#documentação` virar falso positivo."""
+              t = re.sub(r"[^\w\s-]", "", titulo.strip().lower(), flags=re.UNICODE)
+              return re.sub(r"\s+", "-", t)
+
           docs = [l for l in subprocess.run(["git", "ls-files"], capture_output=True,
                                             text=True).stdout.split("\n") if l.endswith(".md")]
           quebrados = []
@@ -77,36 +84,44 @@ jobs:
               p = pathlib.Path(d)
               for rot, alvo in re.findall(r"\[([^\]]+)\]\(([^)]+)\)",
                                           p.read_text(encoding="utf-8")):
-                  if alvo.startswith(("http", "mailto:", "#", "<", "{")):
+                  if alvo.startswith(("http", "mailto:", "<", "{")):
                       continue
-                  cam = alvo.split("#")[0].strip()
+                  cam, _, frag = alvo.partition("#")
+                  cam = cam.strip()
                   # `[alt](src)` aparece em CHANGELOG como sintaxe citada, não link
-                  if not cam or cam == "src":
+                  if cam == "src":
                       continue
-                  if not (p.parent / cam).exists():
-                      quebrados.append(f"{d}: [{rot}]({alvo})")
+                  destino = p if not cam else (p.parent / cam)
+                  if cam and not destino.exists():
+                      quebrados.append(f"{d}: [{rot}]({alvo}) — arquivo inexistente")
+                      continue
+                  if frag and destino.suffix == ".md":
+                      titulos = re.finditer(r"^#+\s+(.+)$",
+                                            destino.read_text(encoding="utf-8"), re.M)
+                      if frag not in {ancora_github(m.group(1)) for m in titulos}:
+                          quebrados.append(f"{d}: [{rot}]({alvo}) — âncora inexistente")
           for q in quebrados:
               print(f"::error::link quebrado — {q}")
           sys.exit(1 if quebrados else 0)
           PY
 
-      # O diagrama existe em dois lugares por necessidade: o .mmd é a fonte (e gera o
-      # .png) e o bloco ```mermaid do ARQUITETURA.md é o que o GitHub renderiza.
-      # Duas cópias da mesma informação divergem sem um guarda.
-      - name: Diagrama do fluxo sincronizado entre .mmd e ARQUITETURA.md
+      # O diagrama vive em dois lugares: o .mmd é a fonte (e carrega os comentários
+      # %% com as pegadinhas de layout) e o bloco ```mermaid do README é o que o
+      # GitHub renderiza. Duas cópias da mesma informação divergem sem um guarda.
+      - name: Diagrama do fluxo sincronizado entre .mmd e README
         run: |
           python - <<'PY'
           import pathlib, re, sys
           mmd = pathlib.Path("docs/fluxo-concurso.mmd").read_text(encoding="utf-8")
           sem_comentario = "\n".join(l for l in mmd.split("\n")
                                      if not l.strip().startswith("%%")).strip()
-          arq = pathlib.Path("docs/ARQUITETURA.md").read_text(encoding="utf-8")
+          arq = pathlib.Path("README.md").read_text(encoding="utf-8")
           m = re.search(r"```mermaid\n(.*?)\n```", arq, re.S)
           if not m:
-              print("::error::bloco ```mermaid ausente em docs/ARQUITETURA.md")
+              print("::error::bloco ```mermaid ausente em README.md")
               sys.exit(1)
           if m.group(1).strip() != sem_comentario:
-              print("::error::docs/ARQUITETURA.md divergiu de docs/fluxo-concurso.mmd "
+              print("::error::README.md divergiu de docs/fluxo-concurso.mmd "
                     "— edite o .mmd e cole o bloco (sem as linhas %%)")
               sys.exit(1)
           PY
