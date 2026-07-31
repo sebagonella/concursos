@@ -1,0 +1,25 @@
+# Dependências da skill concurso-notebooklm
+# ----------------------------------------------------------------------------
+# TODAS são OPCIONAIS. Sem elas a skill degrada para o modo manual:
+#   - sem notebooklm-py -> a camada de contrato (ler o pacote, planejar, nomear)
+#     continua funcionando; só a execução no NotebookLM fica indisponível. O
+#     `_fonte-notebooklm.md` gerado pela concurso-aprofunda segue sendo o caminho
+#     manual, completo e garantido.
+#   - sem pytest        -> os testes rodam standalone
+#     (python3 scripts/tests/test_smoke.py)
+#
+# AVISO sobre a notebooklm-py: é cliente NÃO-OFICIAL. Roda sobre endpoints internos
+# do Google, com IDs de RPC fixos no código, e o próprio projeto declara não haver
+# garantia de estabilidade — quebra do Google é tratada lá como evento de patch.
+# Por isso a versão é pinada: subir de faixa é tarefa com passe de testes próprio.
+#
+# CREDENCIAL (não é pip): a sessão do Google fica em $NOTEBOOKLM_HOME. Ela dá acesso
+# à CONTA INTEIRA, não só ao NotebookLM — use uma conta dedicada. Nunca guarde esse
+# arquivo no repositório nem no vault, que sincroniza com o Google Drive.
+#
+# O primeiro login exige o extra [browser], que traz o Playwright (centenas de MB).
+# Depois disso o runtime não precisa de navegador:
+#   pip install 'notebooklm-py[browser]' && notebooklm login
+
+notebooklm-py>=0.3.4,<0.4   # cliente NÃO-oficial do NotebookLM
+pytest>=8.0                 # opcional: rodar a suíte com pytest

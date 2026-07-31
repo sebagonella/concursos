@@ -14,11 +14,12 @@ Orientação para o Claude Code trabalhando neste repositório.
 
 Coleção de **skills do Claude Code** que automatizam a preparação para concursos públicos brasileiros, gerando conteúdo estruturado direto num **vault Obsidian**.
 
-O fluxo tem três etapas encadeadas:
+O fluxo tem três etapas encadeadas, mais uma camada opcional:
 
 1. **`concurso-prep`** (Etapa 1) — a partir de um edital (PDF/DOCX/MD), monta a estrutura completa de estudos: cronograma, mapas por matéria, análise da banca, histórico do órgão, materiais (leis baixadas em MD+PDF), sinergias entre concursos. Suporta concurso *previsto* (sem edital ainda) e *reconciliação/retificação* quando o edital sai ou muda.
 2. **`concurso-aprofunda`** (Etapa 2) — consome a saída da Etapa 1 + um livro de referência denso. Localiza cada assunto no livro, gera um `.md` por assunto (resumo próprio + ponteiros de página + citações curtas), flashcards nativos e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM.
 3. **`concurso-publica`** (Etapa 3) — transforma a pasta de um concurso em **site estático** que espelha a organização do vault (`{concurso}/{comum|cargo}/`) e publica **todo** o conteúdo abaixo do concurso: edital, cronograma, mapas de matéria, materiais e leis, histórico, sinergia, discursiva, títulos e o aprofundamento, com mídias embutidas, quiz de flashcards e uma página por assunto para o pacote NotebookLM. Cada matéria abre em duas visões — **Plano** (o mapa do edital) e **Estudo** (os assuntos aprofundados). Decisões travadas: gerador próprio em Python (sem Node), por concurso, uso local/rede doméstica, **site só leitura** (progresso lido do vault na geração; o vault é a única fonte de verdade), link NotebookLM apenas se `notebooklm_url:` preenchida (sem iframe do Google).
+4. **`concurso-notebooklm`** (camada opcional sobre a Etapa 2) — **executa** os pacotes que a `concurso-aprofunda` preparou: cria o notebook, sobe as fontes, gera as mídias e salva os arquivos com o nome que a `concurso-publica` detecta. Roda **sob demanda**, por assunto ou por matéria. A biblioteca usada (`notebooklm-py`) **não é oficial** e quebra sem aviso, então a automação é sempre **opcional** e o modo manual segue completo.
 
 O repositório é versionado no GitHub e instalado localmente no Claude Code do usuário.
 
@@ -37,11 +38,14 @@ skills/
 │   ├── assets/templates/
 │   ├── scripts/
 │   └── examples/
-└── concurso-publica/       # Etapa 3 — concurso → site estático
+├── concurso-publica/       # Etapa 3 — concurso → site estático
+│   ├── SKILL.md
+│   ├── assets/             # site.css, site.js (sem CDN: o site roda offline)
+│   ├── scripts/            # site_collector.py, site_builder.py, md2html.py
+│   └── examples/           # site-model-exemplo.json (o contrato entre A e B)
+└── concurso-notebooklm/    # camada opcional — executa os pacotes no NotebookLM
     ├── SKILL.md
-    ├── assets/             # site.css, site.js (sem CDN: o site roda offline)
-    ├── scripts/            # site_collector.py, site_builder.py, md2html.py
-    └── examples/           # site-model-exemplo.json (o contrato entre A e B)
+    └── scripts/            # pacote.py (contrato) e plano.py (o que gerar)
 
 scripts/install.sh          # instalador único (instala/atualiza todas as skills)
 scripts/test-all.sh         # roda as suítes de todas as skills
@@ -147,4 +151,4 @@ O vault de destino segue PARA/Johnny-Decimal, com os concursos em `30_AREAS/CARR
 ## Escopo e limites
 
 - O conteúdo gerado é material de estudo — **não substitui a leitura do edital oficial**. Datas e regras devem ser conferidas na fonte.
-- A integração com o NotebookLM é **manual** por decisão de projeto: não há API pública de consumidor, e a via da comunidade (`notebooklm-py`) usa endpoints não-oficiais e pode quebrar. A skill prepara o pacote; o usuário sobe e clica. Se um dia a automação entrar, será **camada opcional** sobre o modo manual, nunca substituindo-o.
+- A integração com o NotebookLM tem **dois modos, e o manual é o garantido**: não há API pública de consumidor, e a via da comunidade (`notebooklm-py`) usa endpoints não-oficiais que quebram sem aviso. A `concurso-aprofunda` prepara o pacote e o usuário sobe e clica; a `concurso-notebooklm` executa o mesmo pacote automaticamente, como **camada opcional** — nunca em substituição. Sem a biblioteca, a skill degrada e o pacote continua completo.

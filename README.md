@@ -9,6 +9,7 @@ Skills do [Claude Code](https://claude.com/claude-code) que automatizam a prepar
 | **`concurso-prep`** | 1 | Do **edital** → estrutura completa de estudos: cronograma adaptativo (até 4 fases, conforme o prazo), mapas por matéria, análise da banca, histórico do órgão, leis baixadas (MD+PDF), sinergias entre concursos |
 | **`concurso-aprofunda`** | 2 | Do **livro de referência** → um `.md` por assunto (resumo próprio + páginas do livro + citações curtas), flashcards (Obsidian/Anki) e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM |
 | **`concurso-publica`** | 3 | Do **vault** → site estático navegável com **todo** o conteúdo do concurso, espelhando a organização em COMUM e cargos: edital, cronograma, mapas de matéria, leis, histórico, sinergia, discursiva e o aprofundamento — com o podcast tocando, o vídeo rodando, flashcards como quiz e os prompts do NotebookLM a um toque |
+| **`concurso-notebooklm`** | 3+ | Executa os pacotes NotebookLM que a Etapa 2 deixou prontos: cria o notebook, sobe as fontes, gera as mídias e salva os arquivos com o nome que o site reconhece. **Opcional** — o modo manual continua valendo, e a biblioteca usada não é oficial |
 
 Cada etapa consome a saída da anterior.
 
@@ -205,6 +206,7 @@ Cada skill tem a mesma anatomia: `SKILL.md` é o orquestrador que o Claude execu
 | `concurso-prep` | [`SKILL.md`](skills/concurso-prep/SKILL.md) | [`README.md`](skills/concurso-prep/README.md) | [`CHANGELOG.md`](skills/concurso-prep/CHANGELOG.md) |
 | `concurso-aprofunda` | [`SKILL.md`](skills/concurso-aprofunda/SKILL.md) | [`README.md`](skills/concurso-aprofunda/README.md) | [`CHANGELOG.md`](skills/concurso-aprofunda/CHANGELOG.md) |
 | `concurso-publica` | [`SKILL.md`](skills/concurso-publica/SKILL.md) | [`README.md`](skills/concurso-publica/README.md) | [`CHANGELOG.md`](skills/concurso-publica/CHANGELOG.md) |
+| `concurso-notebooklm` | [`SKILL.md`](skills/concurso-notebooklm/SKILL.md) | [`README.md`](skills/concurso-notebooklm/README.md) | [`CHANGELOG.md`](skills/concurso-notebooklm/CHANGELOG.md) |
 
 ### Subagents da Etapa 1
 

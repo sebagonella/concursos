@@ -9,6 +9,7 @@ Três etapas encadeadas, cada uma consumindo a saída da anterior:
 1. **`concurso-prep`** — o edital vira a estrutura de estudo no vault.
 2. **`concurso-aprofunda`** — o livro de referência vira assunto aprofundado, com flashcards e o pacote do NotebookLM.
 3. **`concurso-publica`** — o vault vira site estático, servido por Docker na rede doméstica.
+4. **`concurso-notebooklm`** — camada **opcional** que executa os pacotes do NotebookLM. Ver "NotebookLM manual, automação como camada opcional".
 
 ## O fluxo completo, do edital ao site no ar
 
@@ -194,7 +195,13 @@ O modelo 3 foi descartado: reproduz a obra. O modelo 2 entrega o que ajuda de fa
 
 ### NotebookLM manual, automação como camada opcional
 
-Não existe API pública de consumidor do NotebookLM. A via da comunidade (`notebooklm-py`) usa endpoints internos não-documentados do Google e pode quebrar sem aviso. Por isso a skill **gera o pacote de embarque** (fontes a subir, prompts prontos por gerável, roteiro de cliques) e o usuário executa manualmente. Se a automação for adicionada, entra como camada **sobre** o modo manual, que continua sendo o caminho garantido.
+Não existe API pública de consumidor do NotebookLM. A via da comunidade (`notebooklm-py`) usa endpoints internos não-documentados do Google e pode quebrar sem aviso. Por isso a `concurso-aprofunda` **gera o pacote de embarque** (fontes a subir, prompts prontos por gerável, roteiro de cliques) e o usuário executa — manualmente, sempre que quiser.
+
+A automação **entrou**, na `concurso-notebooklm`, e entrou exatamente na forma prevista: skill **separada**, para a dependência não contaminar as outras três, que seguem 100% stdlib; e camada **sobre** o modo manual, nunca em substituição. Sem a biblioteca instalada, a skill degrada e o pacote continua completo — a suíte dela passa sem a dependência, porque o `install.sh` roda os testes logo depois de copiar.
+
+A divisão interna existe pelo mesmo motivo da fragilidade: **a lógica não toca a rede**. `pacote.py` (ler/escrever o pacote) e `plano.py` (o que gerar, com que nome) são stdlib puro e testáveis sem conexão; a fronteira de rede é fina e injetável. Quando o Google mudar algo por baixo, quebra num arquivo só.
+
+Duas restrições descobertas ao ler a biblioteca, e que moldaram o escopo: ela **não aceita prompt customizado para mapa mental** (o `PROMPT_MINDMAP` do pacote não seria enviado) e **baixa o mapa em JSON**, formato que o catálogo de mídias da `concurso-publica` não reconhece — o arquivo ficaria invisível no site. Por isso o mapa mental ficou **fora** da automação, e pedi-lo é recusado **com a razão**, não ignorado. Pelo mesmo princípio, a extensão do arquivo baixado sai dos **bytes**, não da declaração: o site casa prefixo *e* extensão, então nome errado não vira outro tipo de mídia — vira invisível, que é o pior desfecho por ser silencioso.
 
 ### Localização no livro: TOC primeiro, densidade como rede
 
