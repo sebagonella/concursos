@@ -337,6 +337,10 @@ def test_container_sai_dos_bytes_nao_da_extensao():
     """O site casa prefixo E extensão: nome errado não vira outro tipo, vira
     INVISÍVEL — que é o pior desfecho, porque é silencioso."""
     assert plano_mod.container_dos_bytes(b"\x00\x00\x00\x18ftypM4A ") == ".m4a"
+    # o cabeçalho REAL do NotebookLM, observado em 2026-07-31: brand `dash`,
+    # fMP4 auto-contido com AAC. Não é o `M4A ` que se esperaria — e é por isso
+    # que a checagem olha o `ftyp` na posição 4, não a brand.
+    assert plano_mod.container_dos_bytes(b"\x00\x00\x00\x18ftypdash\x00\x00\x00\x00") == ".m4a"
     assert plano_mod.container_dos_bytes(b"ID3\x04\x00\x00") == ".mp3"
     assert plano_mod.container_dos_bytes(b"RIFF\x00\x00\x00\x00WAVEfmt ") == ".wav"
     assert plano_mod.container_dos_bytes(b"OggS\x00\x02\x00\x00") == ".ogg"

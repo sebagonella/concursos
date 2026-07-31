@@ -28,6 +28,41 @@ baixo da biblioteca, quebra num arquivo só.
   fixture são gerados pelo `notebooklm_pack.py` de verdade, e há guarda cruzada que
   falha se a `concurso-publica` mudar as extensões aceitas para podcast.
 
+### Verificado em campo (2026-07-31)
+
+Primeira execução real contra o NotebookLM, com a `notebooklm-py` **0.7.3** e conta
+dedicada. O que se confirmou:
+
+- **`notebooklm login` não funciona nesta versão.** Ela espera a página no host antigo
+  (`page.wait_for_url` em `cli/services/playwright_login.py`), e desde o rebrand
+  "Gemini Notebook" o Google leva a sessão para `notebook.google.com`. A espera de 5
+  minutos estoura sempre. `NOTEBOOKLM_BASE_URL` **não** contorna: o host novo não está
+  na lista branca de `_env.py`. Contorno documentado no README — `--browser-cookies`,
+  que nem usa Playwright — e `scripts/salvar_sessao.py` para recuperar um login que
+  já aconteceu no perfil persistente.
+- **Só a detecção quebra.** Com a credencial salva, `auth check`, `list`, `create`,
+  `source add`, `generate audio` e `share` respondem normalmente. O `auth check`
+  mostra `OSID` nos **dois** hosts.
+- **O título da fonte é o nome do arquivo.** `source add` não recebe título, e isso é
+  sorte boa: os prompts do pacote ancoram na nota **pelo nome do arquivo**, então a
+  âncora resolve sozinha. Regra que decorre disso: **nunca renomear no upload**.
+- **A URL de compartilhamento é a que `plano.url_do_notebook()` deriva**, byte a byte
+  — confirmado contra o `share_url` devolvido pelo Google. Derivar não custa rede;
+  `share public` é a chamada que muda acesso, e é outra coisa.
+- **O idioma é `pt_BR`, com underscore.** O default da biblioteca é `en` — esquecer
+  produziria podcasts em inglês e queimaria a quota do dia.
+- **O container do áudio é `.m4a`, e a incógnita está resolvida.** O download chega
+  como ISO-BMFF de brand `dash` (`ftypdash`), **AAC estéreo, ~257 kbps**, fMP4
+  auto-contido — `moov` no início, seguido de `sidx`/`moof`/`mdat`. Toca no `<audio>`
+  do site, e `.m4a` é extensão correta para ele. Ou seja: o nome que o pacote já
+  declarava estava certo, e a checagem por bytes confirma em vez de presumir.
+- **Ciclo completo verificado num assunto real** (`especificos-cargo ·
+  populacao-situacao-rua · padrao--dec-7053`): notebook criado, 5 fontes subidas,
+  podcast de **17 min** gerado com o prompt do pacote, link de compartilhamento
+  ativo, metadados gravados no vault e **o site publicando o player sem nenhum passo
+  manual** — inclusive o botão "Abrir no NotebookLM", que veio do `notebooklm_url`
+  que a automação escreveu.
+
 ### Decidido
 - **Mapa mental fora da automação, por ora.** Duas razões técnicas: a biblioteca não
   aceita prompt customizado para ele — o `PROMPT_MINDMAP` do pacote não seria

@@ -54,6 +54,39 @@ sincroniza com o Drive).
 pip install -r skills/concurso-notebooklm/requirements.txt
 ```
 
+## 🛑 O `notebooklm login` trava na 0.7.3 — e não é erro seu
+
+**Sintoma:** o navegador abre, você faz o login com sucesso, mas o terminal fica em
+`Waiting for login (up to 5 minutes)...` até estourar o tempo e desistir.
+
+**Causa, verificada no código instalado:** a 0.7.3 espera que, depois do login, a
+página fique no host antigo —
+`page.wait_for_url(f"{get_base_url()}/**")`, em `cli/services/playwright_login.py`.
+Desde o rebrand **"Gemini Notebook"**, o Google leva a sessão para
+**`notebook.google.com`**, e a URL nunca casa. Não há saída por configuração: a
+variável `NOTEBOOKLM_BASE_URL` é **lista branca** e só aceita
+`notebooklm.google.com` e o host enterprise (`_env.py`). O fix existe no `main` do
+projeto; não na versão do PyPI.
+
+**Só a detecção quebra.** A sessão em si vale para os dois hosts — o `auth check`
+mostra `OSID` tanto em `notebook.google.com` quanto em `notebooklm.google.com` —, e
+as chamadas de RPC funcionam normalmente depois que a credencial está salva.
+
+**Contorno recomendado — não usa Playwright, então não há espera de URL:**
+
+```bash
+pip install 'notebooklm-py[cookies]'
+# faça login na CONTA DEDICADA no seu navegador normal, depois:
+notebooklm login --browser-cookies chrome          # ou 'chrome::<perfil>', firefox, brave…
+notebooklm auth check                              # deve dizer "Authentication is valid"
+```
+
+**Se você já fez o login pelo Playwright e ele expirou esperando**, os cookies estão
+no perfil persistente (`~/.notebooklm/profiles/<perfil>/browser_profile`) — só faltou
+gravar o `storage_state.json`. Feche o navegador e rode
+`scripts/salvar_sessao.py`, que faz exatamente esse último passo e **não escreve nada**
+se a sessão não estiver de pé.
+
 ## Testes
 
 ```bash

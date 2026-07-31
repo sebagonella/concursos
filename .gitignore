@@ -33,6 +33,15 @@ deploy-*/
 # Config local de deploy (host, usuário, caminhos da máquina)
 deploy/deploy.env
 
+# Credencial do NotebookLM: são ~15 cookies do Google e dão acesso à CONTA INTEIRA,
+# não só ao NotebookLM. Vivem fora do repo (em $NOTEBOOKLM_HOME, por padrão
+# ~/.notebooklm), mas estas entradas existem para o caso de alguém apontar o
+# NOTEBOOKLM_HOME para dentro do projeto — o erro é fácil e o estrago é grande.
+.notebooklm*/
+storage_state.json
+*.storage_state.json
+master_token.json
+
 # Editores
 .vscode/
 .idea/
