@@ -118,7 +118,7 @@ A localização vem com score. Assuntos não encontrados ou de baixa confiança 
 O histórico de versões vive no [CHANGELOG.md](CHANGELOG.md) — antes havia um roadmap
 aqui que repetia e contradizia o changelog.
 
-Versão atual: **0.7.0** (todo prompt do NotebookLM ancora na **nota do vault**, nunca
+Versão atual: **0.7.1** (todo prompt do NotebookLM ancora na **nota do vault**, nunca
 no livro — que é fonte opcional no notebook; o pacote declara o nome do notebook e o
 de cada arquivo de saída como contrato; e o migrador de pacotes voltou a enxergar o
 layout atual, que ele não via desde a 0.5.0).

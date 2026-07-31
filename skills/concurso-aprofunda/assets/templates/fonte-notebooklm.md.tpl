@@ -9,6 +9,9 @@ notebooklm_status: {NOTEBOOKLM_STATUS}
 # Cole aqui o link do notebook depois de criá-lo: é o que faz o botão
 # "Abrir no NotebookLM" aparecer no site gerado pela concurso-publica.
 notebooklm_url: "{NOTEBOOKLM_URL}"
+# Demais campos `notebooklm_*` escritos por fora (pelo usuário ou pela automação).
+# São herdados por prefixo ao regerar este pacote — ver `herdar_campos()`.
+{NOTEBOOKLM_EXTRA}
 # Identificadores que a concurso-publica publica e que a automação vai consumir.
 # Ficam aqui, e não só na prosa, porque extrair nome de arquivo por regex de texto
 # corrido já falhou: o roteiro do mapa mental e o do report chegavam vazios ao site.

@@ -2,6 +2,14 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.7.1] - 2026-07-31
+
+### Corrigido
+- **Regerar o pacote apagava tudo que a automação escrevesse nele.** `herdar_campos()` herdava exatamente duas chaves — `notebooklm_url` e `notebooklm_status`. Qualquer campo novo (o id do notebook, a data da criação, o que a integração precisa para não recriar o que já existe) ia para o `.bak.md` na regeração seguinte, **em silêncio** — o mesmo defeito que a função foi criada para evitar com a URL, repetido um nível acima. A herança passa a ser por **prefixo** `notebooklm_*`: campo novo sobrevive sem ninguém lembrar de estender a função. Campo presente mas vazio continua não sendo herdado, para não fossilizar `notebooklm_id: ""`.
+
+### Adicionado
+- Bloco `{NOTEBOOKLM_EXTRA}` no template, onde os campos herdados sem lugar fixo são reemitidos, e limpeza de linha vazia no frontmatter — o placeholder fica vazio no caso comum e deixaria uma linha solta no meio do YAML.
+
 ## [0.7.0] - 2026-07-31
 
 ### Corrigido

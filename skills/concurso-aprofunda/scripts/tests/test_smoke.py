@@ -562,6 +562,68 @@ def test_clausula_de_fonte_nomeia_a_nota_e_nada_mais():
         'Baseie-se na nota "crase--padrao--pestana--SEDES_2026.md" deste notebook.')
 
 
+def _pack_de_um_assunto(d: Path, extra_fm: str = "") -> Path:
+    """Gera um pacote de verdade e devolve o caminho dele."""
+    p = d / "assuntos" / "crase" / "padrao--pestana"
+    p.mkdir(parents=True, exist_ok=True)
+    (p / "crase--padrao--pestana--X_2026.md").write_text(
+        '---\ntitle: "Crase"\naprofundamento: "padrao--pestana"\nnivel: padrao\n'
+        'fontes: "Pestana"\nstatus: concluido\n---\nReal.\n', encoding="utf-8")
+    subprocess.run([sys.executable, str(ROOT / "notebooklm_pack.py"),
+                    "--assuntos-dir", str(d / "assuntos"),
+                    "--concurso", "X_2026", "--materia", "M"],
+                   capture_output=True, text=True)
+    return p / "_fonte-notebooklm.md"
+
+
+def test_regerar_preserva_todo_o_bloco_notebooklm():
+    """Regressão: regerar o pacote apagava tudo que a automação escreveu.
+
+    `herdar_campos()` herdava exatamente DUAS chaves. Qualquer campo novo — o id do
+    notebook, a data, o que a integração precisa para não recriar o notebook — ia
+    para o `.bak.md` na regeração seguinte, em silêncio. É o mesmo defeito que a
+    função foi criada para evitar com o `notebooklm_url`, repetido. A herança agora
+    é por PREFIXO: campo novo sobrevive sem ninguém lembrar de vir aqui.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        pack = _pack_de_um_assunto(Path(d))
+        # a automação escreve o que só ela sabe
+        txt = pack.read_text(encoding="utf-8")
+        txt = txt.replace('notebooklm_url: ""',
+                          'notebooklm_url: "https://notebooklm.google.com/notebook/abc"\n'
+                          'notebooklm_id: "abc-123"\n'
+                          'notebooklm_gerado_em: "2026-07-31"')
+        txt = txt.replace("notebooklm_status: nao-criado", "notebooklm_status: completo")
+        pack.write_text(txt, encoding="utf-8")
+
+        # o gerador roda de novo — como rodou nos 158 pacotes do vault
+        _pack_de_um_assunto(Path(d))
+
+        novo = pack.read_text(encoding="utf-8")
+        assert 'notebooklm_url: "https://notebooklm.google.com/notebook/abc"' in novo, "a URL"
+        assert "notebooklm_status: completo" in novo, "o status"
+        assert 'notebooklm_id: "abc-123"' in novo, "o id do notebook"
+        assert 'notebooklm_gerado_em: "2026-07-31"' in novo, "a data"
+
+
+def test_frontmatter_do_pack_novo_nao_tem_linha_vazia():
+    """O bloco de campos herdados fica vazio no caso comum; o placeholder não pode
+    deixar uma linha solta no meio do YAML."""
+    with tempfile.TemporaryDirectory() as d:
+        fm = _pack_de_um_assunto(Path(d)).read_text(encoding="utf-8").split("---")[1]
+        assert not any(l == "" for l in fm.strip("\n").split("\n")), repr(fm)
+
+
+def test_campo_notebooklm_vazio_nao_e_herdado_como_lixo():
+    """Chave presente mas vazia não pode virar `notebooklm_id: ""` para sempre."""
+    with tempfile.TemporaryDirectory() as d:
+        pack = _pack_de_um_assunto(Path(d))
+        pack.write_text(pack.read_text(encoding="utf-8").replace(
+            'notebooklm_url: ""', 'notebooklm_url: ""\nnotebooklm_id: ""'), encoding="utf-8")
+        _pack_de_um_assunto(Path(d))
+        assert "notebooklm_id" not in pack.read_text(encoding="utf-8")
+
+
 def test_pack_declara_nome_do_notebook_e_arquivos_no_frontmatter():
     """O nome do notebook e os nomes dos arquivos a salvar são CONTRATO, não prosa.
 
