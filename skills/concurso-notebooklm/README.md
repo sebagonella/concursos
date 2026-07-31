@@ -5,28 +5,40 @@ prontos no vault: cria o notebook, sobe as fontes, gera as mídias e salva os ar
 com o nome que a `concurso-publica` reconhece — de modo que o site publique sem
 nenhum passo manual.
 
-Versão atual: **0.1.0** (camada de contrato: ler o pacote, decidir o que gerar,
-nomear a saída e gravar os metadados de volta no vault — ainda **sem** falar com o
-NotebookLM).
+Versão atual: **0.2.0** (camada de rede: cria o notebook, sobe as fontes, dispara as
+gerações e coleta os arquivos — verificado ponta a ponta contra o NotebookLM).
 
 ## O problema que ela resolve
 
 O vault tem **158 pacotes prontos** e um punhado de mídias geradas. O gargalo nunca
 foi ter o roteiro: é executá-lo 158 vezes, à mão, no Estúdio.
 
-## O que já funciona
+## Como usar
 
-- Ler o `_fonte-notebooklm.md` e extrair o nome do notebook, o nome de cada arquivo de
-  saída, um prompt por gerável e as fontes a subir.
-- Resolver cada fonte num arquivo real do disco — a nota do assunto ao lado do pacote,
-  as leis na pasta de leis-baixadas —, reportando **por nome** o que faltar.
-- Decidir o que gerar, pulando o que já tem arquivo na pasta.
-- Gravar de volta no pacote o endereço do notebook e o estado, de forma atômica e
-  preservando o resto do arquivo byte a byte.
+```bash
+# dispara (não espera: a geração leva minutos)
+python3 scripts/nlm_run.py --assuntos-dir <.../materia/assuntos> \
+    --leis-dir <.../04-MATERIAIS/leis-baixadas> --publicar
 
-## O que ainda não
+# minutos depois, coleta o que ficou pronto
+python3 scripts/nlm_coleta.py --assuntos-dir <...>
+```
 
-A fronteira de rede. Nada aqui conversa com o NotebookLM nesta versão.
+`--dry-run` mostra o plano sem tocar em nada — e funciona **sem** a biblioteca
+instalada, porque é o relatório honesto do backlog.
+
+## O que funciona
+
+- Ler o pacote e extrair o nome do notebook, o nome de cada arquivo de saída, um
+  prompt por gerável e as fontes a subir.
+- Resolver cada fonte num arquivo real do disco, reportando **por nome** o que faltar.
+- Criar o notebook só se ainda não houver um, e subir só a fonte que ainda não está
+  lá — reexecutar sobre 66 assuntos não duplica nem queima quota.
+- Disparar as gerações, guardando os `task_id` num sidecar, e coletar depois.
+- Nomear o arquivo baixado pelo container **real**, corrigindo o pacote se divergir.
+- Gravar no vault o id, o endereço, o estado e a data — de forma atômica.
+- Parar na quota **por tipo** (áudio esgotado não impede report) e sair com **4**,
+  que é o código de "rode de novo amanhã".
 
 ## Geráveis
 

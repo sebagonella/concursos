@@ -2,6 +2,52 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.2.0] - 2026-07-31
+
+A **camada de rede**. A skill passa a criar o notebook, subir as fontes, disparar as
+gerações e coletar os arquivos — verificado ponta a ponta contra o NotebookLM real.
+
+### Adicionado
+- `scripts/porta.py` — a fronteira. **A fronteira é a CLI, não a API Python**: a
+  biblioteca expõe as duas, mas a API é `async` e mora em módulos com underscore que o
+  próprio projeto declara instáveis; a CLI é a superfície pública, devolve JSON e foi
+  a que se verificou em campo. Por subprocess, a skill fica **síncrona** como o resto
+  do repositório, e a degradação vira trivial: sem o executável, não há o que importar.
+  O vocabulário de estado é **nosso**, não o da biblioteca — é o que faz a fronteira
+  sobreviver ao Google renomear coisas. A `PortaFalsa` vive no mesmo módulo do
+  Protocol, e há teste comparando as assinaturas: dublê e interface não podem divergir
+  sem alguém ver.
+- `scripts/executor.py` — junta plano e porta. **Não recria notebook que já existe**
+  (reexecutar sobre 66 assuntos criaria 66 duplicados e queimaria a quota) e **não
+  ressobe fonte que já está lá**. A quota é tratada **por tipo**: esgotar áudio não
+  impede report, cujo teto é muito mais folgado.
+- `scripts/nlm_run.py` e `scripts/nlm_coleta.py` — os dois comandos. O `run` **não
+  espera**: são minutos por item, e 66 itens seriam horas com um processo segurando a
+  sessão. Ele grava os `task_id` e diz o comando da coleta; a coleta roda quantas
+  vezes quiser.
+- **Código de saída 4 para quota**, separado do 2. É o único caso em que "rode de novo
+  amanhã" é a instrução certa, e o relatório diz que o teto **não** é informado pelo
+  servidor — o que se sabe é que ele recusou.
+- 19 testes novos, todos com o dublê e sem rede.
+
+### Corrigido
+- **`Auth not found` logo depois de um login bem-sucedido.** Com duas instalações da
+  biblioteca (uma no `~/.local`, outra na venv do projeto), o `PATH` escolhe a errada —
+  e as versões guardam a credencial em caminhos **diferentes**: a 0.3.x em
+  `$NOTEBOOKLM_HOME/storage_state.json`, a 0.7.x em `profiles/<nome>/`. Os comandos
+  passam a preferir o `notebooklm` da venv do projeto, e caminho explícito continua
+  sendo respeitado. Foi encontrado rodando de verdade, não em teste.
+
+### Onde cada dado mora
+- **Durável e humano → frontmatter do pacote**: `notebooklm_id`, `notebooklm_url`,
+  `notebooklm_status`, `notebooklm_gerado_em`. O usuário os lê no Obsidian e o site os
+  publica.
+- **Volátil e de máquina → sidecar `_notebooklm-estado.json`**: os `task_id` em voo.
+  Não vão para o frontmatter porque são ruído num documento curado; porque mudam a
+  cada execução, e cada mudança dispararia o backup `.bak.md` do gerador; e porque um
+  `task_id` velho é indistinguível de um vivo — a consulta devolve "pendente" para
+  tarefa desconhecida, daí também o teto de idade de 6 h na coleta.
+
 ## [0.1.0] - 2026-07-31
 
 Primeira versão: **camada de contrato**. Lê o pacote, decide o que gerar, nomeia a

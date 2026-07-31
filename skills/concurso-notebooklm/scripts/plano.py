@@ -37,6 +37,15 @@ MAPA_MENTAL_FORA = (
 
 TOKENS_ESPECIAIS = ("nada", "tudo")
 
+# As extensões que o `CATALOGO_MIDIAS` da concurso-publica reconhece por tipo. Se o
+# download vier num container diferente do declarado mas ainda desta lista, dá para
+# renomear e o site continua enxergando; fora dela, vira pendência nomeada.
+EXTENSOES_ACEITAS = {
+    "podcast": (".m4a", ".mp3", ".wav", ".ogg"),
+    "video": (".mp4", ".webm", ".mov"),
+    "report": (".md", ".pdf", ".txt"),
+}
+
 
 class MidiaInvalida(ValueError):
     """Argumento de --midias que não dá para atender. Vira exit 3."""

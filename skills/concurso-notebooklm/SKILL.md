@@ -1,6 +1,6 @@
 ---
 name: concurso-notebooklm
-version: 0.1.0
+version: 0.2.0
 description: >
   Use quando o usuário quiser EXECUTAR automaticamente os pacotes NotebookLM que a
   skill concurso-aprofunda já preparou no vault — criar o notebook, subir as fontes,
@@ -24,11 +24,48 @@ prompt por gerável. Esta skill só executa; não recalcula nada.
 > clicar no Estúdio — continua sendo o caminho garantido, e é o que vale quando a
 > biblioteca não está instalada ou quando o Google muda o que ela usa por baixo.
 
-## Estado desta versão
+## Como usar
 
-Só a **camada de contrato** existe: ler o pacote, decidir o que gerar, nomear o
-arquivo de saída e gravar os metadados de volta. **Ainda não fala com o NotebookLM.**
-A fronteira de rede é a próxima etapa.
+```bash
+# um aprofundamento
+python3 scripts/nlm_run.py --aprofundamento <.../assuntos/crase/padrao--pestana>
+
+# a matéria inteira, com as leis como fonte
+python3 scripts/nlm_run.py --assuntos-dir <.../lingua-portuguesa/assuntos> \
+    --leis-dir <.../04-MATERIAIS/leis-baixadas>
+
+# escolher o que gerar (padrão: podcast:deep-dive)
+    --midias podcast:debate,report      --midias tudo      --midias nada
+
+# ativar o link público do notebook (padrão: não)
+    --publicar
+
+# conferir sem tocar em nada
+    --dry-run
+```
+
+A geração leva minutos, então `nlm_run.py` **não espera** — 66 assuntos seriam horas
+com um processo segurando a sessão. Depois:
+
+```bash
+python3 scripts/nlm_coleta.py --assuntos-dir <...>
+```
+
+Roda quantas vezes quiser: o que já está no disco é pulado e o que ainda gera fica
+no sidecar para a próxima passada. Ao final, republique o site.
+
+### Códigos de saída
+
+| | |
+|---|---|
+| **0** | tudo que foi pedido foi feito |
+| **1** | rede ou autenticação — instalar não resolve |
+| **2** | degradação parcial (biblioteca ausente, falha isolada) |
+| **3** | argumentos inválidos |
+| **4** | **quota atingida** — retomável com o mesmo comando |
+
+O **4** é separado do 2 de propósito: é o único caso em que "rode de novo amanhã" é
+a instrução certa.
 
 ## Por que a dependência é frágil, e o que isso impõe
 
@@ -50,6 +87,22 @@ semanas. Consequências que valem como regra desta skill:
 |---|---|
 | `scripts/pacote.py` | ler e escrever o `_fonte-notebooklm.md` — o único que toca o arquivo |
 | `scripts/plano.py` | decidir o que gerar, nomear a saída, adivinhar o container pelos bytes |
+| `scripts/porta.py` | a fronteira com o NotebookLM — e o dublê que a espelha |
+| `scripts/executor.py` | junta plano e porta; cria, sobe, dispara e coleta |
+| `scripts/nlm_run.py` · `nlm_coleta.py` | os dois comandos |
+| `scripts/salvar_sessao.py` | recupera um login que o detector quebrado não gravou |
+
+**A fronteira é a CLI, não a API Python.** A biblioteca expõe as duas, mas a API é
+`async` e mora em módulos com underscore que o próprio projeto declara instáveis; a
+CLI é a superfície pública e devolve JSON. Falar com ela por subprocess mantém esta
+skill **síncrona**, como o resto do repositório, e é o mesmo padrão que o
+`fetch_lei.py` usa para o `pdftotext`.
+
+**Onde cada dado mora:** durável e humano (`notebooklm_id`, `url`, `status`, data) vai
+para o **frontmatter do pacote**; volátil e de máquina (os `task_id` em voo) vai para
+o sidecar `_notebooklm-estado.json`, que começa com `_` e por isso o site ignora. Id
+opaco num documento curado é ruído, e cada mudança dele dispararia o backup do
+gerador.
 
 ## O que se pode gerar
 

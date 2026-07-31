@@ -13,6 +13,7 @@ Os pacotes usados como fixture são gerados pelo `notebooklm_pack.py` DE VERDADE
 nunca escritos à mão: fixture que inventa o que o gerador não produz é teste que se
 autoconfirma — já aconteceu duas vezes neste repo.
 """
+import json
 import subprocess
 import sys
 import tempfile
@@ -364,6 +365,287 @@ def test_extensoes_do_podcast_sao_as_que_o_site_reconhece():
     aceitas = set(re.findall(r'"(\.[a-z0-9]+)"', m.group(1)))
     for ext in (".m4a", ".mp3", ".wav", ".ogg"):
         assert ext in aceitas, f"{ext} deixou de ser reconhecida como podcast"
+
+
+# --------------------------------------------------------------------------- #
+# porta.py — a fronteira, e o dublê que a espelha
+# --------------------------------------------------------------------------- #
+import inspect                    # noqa: E402
+import porta as porta_mod         # noqa: E402
+import executor as exe_mod        # noqa: E402
+
+
+def test_dublê_tem_a_mesma_assinatura_do_protocolo():
+    """Dublê e interface não podem divergir sem alguém ver — é o mesmo princípio do
+    fixture que espelha o gerador real."""
+    for nome, metodo in inspect.getmembers(porta_mod.PortaNotebookLM, inspect.isfunction):
+        if nome.startswith("_"):
+            continue
+        real = getattr(porta_mod.PortaFalsa, nome, None)
+        assert real is not None, f"PortaFalsa não implementa {nome}"
+        esperado = list(inspect.signature(metodo).parameters)
+        obtido = list(inspect.signature(real).parameters)
+        assert esperado == obtido, f"{nome}: {esperado} != {obtido}"
+
+
+def test_notebook_existente_nao_e_recriado():
+    """Reexecutar sobre 66 assuntos criaria 66 duplicados e queimaria a quota."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac_mod.gravar_campos(caminho, {"notebooklm_id": "ja-existe"})
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa()
+        rel = exe_mod.executar(pac, [], porta)
+        assert rel.notebook_id == "ja-existe"
+        assert not any(m == "criar_notebook" for m, _ in porta.chamadas)
+
+
+def test_fonte_ja_no_notebook_nao_e_ressubida():
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        caminho = _montar_pacote(d, com_leis=True)
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa()
+        exe_mod.executar(pac, [], porta, leis_dir=d / "leis")
+        primeira = [k for k, _ in porta.chamadas].count("subir_fonte")
+        assert primeira == 2, primeira
+        exe_mod.executar(pac_mod.ler(caminho), [], porta, leis_dir=d / "leis")
+        assert [k for k, _ in porta.chamadas].count("subir_fonte") == primeira
+
+
+def test_o_prompt_que_chega_na_porta_e_o_do_pacote():
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa()
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        exe_mod.executar(pac, tarefas, porta)
+        gerar = [kw for m, kw in porta.chamadas if m == "gerar"]
+        assert len(gerar) == 1
+        assert gerar[0]["prompt"] == pac.prompts["podcast"]
+        assert gerar[0]["opcoes"]["idioma"] == "pt_BR", "o default da lib é 'en'"
+
+
+def test_quota_de_um_tipo_nao_impede_os_outros():
+    """As quotas são separadas por gerável: abortar tudo no primeiro estouro de
+    áudio desperdiçaria os tetos muito mais folgados de report."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa(roteiro={"podcast": ["sem-quota"]})
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive"), ("report", "custom")])
+        rel = exe_mod.executar(pac, tarefas, porta)
+        assert [t for t, _ in rel.sem_quota] == ["podcast"]
+        assert [t for t, _ in rel.disparadas] == ["report"]
+        assert rel.codigo_saida == 4, "quota é retomável, e o código diz isso"
+
+
+def test_task_id_vazio_conta_como_quota():
+    """É assim que o servidor recusa sem erro explícito — e o sinal sobrevive a
+    mudança de mensagem, ao contrário de casar string."""
+    class SemTask(porta_mod.PortaFalsa):
+        def gerar(self, nb, tipo, prompt, opcoes):
+            self._reg("gerar", nb=nb, tipo=tipo, prompt=prompt, opcoes=dict(opcoes))
+            return porta_mod.Resultado(porta_mod.SEM_QUOTA, "", "sem task_id")
+
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        rel = exe_mod.executar(pac, tarefas, SemTask())
+        assert rel.sem_quota and not rel.disparadas
+
+
+def test_task_id_vai_para_o_sidecar_nao_para_o_frontmatter():
+    """Id opaco é ruído num documento curado, muda a cada execução (e cada mudança
+    dispara backup no gerador), e não é escalar — pode haver vários em voo."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        exe_mod.executar(pac, tarefas, porta_mod.PortaFalsa())
+        assert "task_id" not in caminho.read_text(encoding="utf-8")
+        side = json.loads((pac.pasta / exe_mod.SIDECAR).read_text(encoding="utf-8"))
+        assert side["tarefas"][0]["tipo"] == "podcast"
+        assert side["tarefas"][0]["task_id"]
+        assert pac_mod.ler(caminho).status == "gerando"
+
+
+def test_sidecar_e_invisivel_para_o_site():
+    """Começa com `_`, como o próprio pacote — o coletor do site ignora os dois."""
+    assert exe_mod.SIDECAR.startswith("_")
+
+
+def test_coleta_baixa_nomeia_e_marca_completo():
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa()
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        exe_mod.executar(pac, tarefas, porta)
+        rel = exe_mod.coletar(pac_mod.ler(caminho), porta)
+        esperado = pac.arquivo_de("podcast")
+        assert rel.baixadas == [esperado], rel.baixadas
+        assert (pac.pasta / esperado).is_file()
+        assert not list(pac.pasta.glob("*.parcial")), "não pode sobrar parcial"
+        assert pac_mod.ler(caminho).status == "completo"
+
+
+def test_estados_e_uma_chamada_por_notebook():
+    """A consulta relista todos os artefatos; perguntar por tarefa multiplicaria
+    chamadas sem ganhar nada."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa()
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive"), ("report", "custom")])
+        exe_mod.executar(pac, tarefas, porta)
+        antes = [k for k, _ in porta.chamadas].count("estados")
+        exe_mod.coletar(pac_mod.ler(caminho), porta)
+        assert [k for k, _ in porta.chamadas].count("estados") == antes + 1
+
+
+def test_container_divergente_renomeia_e_corrige_o_pacote():
+    """Se vier MP3 onde o pacote diz M4A, o arquivo é salvo com a extensão real E o
+    pacote é corrigido — senão ele passa a mentir para o site."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa(conteudo=b"ID3\x04\x00\x00\x00\x00\x00\x00\x00\x00")
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        exe_mod.executar(pac, tarefas, porta)
+        exe_mod.coletar(pac_mod.ler(caminho), porta)
+        depois = pac_mod.ler(caminho)
+        assert depois.arquivo_de("podcast").endswith(".mp3"), depois.arquivo_de("podcast")
+        assert (pac.pasta / depois.arquivo_de("podcast")).is_file()
+
+
+def test_download_html_e_descartado():
+    """Página de erro salva com nome de mídia seria o pior desfecho: o site
+    mostraria um player que não toca."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa(
+            conteudo=b"<!DOCTYPE html><html><body>erro</body></html>")
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        exe_mod.executar(pac, tarefas, porta)
+        rel = exe_mod.coletar(pac_mod.ler(caminho), porta)
+        assert not rel.baixadas
+        assert rel.falhas and "HTML" in rel.falhas[0][1]
+        assert not list(pac.pasta.glob("podcast-*"))
+
+
+def test_publicar_e_opt_in():
+    """Sem a flag, o notebook não vira público — mas a URL é gravada assim mesmo,
+    porque ela é derivável e funciona para o dono."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        porta = porta_mod.PortaFalsa()
+        exe_mod.executar(pac_mod.ler(caminho), [], porta)
+        assert not any(m == "publicar" for m, _ in porta.chamadas)
+        assert pac_mod.ler(caminho).url.startswith("https://notebooklm.google.com/")
+        exe_mod.executar(pac_mod.ler(caminho), [], porta, publicar=True)
+        assert any(m == "publicar" for m, _ in porta.chamadas)
+
+
+def test_cli_roda_dry_run_sem_a_biblioteca():
+    """O dry-run é o relatório honesto do backlog, e não pode exigir dependência."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "nlm_run.py"),
+             "--aprofundamento", str(caminho.parent), "--dry-run"],
+            capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        saida = json.loads(r.stdout)
+        assert saida["a_disparar"] == 1
+        assert saida["itens"][0]["tarefas"] == ["podcast:deep-dive"]
+
+
+def test_cli_sem_executavel_degrada_com_exit_2():
+    """Sem a biblioteca o pacote manual continua completo — é degradação, não erro
+    de rede (que seria 1, e onde instalar não resolveria)."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "nlm_run.py"),
+             "--aprofundamento", str(caminho.parent),
+             "--executavel", "notebooklm-que-nao-existe"],
+            capture_output=True, text=True)
+        assert r.returncode == 2, (r.returncode, r.stderr)
+        assert "manual" in r.stderr
+
+
+def test_cli_recusa_midia_invalida_com_exit_3():
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "nlm_run.py"),
+             "--aprofundamento", str(caminho.parent), "--midias", "mapa-mental"],
+            capture_output=True, text=True)
+        assert r.returncode == 3
+        assert "JSON" in r.stderr
+
+
+def test_prefere_o_notebooklm_da_venv_do_projeto():
+    """Regressão de campo: com duas instalações (uma no ~/.local, outra na venv), o
+    PATH escolhe a errada — e as versões guardam a credencial em caminhos DIFERENTES.
+    O sintoma é "Auth not found" logo depois de um login bem-sucedido."""
+    achado = porta_mod.PortaCLI.achar_executavel()
+    if (ROOT.parents[2] / ".venv" / "bin" / "notebooklm").is_file():
+        assert achado.endswith(".venv/bin/notebooklm"), achado
+    # caminho explícito é sempre respeitado
+    assert porta_mod.PortaCLI.achar_executavel("/usr/bin/x") == "/usr/bin/x"
+
+
+def test_disponivel_aceita_caminho_absoluto():
+    """`shutil.which` não acha executável fora do PATH — e o da venv está fora."""
+    assert not porta_mod.PortaCLI.disponivel("/caminho/que/nao/existe")
+    assert porta_mod.PortaCLI.disponivel(sys.executable), "caminho absoluto vale"
+
+
+def test_relatorio_nunca_carrega_cookie():
+    """Segredo em log é vazamento silencioso: o relatório vai para o terminal, para
+    o `--json` e para onde o usuário colar."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        rel = exe_mod.executar(pac, tarefas, porta_mod.PortaFalsa())
+        texto = json.dumps(rel.como_dict(), ensure_ascii=False)
+        for proibido in ("__Secure", "SID=", "SAPISID", "storage_state"):
+            assert proibido not in texto, proibido
 
 
 def _run_standalone():
