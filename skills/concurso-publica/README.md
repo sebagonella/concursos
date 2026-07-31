@@ -24,6 +24,6 @@ edital) e **Estudo** (os assuntos aprofundados). No Plano, cada tópico traz o l
 do edital e o checklist derivado à vista, e a um clique o material recomendado, as
 pegadinhas da banca, a meta de questões e o que mais o mapa tiver escrito.
 
-Versão atual: **0.11.1** (a página do pacote NotebookLM passa a dizer com que nome
-criar o notebook e com que nome salvar cada arquivo; e o assunto abre na aba do
-nível **padrão**, desempatada pela ordem alfabética).
+Versão atual: **0.11.2** (quatro defeitos de renderização: lista aninhada deixa de
+achatar, item de lista não perde a linha de continuação, negrito contendo itálico
+converte, e o pipe cru de wikilink não quebra mais a tabela).

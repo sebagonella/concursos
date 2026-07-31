@@ -498,6 +498,100 @@ def test_md2html_checkbox_vira_tarefa_com_estado():
     assert "tarefa feito" in h and "tarefa aberto" in h
 
 
+def test_md2html_lista_aninhada_preserva_a_hierarquia():
+    """Regressão: o conversor guardava UMA lista aberta, então subitem virava irmão
+    do pai e a hierarquia — que é a informação — sumia. Eram 408 linhas em 51
+    arquivos do vault."""
+    h = md2html.converter("- Pai\n  - Filho\n    - Neto\n- Tio\n")
+    # a sublista fica DENTRO do <li>, senão é HTML inválido
+    assert "<li>Pai\n<ul>" in h, "a sublista precisa abrir dentro do item pai"
+    assert h.count("<ul>") == 3, f"três níveis, três <ul>: {h.count('<ul>')}"
+    assert h.count("</ul>") == 3, "e todos fechados"
+    assert h.count("<li>") == 4
+    # o irmão do primeiro nível volta ao nível de fora
+    assert h.rstrip().endswith("<li>Tio\n</li>\n</ul>"), h[-60:]
+
+
+def test_md2html_lista_aninhada_nao_deixa_ul_solto_dentro_de_ul():
+    """`<ul>` como filho direto de `<ul>` é inválido — e é o que sai se alguém
+    fechar o `<li>` do pai antes de abrir a sublista."""
+    h = md2html.converter("- Pai\n  - Filho\n")
+    assert "</li>\n<ul>" not in h, "sublista não pode vir depois do </li> do pai"
+
+
+def test_md2html_tarefas_aninhadas_mantem_o_estado_de_cada_nivel():
+    h = md2html.converter("- [ ] Pai\n  - [x] Filho\n- [ ] Outro\n")
+    assert h.count('class="tarefas"') == 2, "uma lista por nível"
+    assert "tarefa feito" in h and h.count("tarefa aberto") == 2
+
+
+def test_md2html_item_de_lista_absorve_a_linha_de_continuacao():
+    """Regressão: linha indentada sem marcador virava PARÁGRAFO solto fora da lista.
+    O item perdia metade do texto — 838 linhas em 38 arquivos do vault — e, quando o
+    negrito atravessava a quebra, as duas metades caíam em conversões inline
+    diferentes e os asteriscos chegavam crus à página."""
+    h = md2html.converter(
+        "2. **Regência verbal** — quais verbos, e quais **mudam de\n"
+        "   sentido** conforme a preposição.\n")
+    assert h.count("<li>") == 1, "uma continuação não abre item novo"
+    assert "<p>" not in h, "e não vira parágrafo solto fora da lista"
+    assert "<strong>mudam de\nsentido</strong>" in h, h
+    assert "*" not in h, f"sobrou asterisco cru: {h}"
+
+
+def test_md2html_continuacao_nao_engole_a_sublista():
+    """Linha indentada COM marcador é sublista, não continuação — quem trata é o
+    laço principal, e confundir os dois perderia um nível inteiro."""
+    h = md2html.converter("- Pai que continua\n  na linha de baixo\n  - Filho\n- Tio\n")
+    assert h.count("<ul>") == 2, f"o filho precisa abrir sublista: {h}"
+    assert "na linha de baixo" in h.split("<ul>")[1], "a continuação fica no pai"
+    assert "<li>Filho" in h
+
+
+def test_md2html_negrito_contendo_italico():
+    """Regressão: a classe negada `[^*]+` no negrito fazia a linha inteira chegar
+    ao site com os asteriscos crus. São 139 linhas em 20 arquivos do vault, no
+    formato `**​*Cujo* não admite artigo**`."""
+    h = md2html.converter("- ***Cujo* não admite artigo depois** — regra.")
+    assert "<strong><em>Cujo</em> não admite artigo depois</strong>" in h, h
+    assert "*" not in h.replace("&#42;", ""), f"sobrou asterisco cru: {h}"
+
+
+def test_md2html_italico_contendo_negrito_continua_funcionando():
+    """A forma inversa já funcionava; a correção não pode quebrá-la."""
+    h = md2html.converter("*Fui eu **que fiz*** — relativo.")
+    assert "<em>Fui eu <strong>que fiz</strong></em>" in h, h
+
+
+def test_md2html_negrito_atravessa_quebra_de_linha():
+    """O vault quebra linha no meio de negrito o tempo todo — o texto que chega ao
+    conversor é um bloco inteiro, com `\\n` entre as linhas. Fechar o casamento na
+    quebra devolvia 1.406 asteriscos crus ao site; foi medido no HTML gerado."""
+    h = md2html.converter("texto **negrito que\ncruza a linha** fim")
+    assert "<strong>negrito que cruza a linha</strong>" in h, h
+    assert "*" not in h, h
+
+
+def test_md2html_negrito_italico_junto_nao_deixa_asterisco():
+    """`***x***` precisa ser tratado ANTES do negrito: o passo preguiçoso casaria
+    `**` + `*x` + `**` e deixaria um `*` na página."""
+    h = md2html.converter("***assim*** e ***outro***")
+    assert h.count("<strong><em>") == 2, h
+    assert "*" not in h, h
+
+
+def test_md2html_wikilink_com_pipe_CRU_dentro_de_tabela():
+    """Regressão: o pipe do wikilink era lido como separador — duas colunas viravam
+    quatro e o link aparecia em texto puro na página. O escapado (`\\|`) já era
+    tratado; o cru, que o vault também escreve, não era."""
+    h = md2html.converter(
+        "| Termo | Onde cai |\n|---|---|\n"
+        "| Pronome | [[regencia|regência]] e [[crase|crase]] |\n")
+    assert h.count("<td>") == 2, f"duas células, não quatro: {h}"
+    assert "[[" not in h, "o wikilink não pode sobrar cru na página"
+    assert ">regência<" in h and ">crase<" in h
+
+
 def test_md2html_escapa_html_perigoso():
     h = md2html.converter("<script>alert(1)</script> texto")
     assert "<script>" not in h

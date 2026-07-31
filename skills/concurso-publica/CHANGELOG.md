@@ -2,6 +2,47 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.11.2] - 2026-07-31
+
+### Corrigido
+Quatro defeitos de renderização do `md2html.py`, todos medidos no vault antes e
+depois. No HTML gerado dos dois concursos: **1.406 asteriscos crus → 0**, wikilink
+não resolvido **→ 0**, e **3.969 sublistas aninhadas** em 338 páginas onde antes a
+hierarquia era achatada.
+
+- **Lista aninhada chegava ACHATADA ao site.** O conversor guardava *uma* lista
+  aberta, então o subitem virava irmão do pai e a hierarquia — que é a informação —
+  sumia. Eram 408 linhas em 51 arquivos. Agora há uma pilha por nível de indentação,
+  e a sublista abre **dentro** do `<li>` do pai: `<ul>` como filho direto de `<ul>` é
+  HTML inválido, e fechar o `<li>` antes era o jeito errado de fazer parecer certo.
+- **Item de lista perdia a linha de continuação.** Linha indentada sem marcador virava
+  parágrafo solto fora da lista — 838 linhas em 38 arquivos. Pior: quando o negrito
+  atravessava a quebra, as duas metades caíam em conversões inline diferentes e os
+  asteriscos chegavam crus à página. A continuação passa a ser juntada ao item
+  **antes** da conversão inline. Linha indentada que *tem* marcador continua sendo
+  sublista, não continuação.
+- **`**​*negrito* contendo itálico**` não convertia.** A classe negada `[^*]+` parava
+  no primeiro `*` interno e a linha inteira chegava ao site com os asteriscos crus —
+  139 linhas em 20 arquivos. Passa a aceitar `*` dentro, com `***x***` tratado antes
+  (senão o passo preguiçoso casaria `**` + `*x` + `**` e deixaria um `*` solto). A
+  forma inversa, `*Fui eu **que fiz***`, já funcionava e tem teste para continuar
+  funcionando.
+- **Wikilink com pipe CRU quebrava a tabela.** O `|` do link era lido como separador:
+  duas colunas viravam quatro e o link aparecia em texto puro. O escapado (`\|`) já
+  era tratado; o cru, que o vault também escreve, não era. Agora o miolo de `[[…]]` é
+  mascarado antes de dividir a linha, o que cobre as duas formas.
+
+> Nota de método: o negrito usa `[\s\S]+?`, não `.+?`. O texto que chega ao conversor
+> inline é um bloco inteiro com as linhas ainda separadas por `\n`, e o vault quebra
+> linha no meio de negrito o tempo todo — `.` fecharia o casamento na quebra. Foi
+> exatamente o que aconteceu na primeira tentativa desta correção, e a medição no
+> site gerado (1.406 asteriscos) é que denunciou.
+
+### Adicionado
+- Sete testes de regressão, um por defeito e um por invariante: hierarquia preservada,
+  ausência de `<ul>` inválido, estado das tarefas por nível, continuação que não engole
+  a sublista, negrito atravessando quebra de linha, e as duas formas de pipe em tabela.
+
 ## [0.11.1] - 2026-07-31
 
 ### Alterado
