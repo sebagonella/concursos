@@ -6,6 +6,7 @@ Roda com pytest ou standalone:
     python scripts/tests/test_smoke.py
 """
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -312,6 +313,68 @@ def test_fix_notebooklm_preserva_e_atualiza():
 
 
 
+def test_fix_notebooklm_enxerga_o_layout_de_aprofundamentos():
+    """Regressão: o migrador não achava um único pacote do vault — e saía com 0.
+
+    O inventário reimplementava a regra de layout procurando `{assunto}/{assunto}.md`,
+    o formato plano legado. Como todos os 158 pacotes do vault vivem em
+    `{assunto}/{nivel}--{fonte}/`, ele imprimia "Nenhum assunto encontrado" e
+    encerrava **com sucesso**: migração que não migra e não reclama. O teste antigo
+    passava porque o fixture usava o layout que o gerador não emite mais.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        pasta = Path(d) / "assuntos" / "crase" / "padrao--pestana"
+        pasta.mkdir(parents=True)
+        (pasta / "crase--padrao--pestana--X_2026.md").write_text(
+            '---\ntitle: "Crase"\naprofundamento: "padrao--pestana"\nnivel: padrao\n'
+            'fontes: "Pestana"\nstatus: concluido\n---\nResumo real.\n', encoding="utf-8")
+        (pasta / "_fonte-notebooklm.md").write_text(
+            "# antigo\npodcast-crase.mp3\n", encoding="utf-8")
+        r = subprocess.run([sys.executable, str(ROOT / "fix_notebooklm_packs.py"),
+                            "--assuntos-dir", str(Path(d) / "assuntos"),
+                            "--concurso", "X_2026", "--materia", "P"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert "Aprofundamentos encontrados: 1" in r.stdout, r.stdout
+        novo = (pasta / "_fonte-notebooklm.md").read_text(encoding="utf-8")
+        assert "podcast-crase--padrao--pestana--X_2026.m4a" in novo, novo[:400]
+        assert (pasta / "_fonte-notebooklm.bak.md").exists(), "backup do gerador"
+
+
+def test_fix_notebooklm_falha_alto_quando_nao_acha_nada():
+    """Sair 0 sem escrever nada escondeu o bug do layout por versões. Pasta sem
+    aprofundamento é erro, não sucesso silencioso."""
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "assuntos").mkdir()
+        r = subprocess.run([sys.executable, str(ROOT / "fix_notebooklm_packs.py"),
+                            "--assuntos-dir", str(Path(d) / "assuntos"),
+                            "--concurso", "X_2026", "--materia", "P"],
+                           capture_output=True, text=True)
+        assert r.returncode == 1, (r.returncode, r.stdout)
+
+
+def test_fix_notebooklm_sem_leis_dir_nao_apaga_as_leis_da_lista_de_fontes():
+    """44 dos 158 packs do vault listam leis como fonte a subir. Regenerar sem
+    `--leis-dir` as apaga em silêncio — e o pack é onde o usuário lê o que subir."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        leis = d / "leis"
+        leis.mkdir()
+        (leis / "lei-8742-1993-loas.pdf").write_bytes(b"%PDF-1.4\n")
+        pasta = d / "assuntos" / "bpc" / "padrao--lei-8742"
+        pasta.mkdir(parents=True)
+        (pasta / "bpc--padrao--lei-8742--X_2026.md").write_text(
+            '---\ntitle: "BPC"\naprofundamento: "padrao--lei-8742"\nnivel: padrao\n'
+            'fontes: "Lei 8.742/1993"\nstatus: concluido\n---\n'
+            "O art. 20 da Lei 8742 define o BPC.\n", encoding="utf-8")
+        cmd = [sys.executable, str(ROOT / "fix_notebooklm_packs.py"),
+               "--assuntos-dir", str(d / "assuntos"), "--concurso", "X_2026",
+               "--materia", "P", "--leis-dir", str(leis)]
+        assert subprocess.run(cmd, capture_output=True, text=True).returncode == 0
+        com = (pasta / "_fonte-notebooklm.md").read_text(encoding="utf-8")
+        assert "lei-8742-1993-loas.pdf" in com, "a lei tem de entrar na lista de fontes"
+
+
 def test_niveis_geram_templates_diferentes():
     """padrao e detalhado devem produzir estruturas de seções distintas."""
     with tempfile.TemporaryDirectory() as d:
@@ -377,6 +440,153 @@ def test_notebooklm_pack_gera_um_por_aprofundamento():
         det = (base / "beta--detalhado" / "_fonte-notebooklm.md").read_text(encoding="utf-8")
         pad = (base / "alfa--padrao" / "_fonte-notebooklm.md").read_text(encoding="utf-8")
         assert "APROFUNDADO" in det and "APROFUNDADO" not in pad
+        # este é o único fixture antigo que exercita o caminho que vazava: era o
+        # nível `detalhado` que injetava `fontes:` dentro do prompt
+        assert ".pdf" not in det and "Fonte X" not in det, det
+
+
+def _blocos_de_prompt(pack: str) -> list[str]:
+    """Todo bloco cercado do pacote — é o que o usuário cola no NotebookLM."""
+    return re.findall(r"^```\s*\n(.*?)^```", pack, re.MULTILINE | re.DOTALL)
+
+
+# padrões que denunciam um prompt mandando consultar a OBRA em vez da nota do vault
+PROIBIDO_NO_PROMPT = (
+    re.compile(r"\.pdf\b", re.I),
+    re.compile(r"\bp[áa]gs?\.", re.I),
+    re.compile(r"\bp[áa]ginas?\b", re.I),
+    re.compile(r"\bcap[íi]tulos?\b", re.I),
+    re.compile(r"\btrecho do livro\b", re.I),
+    re.compile(r"Baseie-se nas fontes", re.I),   # a formulação que injetava `fontes:`
+    re.compile(r"localizacao_livro", re.I),
+)
+# palavras comuns demais para acusar vazamento da fonte
+GENERICOS = {"lei", "livro", "material", "proprio", "próprio", "para", "concursos",
+             "gramatica", "gramática", "manual", "plano", "edicao", "edição"}
+
+
+def _termos(s: str) -> set:
+    return set(re.findall(r"[\wÀ-ÿ]{2,}", (s or "").lower()))
+
+
+def test_prompt_nunca_manda_consultar_o_livro():
+    """Guarda sistêmica: subir o livro é OPCIONAL, então prompt que o nomeia manda
+    o modelo usar uma fonte que pode não estar no notebook.
+
+    Regressão real: o áudio nível `detalhado` injetava
+    `Baseie-se nas fontes: A-Gramatica-para-Concursos-Fernando-Pestana.pdf.` — um
+    PDF marcado como *(Referência)* opcional na própria seção de fontes do pacote.
+
+    Este teste vale para os prompts que ainda serão escritos: varre TODOS os blocos
+    cercados de TODAS as combinações e falha se algum nomear obra, PDF ou página.
+    """
+    casos = [
+        # (ident no padrão {nivel}--{fonte}, nivel, fontes, localizacao_livro)
+        ("padrao--pestana", "padrao", "A Gramática para Concursos (Pestana)",
+         "A-Gramatica-para-Concursos-Fernando-Pestana.pdf — págs. 192–682"),
+        ("detalhado--pestana", "detalhado", "A-Gramatica-para-Concursos-Fernando-Pestana.pdf",
+         "A-Gramatica-para-Concursos-Fernando-Pestana.pdf — págs. 192–682"),
+        ("padrao--lei-8742", "padrao", "Lei nº 8.742/1993", "lei-8742-1993-loas.pdf — art. 20"),
+        ("padrao--proprio", "padrao", "material próprio", ""),
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d) / "assuntos" / "crase"
+        for ident, nivel, fontes, loc in casos:
+            p = base / ident
+            p.mkdir(parents=True)
+            extra = f'localizacao_livro: "{loc}"\n' if loc else ""
+            (p / f"crase--{ident}.md").write_text(
+                f'---\ntitle: "Crase"\naprofundamento: "{ident}"\nnivel: {nivel}\n'
+                f'fontes: "{fontes}"\n{extra}status: concluido\n---\nConteúdo real.\n',
+                encoding="utf-8")
+        r = subprocess.run([sys.executable, str(ROOT / "notebooklm_pack.py"),
+                            "--assuntos-dir", str(Path(d) / "assuntos"),
+                            "--concurso", "X_2026", "--materia", "P"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert json.loads(r.stdout)["gerados"] == len(casos)
+
+        for ident, _, fontes, loc in casos:
+            pack = (base / ident / "_fonte-notebooklm.md").read_text(encoding="utf-8")
+            blocos = _blocos_de_prompt(pack)
+            assert len(blocos) == 4, (ident, len(blocos))
+
+            nota = f"crase--{ident}.md"
+            clausula = f'Baseie-se na nota "{nota}" deste notebook.'
+            # termos que SÓ o frontmatter de fonte conhece. O que o título do
+            # assunto já diz é legítimo — num assunto "Lei 8.742/1993" citar a lei
+            # no prompt é o próprio tema, não vazamento da obra.
+            so_da_fonte = {t for t in _termos(f"{fontes} {loc}")
+                           if len(t) > 3 and t not in _termos("Crase")
+                           and t not in GENERICOS}
+
+            for bloco in blocos:
+                # TODO prompt ancora na nota, que é sempre o item 1 das fontes
+                assert nota in bloco, (ident, bloco)
+                # tirar a cláusula ANTES de varrer: o nome da nota carrega o slug
+                # da fonte (`--pestana--`), e a varredura acusaria a própria frase
+                # que este teste exige.
+                corpo = bloco.replace(clausula, "")
+                for padrao in PROIBIDO_NO_PROMPT:
+                    assert not padrao.search(corpo), (ident, padrao.pattern, corpo)
+                vazou = sorted(so_da_fonte & _termos(corpo))
+                assert not vazou, (ident, "termo que só `fontes:` conhece", vazou)
+
+
+def test_prompt_cabe_no_campo_do_estudio():
+    """O campo "Customize" do Estúdio trunca. Prompt que estoura perde o fim —
+    e o fim é onde ficam as instruções de conteúdo."""
+    with tempfile.TemporaryDirectory() as d:
+        # pior caso realista: nome de assunto e de aprofundamento longos
+        ident = "detalhado--samu-sp+cruz-vermelha"
+        p = Path(d) / "assuntos" / "nocoes-de-rcp-e-cadeia-de-sobrevivencia" / ident
+        p.mkdir(parents=True)
+        (p / f"nocoes-de-rcp-e-cadeia-de-sobrevivencia--{ident}--SEDES_2026.md").write_text(
+            '---\ntitle: "Noções de RCP (reanimação cardiopulmonar) e cadeia de '
+            'sobrevivência"\naprofundamento: "' + ident + '"\nnivel: detalhado\n'
+            'fontes: "Manual do SAMU-192, CICV"\nstatus: concluido\n---\nReal.\n',
+            encoding="utf-8")
+        subprocess.run([sys.executable, str(ROOT / "notebooklm_pack.py"),
+                        "--assuntos-dir", str(Path(d) / "assuntos"),
+                        "--concurso", "SEDES_2026", "--materia", "M"],
+                       capture_output=True, text=True)
+        # medido no pior caso real do vault: 490 chars. O teto dá folga sem virar
+        # teste que nunca morde.
+        for bloco in _blocos_de_prompt((p / "_fonte-notebooklm.md").read_text(encoding="utf-8")):
+            assert len(bloco.strip()) <= 550, (len(bloco.strip()), bloco[:120])
+
+
+def test_clausula_de_fonte_nomeia_a_nota_e_nada_mais():
+    import notebooklm_pack as nlp
+    assert nlp.clausula_fonte("crase--padrao--pestana--SEDES_2026.md") == (
+        'Baseie-se na nota "crase--padrao--pestana--SEDES_2026.md" deste notebook.')
+
+
+def test_pack_declara_nome_do_notebook_e_arquivos_no_frontmatter():
+    """O nome do notebook e os nomes dos arquivos a salvar são CONTRATO, não prosa.
+
+    A `concurso-publica` os extraía por regex do texto corrido e falhava: o roteiro
+    do mapa mental e o do report chegavam vazios ao site, e o nome do notebook não
+    chegava nunca. Declarados no frontmatter, a leitura é determinística — e é o que
+    a automação vai consumir.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "assuntos" / "crase" / "padrao--pestana"
+        p.mkdir(parents=True)
+        (p / "crase--padrao--pestana--X_2026.md").write_text(
+            '---\ntitle: "Crase"\naprofundamento: "padrao--pestana"\nnivel: padrao\n'
+            'fontes: "Pestana"\nstatus: concluido\n---\nReal.\n', encoding="utf-8")
+        subprocess.run([sys.executable, str(ROOT / "notebooklm_pack.py"),
+                        "--assuntos-dir", str(Path(d) / "assuntos"),
+                        "--concurso", "X_2026", "--materia", "M"],
+                       capture_output=True, text=True)
+        pack = (p / "_fonte-notebooklm.md").read_text(encoding="utf-8")
+        base = "crase--padrao--pestana--X_2026"
+        assert 'nome_notebook: "X_2026 — Crase — padrao--pestana"' in pack, "nome do notebook"
+        assert f'arquivo_podcast: "podcast-{base}.m4a"' in pack, "arquivo do podcast"
+        assert f'arquivo_mapa_mental: "mapa-mental-{base}.png"' in pack, "arquivo do mapa mental"
+        assert f'arquivo_video: "video-{base}.mp4"' in pack, "arquivo do vídeo"
+        assert f'arquivo_report: "report-{base}.md"' in pack, "arquivo do report"
 
 
 # ---------------- convenção de aprofundamento (aprofundamento_id) ---------------- #
@@ -655,6 +865,48 @@ def test_assuntos_do_topico_falha_alto_quando_nao_existe():
         assert out.returncode == 2
         assert "não encontrado" in out.stderr
         assert "1. Crase" in out.stderr          # lista o que existe
+
+
+def test_assuntos_do_topico_ignora_marcadores_do_obsidian_tasks():
+    """Regressão: marcar o subtópico como concluído no Obsidian renomeava o assunto.
+
+    O plugin Tasks acrescenta `✅ 2026-07-30` ao fim da linha. Como o corte nos
+    dois-pontos só limpava itens do formato "Tema: explicação", num item SEM `:`
+    a data ia parar dentro do nome — o slug virava
+    `criacao-de-brasilia-...-plano-de-metas-2026-07-30` e deixava de casar com a
+    pasta já existente no vault, fazendo o assunto parecer não aprofundado.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d) / "SEDES_2026"
+        (base / "_COMUM" / "03-MAPAS-COMUNS").mkdir(parents=True)
+        (base / "_COMUM" / "03-MAPAS-COMUNS" / "01-df.md").write_text(
+            '---\nmateria_id: conhecimentos-df\n---\n'
+            '# 📚 Mapa de Estudo — Conhecimentos do DF\n\n'
+            '## 1. Conhecimentos do DF\n\n### Subtópicos derivados\n\n'
+            # concluído: o caso real, item SEM dois-pontos
+            '- [x] Criação de Brasília, plano de metas ✅ 2026-07-30\n'
+            # agendado + vencimento, ainda em aberto
+            '- [ ] Geografia do DF ➕ 2026-07-01 📅 2026-08-15\n'
+            # prioridade do Tasks, sem data
+            '- [ ] Realidade étnica ⏫\n'
+            # item COM dois-pontos: já sobrevivia, tem de continuar sobrevivendo
+            '- [x] Política e organização: acumula competências ✅ 2026-07-30\n'
+            # emoji que NÃO é do Tasks pertence ao nome e não pode ser cortado
+            '- [ ] Mnemônicos 🧠 do bloco\n',
+            encoding="utf-8")
+        out = subprocess.run(
+            [sys.executable, str(ROOT / "assuntos_do_topico.py"),
+             "--concurso-dir", str(base), "--materia-id", "conhecimentos-df",
+             "--topico", "1"], capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr
+        assuntos = json.loads(out.stdout)["assuntos"]
+        assert assuntos == ["Criação de Brasília, plano de metas",
+                            "Geografia do DF",
+                            "Realidade étnica",
+                            "Política e organização",
+                            "Mnemônicos 🧠 do bloco"], assuntos
+        # o que o bug produzia não pode reaparecer em nenhum deles
+        assert not any("2026-" in a for a in assuntos), assuntos
 
 
 def test_assuntos_do_topico_avisa_quando_topico_nao_tem_subtopicos():

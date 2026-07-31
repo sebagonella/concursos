@@ -2,6 +2,23 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.7.0] - 2026-07-31
+
+### Corrigido
+- **O prompt mandava o NotebookLM usar uma fonte que podia não estar lá.** No nível `detalhado`, o prompt de áudio injetava `Baseie-se nas fontes: {fontes}` com o nome do arquivo do livro — mas a própria seção "Fontes para subir" marca o recorte do livro como *(Referência)* **opcional**, e o padrão é subir só a nota curada do vault. Prompt e instrução se contradiziam. Eram **20 dos 158 pacotes** do vault. Agora **os quatro prompts** ancoram na nota, por `clausula_fonte()`, e o único nome citado é o do `.md` que a seção 1 manda subir como fonte principal.
+- **O migrador de pacotes não enxergava um único pacote do vault.** `fix_notebooklm_packs.py` procurava o assunto em `{assunto}/{assunto}.md` — o layout plano legado — enquanto todos os 158 pacotes vivem em `{assunto}/{nivel}--{fonte}/`. Ele imprimia "Nenhum assunto encontrado" e **saía com sucesso**: migração que não migra e não reclama. O teste passava porque o fixture usava o layout que o gerador não emite mais. Agora o inventário vem de `pastas_de_aprofundamento()`/`arquivo_principal()` do próprio gerador — a regra de layout deixa de existir em dois lugares — e não achar nada **falha alto**.
+- **Backup duplicado no migrador.** Ele copiava o pacote para `.bak.md` incondicionalmente, inclusive quando nada mudaria, e o backup condicional do `notebooklm_pack.py` o sobrescrevia em seguida. Removido: o backup é do gerador, que só copia quando o conteúdo mudou.
+
+### Adicionado
+- **Guarda sistêmica contra citar a obra no prompt.** `test_prompt_nunca_manda_consultar_o_livro` gera pacotes para as combinações representativas (livro · norma · `--proprio` · `padrao` · `detalhado`), varre **todos** os blocos cercados e falha se algum casar `.pdf`, `págs.`, `páginas`, `capítulo`, a formulação antiga, ou qualquer termo que **só** o `fontes:`/`localizacao_livro:` conheça. Vale para os prompts que ainda serão escritos — é o análogo do teste que barra cor fixa fora das variáveis de tema, na `concurso-publica`.
+- **Teto de tamanho do prompt** (`test_prompt_cabe_no_campo_do_estudio`): o campo "Customize" do Estúdio trunca, e o fim do prompt é onde ficam as instruções de conteúdo. Pior caso real medido: 490 caracteres.
+- **O pacote declara o que a automação precisa**, em chaves planas no frontmatter: `nome_notebook`, `arquivo_podcast`, `arquivo_mapa_mental`, `arquivo_video`, `arquivo_report`. Antes esses identificadores só existiam na prosa, e extrair nome de arquivo por regex de texto corrido era exatamente o que fazia o roteiro do mapa mental e o do report chegarem **vazios** ao site.
+
+## [0.6.1] - 2026-07-30
+
+### Corrigido
+- **Marcar um subtópico como concluído no Obsidian renomeava o assunto.** O plugin **Tasks** acrescenta `✅ 2026-07-30` ao fim da linha, e o `assuntos_do_topico.py` só limpava isso por acidente: o corte nos dois-pontos ("Tema: explicação") descartava o resto da linha. Num item **sem** `:` a data entrava no nome — `criacao-de-brasilia-…-plano-de-metas-2026-07-30` — e o slug deixava de casar com a pasta já existente no vault, fazendo um assunto **já aprofundado parecer não aprofundado** em qualquer verificação mapa↔pastas. Agora os marcadores do Tasks (`✅ ❌ ➕ 🛫 ⏳ 📅 🔁 🆔 ⛔` e as cinco prioridades `🔺 ⏫ 🔼 🔽 ⏬`) são removidos **antes** do corte nos dois-pontos, de modo que os dois formatos de item ficam limpos. Emoji fora desse conjunto pertence ao nome e é preservado — há teste que trava isso.
+
 ## [0.6.0] - 2026-07-30
 
 ### Corrigido

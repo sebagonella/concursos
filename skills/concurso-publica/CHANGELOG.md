@@ -2,6 +2,19 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.11.0] - 2026-07-31
+
+### Corrigido
+- **A página do pacote NotebookLM não dizia com que nome criar o notebook nem com que nome salvar cada arquivo** — as duas informações sem as quais o roteiro não se executa sem abrir o Obsidian. O nome do notebook nunca chegava (só a lista numerada da seção 1 era lida, e o nome está na frase que a introduz), e o nome do arquivo vivia numa linha que o parser de roteiro descartava.
+- **`_roteiro_do_bloco()` exigia bullet e descartava as instruções que mais importam.** No template real, `Studio → …`, `Generate → …` e `Salve … como …` são **parágrafo**, não item de lista. Resultado: o roteiro do **mapa mental** e o do **report**, cujas instruções são todas parágrafo, saíam **vazios** — está congelado assim no `examples/site-model-exemplo.json`. A regra agora é aberta: toda linha de instrução entra, e o que é estrutura (blockquote, título, lista de fontes) sai. Lista fechada falha em silêncio; regra aberta falha à vista.
+- **O fixture inventava a realidade que o parser exigia.** Ele escrevia `- Studio → …` **como bullet**, o que no template real não é bullet, e o corpo do pacote era a palavra `pack`. O teste ficava verde enquanto o vault produzia roteiro vazio — o mesmo modo de falha do bug do `_GERAL`. Agora o fixture **renderiza o `.tpl` real** da skill irmã, e `test_o_que_o_coletor_espera_do_pack_existe_no_template_real` quebra se o template mudar de forma.
+- **O botão de copiar não alcançaria nada fora de um cartão de prompt** (`closest(".prompt")`): existiria e não faria nada, sem erro visível. Passou a aceitar `.copiavel`/`.texto-copiavel`, com teste que trava os seletores.
+
+### Adicionado
+- `pack_notebooklm.nome_notebook` e `prompts[].arquivo_saida` no modelo — os identificadores que a automação vai consumir. Lidos do frontmatter do pacote (contrato) com a prosa como **fallback**, para os pacotes do vault que ainda não foram regerados.
+- A página mostra o nome do notebook **por aprofundamento** (dois aprofundamentos = dois notebooks, com nomes diferentes; no cabeçalho da página apareceria o nome errado nas outras abas) e o nome do arquivo em cada cartão de gerável.
+- `examples/site-model-exemplo.json` atualizado — trazia `roteiro: []` congelado — e o teste do exemplo agora afirma roteiro não vazio e arquivo de saída em todos os geráveis.
+
 ## [0.10.0] - 2026-07-30
 
 ### Adicionado

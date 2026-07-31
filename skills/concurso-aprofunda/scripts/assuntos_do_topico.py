@@ -37,6 +37,34 @@ ITEM = re.compile(r"^\s*[-*]\s*(?:\[[ xX]\]\s*)?(.+)$")
 H4 = re.compile(r"^\s*####\s+")
 PRIORIDADE_EMOJI = ("🔴", "🟠", "🟡", "🟢")
 
+# Marcadores do plugin Obsidian Tasks. Marcar um subtópico como concluído
+# acrescenta `✅ 2026-07-30` ao fim da linha — e isso ia parar dentro do nome do
+# assunto, gerando `...-plano-de-metas-2026-07-30` e um slug que não casa mais
+# com a pasta já criada no vault. Como o plugin sempre escreve os marcadores num
+# bloco no FIM da linha, corta-se do primeiro marcador em diante.
+TASKS_MARCADOR = re.compile(
+    "[" "✅"      # ✅ concluída
+        "❌"      # ❌ cancelada
+        "➕"      # ➕ criada
+        "\U0001f6eb"  # 🛫 início
+        "⏳"      # ⏳ agendada
+        "\U0001f4c5"  # 📅 vencimento
+        "\U0001f501"  # 🔁 recorrência
+        "\U0001f194"  # 🆔 id
+        "⛔"      # ⛔ depende de
+        "\U0001f53a"  # 🔺 prioridade máxima
+        "⏫"      # ⏫ alta
+        "\U0001f53c"  # 🔼 média
+        "\U0001f53d"  # 🔽 baixa
+        "⏬"      # ⏬ mínima
+    "]"
+)
+
+
+def limpar_item(texto: str) -> str:
+    """Texto do subtópico sem os marcadores do Obsidian Tasks."""
+    return TASKS_MARCADOR.split(texto, maxsplit=1)[0].strip(" —-·")
+
 
 def ler_frontmatter(md: Path) -> tuple[dict, str]:
     txt = md.read_text(encoding="utf-8")
@@ -108,6 +136,11 @@ def topicos_do_mapa(md: Path) -> list[dict]:
                 mi = ITEM.match(linha)
                 if mi:
                     texto = re.sub(r"\*\*", "", mi.group(1)).strip()
+                    # marcadores do Tasks saem ANTES do corte nos dois-pontos:
+                    # item sem `:` levava a data do `✅` para dentro do assunto
+                    texto = limpar_item(texto)
+                    if not texto:
+                        continue
                     # o item costuma ser "Tema: explicação"; o assunto é o tema
                     assuntos.append(texto.split(":")[0].strip() if ":" in texto[:80]
                                     else texto)

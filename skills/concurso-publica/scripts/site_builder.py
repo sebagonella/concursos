@@ -542,12 +542,19 @@ def bloco_pack(pack: dict, ap: dict, ativo: bool, ident: str) -> str:
     prompts = []
     for p in pack["prompts"]:
         roteiro = "".join(f"<li>{esc(l)}</li>" for l in p["roteiro"])
+        # com que nome salvar: sem isto o arquivo baixado não casa com o que o site
+        # procura para detectar a mídia, e o gerável fica invisível na página
+        arq = ""
+        if p.get("arquivo_saida"):
+            arq = (f'<p class="arquivo-saida">Salvar como '
+                   f'<code>{esc(p["arquivo_saida"])}</code></p>')
         prompts.append(f"""<section class="cartao prompt">
   <div class="titulo-linha">
     <h3>{p["icone"]} {esc(p["rotulo"])}</h3>
     <button class="baixar copiar" type="button" data-copiar>⧉ Copiar</button>
   </div>
   <pre class="texto-prompt">{esc(p["prompt"])}</pre>
+  {arq}
   {f'<ul class="roteiro">{roteiro}</ul>' if roteiro else ''}
 </section>""")
 
@@ -571,10 +578,21 @@ def bloco_pack(pack: dict, ap: dict, ativo: bool, ident: str) -> str:
               if midias_prontas
               else '<p class="meta">Nada gerado ainda para este aprofundamento.</p>')
 
+    # o nome vem ANTES das fontes porque é essa a ordem da ação: criar o notebook,
+    # depois subir. E é por APROFUNDAMENTO — dois aprofundamentos do mesmo assunto
+    # são dois notebooks, com nomes diferentes; por isso mora aqui e não no
+    # cabeçalho da página, que é único e mostraria o nome errado nas outras abas.
+    nome = ""
+    if pack.get("nome_notebook"):
+        nome = (f'<p class="nome-notebook copiavel">Criar notebook com o nome '
+                f'<code class="texto-copiavel">{esc(pack["nome_notebook"])}</code> '
+                f'<button class="copiar" type="button" data-copiar>⧉</button></p>')
+
     cls = "aprof" + (" ativo" if ativo else "")
     return f"""<div class="{cls}" data-aprof="{esc(ident)}">
   <section class="papel">
     <h2 id="fontes">1 · Fontes para subir no notebook</h2>
+    {nome}
     <ol class="fontes-pack">{fontes}</ol>
     {estado}
     {botao}

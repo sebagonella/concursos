@@ -9,6 +9,16 @@ notebooklm_status: {NOTEBOOKLM_STATUS}
 # Cole aqui o link do notebook depois de criá-lo: é o que faz o botão
 # "Abrir no NotebookLM" aparecer no site gerado pela concurso-publica.
 notebooklm_url: "{NOTEBOOKLM_URL}"
+# Identificadores que a concurso-publica publica e que a automação vai consumir.
+# Ficam aqui, e não só na prosa, porque extrair nome de arquivo por regex de texto
+# corrido já falhou: o roteiro do mapa mental e o do report chegavam vazios ao site.
+# Chaves PLANAS de propósito — o leitor de frontmatter é `k: v` por linha, sem YAML
+# aninhado.
+nome_notebook: "{CONCURSO} — {ASSUNTO}"
+arquivo_podcast: "podcast-{SLUG_ASSUNTO}.m4a"
+arquivo_mapa_mental: "mapa-mental-{SLUG_ASSUNTO}.png"
+arquivo_video: "video-{SLUG_ASSUNTO}.mp4"
+arquivo_report: "report-{SLUG_ASSUNTO}.md"
 ---
 
 # 🎙️ Pacote NotebookLM — {ASSUNTO}

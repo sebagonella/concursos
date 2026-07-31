@@ -23,12 +23,13 @@ Este script é um WRAPPER fino sobre notebooklm_pack.py: mesma geração, mais b
 e relatório do que mudou. Use-o quando a pasta do concurso JÁ existe.
 """
 import argparse
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI))
+import notebooklm_pack as nlp  # noqa: E402  (a regra de layout mora lá, não aqui)
 
 
 def main():
@@ -47,37 +48,42 @@ def main():
         sys.stderr.write(f"ERRO: não é diretório: {args.assuntos_dir}\n")
         sys.exit(1)
 
-    # inventário do que existe hoje
+    # Inventário: UM pacote por aprofundamento, no layout que o gerador realmente
+    # emite. Antes esta função reimplementava a regra de layout procurando
+    # `subdir/{subdir.name}.md` — o formato plano legado. Como o padrão desde a
+    # 0.5.0 é `{assunto}/{nivel}--{fonte}/`, o inventário achava ZERO alvos nos 158
+    # pacotes do vault e o script saía com sucesso sem escrever nada: migração que
+    # não migra e não reclama. Agora a regra vem do próprio gerador.
     alvos = []
     for subdir in sorted(args.assuntos_dir.iterdir()):
         if not subdir.is_dir():
             continue
-        assunto_md = subdir / f"{subdir.name}.md"
-        pack = subdir / "_fonte-notebooklm.md"
-        if assunto_md.exists():
-            alvos.append((subdir, pack, pack.exists()))
+        for pasta in nlp.pastas_de_aprofundamento(subdir):
+            if nlp.arquivo_principal(pasta) is None:
+                continue
+            pack = pasta / "_fonte-notebooklm.md"
+            rotulo = subdir.name if pasta == subdir else f"{subdir.name}/{pasta.name}"
+            alvos.append((rotulo, pack, pack.exists()))
 
     if not alvos:
         sys.stderr.write("Nenhum assunto encontrado para atualizar.\n")
-        sys.exit(0)
+        sys.exit(1)          # falhar alto: sair 0 escondia a migração que não rodou
 
-    print(f"Assuntos encontrados: {len(alvos)}")
-    for subdir, pack, existe in alvos:
-        print(f"  - {subdir.name}: pack {'existe (será atualizado)' if existe else 'novo'}")
+    print(f"Aprofundamentos encontrados: {len(alvos)}")
+    for rotulo, pack, existe in alvos:
+        print(f"  - {rotulo}: pack {'existe (será atualizado)' if existe else 'novo'}")
 
     if args.dry_run:
         print("\n[dry-run] Nada foi escrito.")
         sys.exit(0)
 
-    # backup dos packs existentes
-    if not args.no_backup:
-        n_bak = 0
-        for subdir, pack, existe in alvos:
-            if existe:
-                bak = subdir / "_fonte-notebooklm.bak.md"
-                shutil.copy2(pack, bak)
-                n_bak += 1
-        print(f"\nBackup: {n_bak} arquivo(s) salvos como _fonte-notebooklm.bak.md")
+    if args.no_backup:
+        print("\n⚠️  --no-backup: o gerador não guardará o pack antigo em .bak.md")
+
+    # O backup é do próprio `notebooklm_pack.py` (só copia quando o conteúdo mudou,
+    # ver a regra de preservar trabalho do usuário). Este script já duplicou esse
+    # backup, incondicionalmente — o que gerava .bak.md inútil em todo pacote
+    # inalterado e ainda era sobrescrito pelo backup do gerador logo em seguida.
 
     # delega a geração ao notebooklm_pack.py (fonte única de verdade do formato)
     cmd = [sys.executable, str(AQUI / "notebooklm_pack.py"),

@@ -58,6 +58,56 @@ def _mat_vault(base: Path, materia: str = "portugues",
     return base / escopo / "03-APROFUNDAMENTO" / materia
 
 
+def _template_pack() -> str | None:
+    """O `.tpl` real da `concurso-aprofunda`, quando as duas skills convivem.
+
+    Devolve None se a irmã não estiver ao lado (skill instalada sozinha) — mesmo
+    precedente de `test_copia_do_aprofundamento_id_nao_divergiu`.
+    """
+    # parents: [0]=tests [1]=scripts [2]=concurso-publica [3]=skills [4]=repo.
+    # Mesmos candidatos de `test_copia_do_aprofundamento_id_nao_divergiu`.
+    aqui = Path(__file__).resolve()
+    rel = Path("assets") / "templates" / "fonte-notebooklm.md.tpl"
+    for cand in (aqui.parents[3] / "concurso-aprofunda" / rel,
+                 aqui.parents[4] / "skills" / "concurso-aprofunda" / rel):
+        if cand.exists():
+            return cand.read_text(encoding="utf-8")
+    return None
+
+
+def _pack_como_a_aprofunda_gera(slug: str, concurso: str = "TESTE_2026",
+                                assunto: str = "Crase") -> str:
+    """Corpo do pacote no formato REAL, renderizado do template da skill irmã.
+
+    Antes o fixture escrevia a palavra `pack` como corpo, e o teste ad-hoc inventava
+    `- Studio → …` **como bullet** — no template real essa linha é parágrafo. O
+    fixture criou a realidade que o parser exigia, o teste ficou verde, e o vault
+    produziu `roteiro: []` em mapa mental e report. É o mesmo modo de falha do bug
+    do `_GERAL`, e é por isso que o corpo agora vem do template de verdade.
+    """
+    tpl = _template_pack()
+    if tpl is None:                       # sem a irmã, um mínimo honesto
+        return (f"# Pacote\n\n## 1. Fontes para subir no notebook\n\n"
+                f'Crie um notebook novo chamado **"{concurso} — {assunto}"** e adicione:\n\n'
+                f"1. **`{slug}.md`** — o resumo curado.\n\n"
+                f"## 2. 🎧 Podcast (Audio Overview)\n\n"
+                f"Studio → **Audio Overview** → clique em **Customize**.\n"
+                f"- **Formato:** Deep Dive\n\n```\nP\n```\n\n"
+                f"Salve nesta pasta como **`podcast-{slug}.m4a`**.\n")
+    corpo = tpl.split("---\n", 2)[-1]     # sem o frontmatter, que o chamador monta
+    for chave, valor in (("{CONCURSO}", concurso), ("{ASSUNTO}", assunto),
+                         ("{SLUG_ASSUNTO}", slug), ("{MATERIA}", "Português"),
+                         ("{TAG_ASSUNTO}", slug),
+                         ("{LISTA_FONTES}", f"1. **`{slug}.md`** — o resumo curado."),
+                         ("{PROMPT_AUDIO}", f"Foque em {assunto} para concurso."),
+                         ("{PROMPT_MINDMAP}", "Construa o mapa mental."),
+                         ("{PROMPT_VIDEO}", "Faca um video-aula."),
+                         ("{PROMPT_REPORT}", "Gere um guia de estudos."),
+                         ("{PERGUNTAS_CHAT}", "- O que mais cai?")):
+        corpo = corpo.replace(chave, valor)
+    return corpo
+
+
 # --------------------------------------------------------------------------- #
 # fixtures
 # --------------------------------------------------------------------------- #
@@ -84,7 +134,8 @@ def _montar_concurso(base: Path, com_midias=True, com_url_nb=False):
     (crase / "flashcards-crase.csv").write_text("P1;R1;t\nP2;R2;t\n", encoding="utf-8")
     url = 'notebooklm_url: "https://notebooklm.google.com/notebook/x"\n' if com_url_nb else ""
     (crase / "_fonte-notebooklm.md").write_text(
-        f"---\ntipo: fonte-notebooklm\n{url}---\npack\n", encoding="utf-8")
+        f"---\ntipo: fonte-notebooklm\n{url}---\n" + _pack_como_a_aprofunda_gera("crase"),
+        encoding="utf-8")
     if com_midias:
         (crase / "podcast-crase.m4a").write_bytes(b"AAA")
         (crase / "mapa-mental-crase.png").write_bytes(b"PNG")
@@ -1275,6 +1326,14 @@ def test_exemplo_do_modelo_constroi_de_verdade():
         def resolvedor(self, rota):
             return lambda alvo: None
 
+    # o pacote é a outra metade do contrato, e era onde o exemplo estava velho:
+    # trazia `roteiro: []` congelado em mapa mental e report
+    pack = _materias(modelo)[0]["assuntos"][0]["aprofundamentos"][0]["pack_notebooklm"]
+    assert pack["nome_notebook"], "exemplo sem nome do notebook: regere-o"
+    for q in pack["prompts"]:
+        assert q["roteiro"], f'exemplo com roteiro vazio em {q["chave"]}'
+        assert q["arquivo_saida"], f'exemplo sem arquivo de saída em {q["chave"]}'
+
     h = sb.bloco_plano(materia, _RotasFalsas(), "c/e/materias/x/index.html")
     assert "Pegadinhas da Quadrix neste tópico" in h
     assert "Leis-chave" in h                     # H3 fora do template
@@ -1588,6 +1647,124 @@ def test_materia_homonima_em_escopos_diferentes_nao_colide():
         assert not orfas, orfas
 
 
+def test_roteiro_le_instrucao_que_nao_e_bullet():
+    """Regressão: `Studio → …`, `Generate → …` e `Salve como …` são PARÁGRAFO no
+    template, e a regra antiga só via bullets. Mapa mental e report, cujas
+    instruções são todas parágrafo, chegavam ao site com `roteiro: []` — está
+    congelado assim no examples/site-model-exemplo.json."""
+    bloco = ('Studio → **Audio Overview** → clique em **Customize**.\n'
+             '- **Formato:** Deep Dive\n'
+             '- **Prompt "no que focar":**\n\n```\nP\n```\n\n'
+             'Generate → ⋮ → Download. O NotebookLM gera **`.m4a`**.\n'
+             'Salve nesta pasta como **`podcast-crase.m4a`**.\n')
+    r = sc._roteiro_do_bloco(bloco)
+    assert "Studio → Audio Overview → clique em Customize." in r, "entrada do Estúdio"
+    assert "Formato: Deep Dive" in r, "bullet de opção"
+    assert any(l.startswith("Generate") for l in r), "gerar e baixar"
+    assert any(l.startswith("Salve") for l in r), "onde salvar"
+    assert 'Prompt "no que focar":' not in r, "rótulo do fence não é roteiro"
+    assert "P" not in r, "conteúdo do prompt não vaza para o roteiro"
+
+
+def test_todo_geravel_tem_roteiro_e_nome_de_arquivo():
+    """Contra a falha silenciosa: roteiro vazio passou por versões porque nada
+    afirmava que roteiro vazio é defeito."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        pack = sc.coletar_pack_notebooklm(_mat_vault(base) / "assuntos" / "crase")
+        assert pack is not None
+        for p in pack["prompts"]:
+            assert p["roteiro"], f'{p["chave"]}: roteiro vazio'
+            assert p["arquivo_saida"], f'{p["chave"]}: sem nome de arquivo'
+
+
+def test_pack_nomeia_o_notebook_e_os_arquivos():
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        pack = sc.coletar_pack_notebooklm(_mat_vault(base) / "assuntos" / "crase")
+        assert pack["nome_notebook"] == "TESTE_2026 — Crase", "nome do notebook"
+        por_chave = {p["chave"]: p["arquivo_saida"] for p in pack["prompts"]}
+        assert por_chave.get("podcast") == "podcast-crase.m4a", "arquivo do podcast"
+        assert por_chave.get("mapa_mental") == "mapa-mental-crase.png", "arquivo do mapa mental"
+        assert por_chave.get("video") == "video-crase.mp4", "arquivo do vídeo"
+        assert por_chave.get("report") == "report-crase.md", "arquivo do report"
+
+
+def test_frontmatter_do_pack_vence_a_prosa():
+    """As chaves são CONTRATO; a regex de prosa é só o fallback dos packs antigos.
+    Extrair nome de arquivo de texto corrido foi a causa-raiz do roteiro vazio."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        p = _mat_vault(base) / "assuntos" / "crase" / "_fonte-notebooklm.md"
+        p.write_text(
+            '---\ntipo: fonte-notebooklm\nnome_notebook: "DO FRONTMATTER"\n'
+            'arquivo_podcast: "audio-oficial.m4a"\n---\n'
+            + _pack_como_a_aprofunda_gera("crase"), encoding="utf-8")
+        pack = sc.coletar_pack_notebooklm(p.parent)
+        assert pack["nome_notebook"] == "DO FRONTMATTER"
+        assert {q["chave"]: q["arquivo_saida"] for q in pack["prompts"]}["podcast"] \
+            == "audio-oficial.m4a"
+
+
+def test_pack_antigo_sem_as_chaves_novas_nao_quebra():
+    """Os pacotes do vault só ganham as chaves quando forem regerados, e o site lê
+    o vault como ele está hoje."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        p = _mat_vault(base) / "assuntos" / "crase" / "_fonte-notebooklm.md"
+        p.write_text("---\ntipo: fonte-notebooklm\n---\n"
+                     "## 2. 🎧 Podcast (Audio Overview)\n\n```\nP\n```\n",
+                     encoding="utf-8")
+        pack = sc.coletar_pack_notebooklm(p.parent)
+        assert pack["nome_notebook"] is None, "sem a chave e sem a prosa, não inventa"
+        assert pack["prompts"][0]["arquivo_saida"] is None
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "crase") / "notebooklm"
+             / "index.html").read_text(encoding="utf-8")
+        assert 'class="nome-notebook"' not in h, "sem dado, sem linha vazia"
+
+
+def test_pagina_notebooklm_mostra_nome_do_notebook_e_arquivo_por_geravel():
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "crase") / "notebooklm"
+             / "index.html").read_text(encoding="utf-8")
+        assert "TESTE_2026 — Crase" in h, "nome do notebook na página"
+        assert "podcast-crase.m4a" in h, "arquivo do podcast"
+        assert "mapa-mental-crase.png" in h, "arquivo do mapa mental"
+        assert "video-crase.mp4" in h, "arquivo do vídeo"
+        assert "report-crase.md" in h, "arquivo do report"
+        assert h.count('class="arquivo-saida"') == 4, "um por gerável"
+        assert "Salve nesta pasta como" in h, "roteiro completo, não só os bullets"
+
+
+def test_botao_de_copiar_alcanca_o_nome_do_notebook():
+    """`iniciarCopiar` fazia `closest('.prompt')`; um botão fora de um cartão de
+    prompt ficaria mudo — e nenhum assert de HTML perceberia, porque o botão
+    existe, só não faz nada."""
+    js = (ROOT.parent / "assets" / "site.js").read_text(encoding="utf-8")
+    assert ".copiavel" in js, "seletor do container copiável"
+    assert ".texto-copiavel" in js, "seletor do texto copiável"
+
+
+def test_o_que_o_coletor_espera_do_pack_existe_no_template_real():
+    """Fixture divergente é teste que se autoconfirma. As âncoras que o coletor usa
+    vivem em OUTRA skill; se o template mudar de forma, quebra aqui em vez de
+    esvaziar a página em silêncio."""
+    tpl = _template_pack()
+    if tpl is None:
+        return
+    for ancora in ('chamado **"{CONCURSO} — {ASSUNTO}"**',
+                   "## 1. Fontes para subir no notebook",
+                   "Salve nesta pasta como **`podcast-{SLUG_ASSUNTO}.m4a`**",
+                   "nome_notebook:", "arquivo_podcast:", "arquivo_mapa_mental:",
+                   "arquivo_video:", "arquivo_report:"):
+        assert ancora in tpl, ancora
+
+
 def test_pacote_notebooklm_vira_pagina_com_prompts():
     """Item 3 do pedido. O vault tem 92 pacotes prontos e um único assunto com mídia
     de verdade: o gargalo não é ter o roteiro, é executá-lo — daí a página existir
@@ -1600,7 +1777,8 @@ def test_pacote_notebooklm_vira_pagina_com_prompts():
             "# Pacote\n\n## 1. Fontes para subir no notebook\n\n"
             "1. **`crase.md`** — o resumo curado.\n\n"
             "## 2. 🎧 Podcast (Audio Overview)\n\n"
-            "- Studio → **Audio Overview** → **Customize**.\n"
+            # NÃO é bullet no template real — era essa a ficção do fixture
+            "Studio → **Audio Overview** → **Customize**.\n"
             "- Formato: Deep Dive\n\n```\nFoque em Crase para concurso.\n```\n\n"
             "## 3. 🧠 Mapa Mental (Mind Map)\n\n```\nConstrua o mapa mental.\n```\n\n"
             "## 7. 💬 Perguntas úteis no chat\n\n- O que mais cai?\n\n"

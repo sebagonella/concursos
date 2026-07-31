@@ -177,8 +177,12 @@
   function iniciarCopiar() {
     document.querySelectorAll("[data-copiar]").forEach(function (botao) {
       botao.addEventListener("click", function () {
-        var cartao = botao.closest(".prompt");
-        var pre = cartao && cartao.querySelector(".texto-prompt");
+        // `.prompt` é o cartão do prompt; `.copiavel` é qualquer outro trecho de
+        // um toque — hoje o nome do notebook, que fica fora de um cartão. Sem os
+        // dois seletores o botão do nome ficaria mudo, e nenhum assert de HTML
+        // perceberia: o botão existe, só não faz nada.
+        var cartao = botao.closest(".prompt, .copiavel");
+        var pre = cartao && cartao.querySelector(".texto-prompt, .texto-copiavel");
         if (!pre) return;
         var texto = pre.textContent;
         var original = botao.textContent;

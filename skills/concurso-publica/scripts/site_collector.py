@@ -454,13 +454,16 @@ def coletar_pack_notebooklm(subdir: Path) -> dict | None:
             if padrao.search(titulo):
                 chave, icone, rotulo = k, ic, rot
                 break
+        corpo_bloco = "\n".join(linhas[1:])
         prompts.append({
             "chave": chave or slug_doc(titulo),
             "icone": icone or "✨",
             "rotulo": rotulo or titulo,
             "titulo_secao": titulo,
             "prompt": fences[0].strip(),
-            "roteiro": _roteiro_do_bloco("\n".join(linhas[1:])),
+            "roteiro": _roteiro_do_bloco(corpo_bloco),
+            # com que nome salvar o gerável — o que a automação vai consumir
+            "arquivo_saida": _arquivo_de_saida(fm, chave, corpo_bloco),
         })
 
     fontes = re.findall(r"^\d+\.\s+(.*)$",
@@ -474,6 +477,8 @@ def coletar_pack_notebooklm(subdir: Path) -> dict | None:
         "caminho": str(pack),
         "status": (fm.get("notebooklm_status") or "").strip() or "nao-criado",
         "url": _url_do_pack(fm),
+        # o nome com que criar o notebook — é POR APROFUNDAMENTO, não por assunto
+        "nome_notebook": _nome_do_notebook(fm, corpo),
         "fontes": [re.sub(r"\*\*", "", f).strip() for f in fontes],
         "prompts": prompts,
         "perguntas": [re.sub(r"\*\*", "", p).strip() for p in perguntas],
@@ -491,12 +496,71 @@ def _secao_do_pack(corpo: str, padrao: str) -> str:
     return ""
 
 
+# linhas do bloco que são estrutura, não instrução: blockquote, título, comentário,
+# separador, wikilink solto e item de lista numerada (que é a lista de fontes)
+_ROTEIRO_ESTRUTURAL = re.compile(r"^(>|#{1,6}\s|<!--|-{3,}\s*$|\[\[|\d+\.\s)")
+
+
 def _roteiro_do_bloco(texto: str) -> list[str]:
-    """As linhas de "onde clicar" — o que o pacote chama de roteiro do Estúdio."""
-    return [re.sub(r"\*\*", "", l).strip(" -*")
-            for l in texto.split("\n")
-            if re.match(r"^[-*]\s+\*?\*?(Studio|Formato|Dura|Idioma|Estilo|Generate|Download)",
-                        l.strip(), re.I)]
+    """As linhas de "onde clicar" — o que o pacote chama de roteiro do Estúdio.
+
+    Regra ABERTA: toda linha de instrução entra, seja bullet ou parágrafo. A regra
+    anterior exigia bullet **e** um verbo de lista fechada, e no template real as
+    três linhas que mais importam são parágrafo:
+
+        Studio → **Audio Overview** → clique em **Customize**.
+        Generate → ao terminar, ⋮ → Download. O NotebookLM gera **`.m4a`**.
+        Salve nesta pasta como **`podcast-{SLUG}.m4a`**.
+
+    Resultado: o mapa mental e o report, cujas instruções são TODAS parágrafo,
+    chegavam ao site com `roteiro: []` — está congelado assim no
+    `examples/site-model-exemplo.json`. Lista fechada falha em silêncio (some linha,
+    ninguém vê); regra aberta falha barulhento (aparece linha a mais, que se vê e se
+    corrige). Prosa que não é roteiro vai como blockquote no template, e o `>` é
+    justamente a válvula de escape reconhecida aqui.
+    """
+    linhas, dentro_do_fence = [], False
+    for bruta in texto.split("\n"):
+        l = bruta.strip()
+        if l.startswith("```"):
+            # o rótulo que só ANUNCIA o prompt ("Prompt «no que focar»:") não é
+            # roteiro — o próprio bloco vem logo abaixo
+            if not dentro_do_fence and linhas and linhas[-1].endswith(":"):
+                linhas.pop()
+            dentro_do_fence = not dentro_do_fence
+            continue
+        if dentro_do_fence or not l or _ROTEIRO_ESTRUTURAL.match(l):
+            continue
+        linhas.append(re.sub(r"\*\*|`", "", l).strip(" -*·"))
+    return linhas
+
+
+def _nome_do_notebook(fm: dict, corpo: str) -> str | None:
+    """Nome sugerido do notebook: contrato no frontmatter, prosa como fallback.
+
+    A chave `nome_notebook:` passou a ser emitida pela concurso-aprofunda; os packs
+    gerados antes disso só têm a frase da seção 1, e o site lê o vault como ele
+    está — que sempre atrasa em relação ao código.
+    """
+    if (v := (fm.get("nome_notebook") or "").strip()):
+        return v
+    m = re.search(r'chamado\s+\*\*"([^"]+)"\*\*',
+                  _secao_do_pack(corpo, r"fontes para subir"))
+    return m.group(1) if m else None
+
+
+# nome de arquivo em negrito+código: `**\`podcast-x.m4a\`**`. O filtro de stem
+# descarta o `**\`.m4a\`**` solto da linha do Generate, que é extensão, não arquivo.
+_ARQ_SAIDA = re.compile(r"\*\*`([^`]*\.[A-Za-z0-9]{2,4})`\*\*")
+
+
+def _arquivo_de_saida(fm: dict, chave: str | None, bloco: str) -> str | None:
+    """O nome com que salvar o gerável. Frontmatter primeiro, prosa como fallback."""
+    if chave and (v := (fm.get(f"arquivo_{chave}") or "").strip()):
+        return v
+    cand = [m.group(1) for m in _ARQ_SAIDA.finditer(bloco)
+            if not m.group(1).startswith(".")]
+    return cand[-1] if cand else None
 
 
 def _url_do_pack(fm: dict) -> str | None:
