@@ -801,16 +801,21 @@ def test_escopo_vem_do_primeiro_componente_do_caminho():
 
 
 def test_midia_do_assunto_e_uniao_dos_aprofundamentos():
-    """Regressão: `midias` era herdada do aprofundamento PRINCIPAL, e como a
-    ordenação põe `detalhado` primeiro, um assunto cuja mídia estava no `padrao`
-    aparecia sem mídia. No vault real era o caso do único assunto com podcast,
-    vídeo e mapa mental — o site anunciava "0 com áudio" na matéria inteira.
+    """Regressão: `midias` era herdada do aprofundamento PRINCIPAL, então um assunto
+    cuja mídia estivesse no aprofundamento secundário aparecia sem mídia. No vault
+    real era o caso do único assunto com podcast, vídeo e mapa mental — o site
+    anunciava "0 com áudio" na matéria inteira.
+
+    A união não pode depender da ordem, e este teste tem de continuar exercitando o
+    caso difícil: a mídia fica no aprofundamento que NÃO é o principal. Como hoje o
+    principal é o `padrao`, é o `detalhado` que carrega o arquivo — o inverso do
+    arranjo original, mesma propriedade.
     """
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=False)
         alvo = _mat_vault(base) / "assuntos" / "crase"
-        # detalhado (que ordena primeiro) SEM mídia; padrao COM mídia
-        for nome, tem_midia in (("detalhado--pestana", False), ("padrao--pestana", True)):
+        # padrao (que ordena primeiro) SEM mídia; detalhado COM mídia
+        for nome, tem_midia in (("padrao--pestana", False), ("detalhado--pestana", True)):
             p = alvo / nome
             p.mkdir(parents=True)
             (p / f"crase--{nome}.md").write_text(
@@ -819,7 +824,7 @@ def test_midia_do_assunto_e_uniao_dos_aprofundamentos():
                 (p / f"podcast-crase--{nome}.m4a").write_bytes(b"A")
 
         a = sc.coletar_assunto(alvo)
-        assert a["aprofundamentos"][0]["nivel"] == "detalhado"      # principal
+        assert a["aprofundamentos"][0]["nivel"] == "padrao"         # principal
         assert a["aprofundamentos"][0]["midias"]["podcast"] is None
         assert a["midias"]["podcast"], "presença deve ser a UNIÃO, não a do principal"
 
@@ -2094,8 +2099,8 @@ def test_varios_aprofundamentos_por_assunto():
         # 2 novos + o legado que já existia na fixture
         assert a["n_aprofundamentos"] == 3
         assert set(a["niveis"]) == {"padrao", "detalhado"}
-        # detalhado vem primeiro (é o principal)
-        assert a["aprofundamentos"][0]["nivel"] == "detalhado"
+        # padrao vem primeiro (é o principal: a aba que abre)
+        assert a["aprofundamentos"][0]["nivel"] == "padrao"
 
 
 def test_legado_continua_funcionando_sozinho():
@@ -2226,9 +2231,60 @@ def test_coleta_no_padrao_de_pastas_atual():
         _add_aprof_atual(base, "crase", "padrao--1f--f1-pestana")
         a = _assunto_do_modelo(_rodar(base), "crase")
         assert a["n_aprofundamentos"] == 3, a["n_aprofundamentos"]   # 2 novos + legado da fixture
-        # detalhado vem primeiro (ordenação por nível)
-        assert a["aprofundamentos"][0]["nivel"] == "detalhado"
-        assert a["aprofundamentos"][1]["nivel"] == "padrao"
+        # padrao vem primeiro (é o principal); o legado, sem identidade de fonte,
+        # fica atrás dos identificados do mesmo nível; detalhado por último
+        assert [x["aprofundamento"] for x in a["aprofundamentos"]] == [
+            "padrao--1f--f1-pestana", "original", "detalhado--1f--f1-pestana"]
+
+
+def test_aba_que_abre_e_a_do_nivel_padrao():
+    """Entra-se num assunto para REVISAR: a aba aberta é a do resumo de revisão, e
+    o tratamento exaustivo fica a um clique. Nada afirmava isso no HTML — a garantia
+    era indireta, via `aprofundamentos[0]`, e o site podia divergir sem ninguém ver.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = _mat_vault(base) / "assuntos" / "regencia-verbal-e-nominal"
+        for nome in ("detalhado--pestana", "padrao--pestana"):
+            p = alvo / nome
+            p.mkdir(parents=True)
+            (p / f"regencia--{nome}.md").write_text(
+                f'---\ntitle: "Regência"\nfontes: "Pestana"\n---\ncorpo do {nome}\n',
+                encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "regencia-verbal-e-nominal")
+             / "index.html").read_text(encoding="utf-8")
+
+        # a aba ativa é a primeira do HTML, e tem de ser a do padrão
+        abas = re.findall(r'<button class="aba( ativa)?"[^>]*>(.*?)</button>', h, re.S)
+        assert abas, "a página precisa ter abas quando há mais de um aprofundamento"
+        ativas = [rot for marca, rot in abas if marca]
+        assert len(ativas) == 1, f"exatamente uma aba ativa, achei {len(ativas)}"
+        assert "Padrão" in ativas[0], f"a aba aberta deveria ser a do padrão: {ativas[0]!r}"
+        # a aba ativa aponta para o painel do padrão (data-alvo casa com data-aprof)
+        alvo = re.search(r'class="aba ativa" data-alvo="([^"]+)"', h)
+        assert alvo, "a aba ativa precisa nomear o painel que abre"
+        assert alvo.group(1).startswith("padrao--"), f"aba aberta: {alvo.group(1)}"
+        painel = re.search(r'class="aprof ativo" data-aprof="([^"]+)"', h)
+        assert painel and painel.group(1) == alvo.group(1), "aba e painel ativos divergem"
+
+
+def test_desempate_entre_dois_padrao_e_alfabetico():
+    """Dois aprofundamentos do MESMO nível: abre o primeiro em ordem alfabética.
+    No vault são 8 assuntos assim — todos em Conhecimentos do DF."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = _mat_vault(base) / "assuntos" / "regencia-verbal-e-nominal"
+        # cadastrados fora de ordem de propósito
+        for nome in ("padrao--proprio", "padrao--linhares", "padrao--lc-94"):
+            p = alvo / nome
+            p.mkdir(parents=True)
+            (p / f"regencia--{nome}.md").write_text(
+                f'---\ntitle: "Regência"\nfontes: "X"\n---\nx\n', encoding="utf-8")
+        a = sc.coletar_assunto(alvo)
+        ids = [x["aprofundamento"] for x in a["aprofundamentos"] if x["nivel"] == "padrao"]
+        assert ids[:3] == ["padrao--lc-94", "padrao--linhares", "padrao--proprio"], ids
 
 
 def test_nivel_vem_da_pasta_mesmo_sem_frontmatter():
@@ -2237,8 +2293,8 @@ def test_nivel_vem_da_pasta_mesmo_sem_frontmatter():
         base = _montar_concurso(Path(d) / "TESTE_2026")
         _add_aprof_atual(base, "crase", "detalhado--2f--f1-pestana--f2-abreu")
         a = _assunto_do_modelo(_rodar(base), "crase")
-        ap = a["aprofundamentos"][0]
-        assert ap["nivel"] == "detalhado"
+        # escolhe pelo nível, não pelo índice: a ordem é assunto de outro teste
+        ap = next(x for x in a["aprofundamentos"] if x["nivel"] == "detalhado")
         assert ap["n_fontes_id"] == 2
         assert ap["fontes_id"] == ["pestana", "abreu"]
 

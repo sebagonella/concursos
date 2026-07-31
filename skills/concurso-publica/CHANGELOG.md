@@ -2,6 +2,17 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.11.1] - 2026-07-31
+
+### Alterado
+- **O assunto abre na aba do nível `padrao`**, não mais no `detalhado`. Entra-se num assunto para revisar; o tratamento exaustivo fica a um clique. O desempate dentro do mesmo nível continua alfabético pelo id do aprofundamento — o que decide os 8 assuntos do vault com dois `padrao`. Muda também o que o card mostra, porque o primeiro aprofundamento **representa** o assunto: descrição, bolha de progresso, contagem de flashcards e URL do NotebookLM passam a vir do `padrao`. Efeito colateral bem-vindo: o único assunto do vault com mídia gerada guarda os 7 arquivos em `padrao--pestana`, que era justamente a aba fechada.
+
+### Corrigido
+- **O aprofundamento do layout plano legado podia sequestrar a aba.** Ele não tem identidade de fonte e recebe o id `original`, que vem antes de `padrao--*` no alfabeto — abriria nele em vez do aprofundamento de verdade. Passa a ordenar depois dos identificados do mesmo nível. Não há nenhum no vault hoje; é rede para o caso.
+
+### Adicionado
+- Dois testes que afirmam no **HTML** qual aba abre (`aba ativa` + `data-alvo` casando com o painel) e que o desempate entre dois `padrao` é alfabético. Antes a garantia era indireta, via `aprofundamentos[0]`, e o site podia divergir sem ninguém ver.
+
 ## [0.11.0] - 2026-07-31
 
 ### Corrigido
