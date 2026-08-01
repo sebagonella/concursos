@@ -20,6 +20,11 @@
 # O primeiro login exige o extra [browser], que traz o Playwright (centenas de MB).
 # Depois disso o runtime não precisa de navegador:
 #   pip install 'notebooklm-py[browser]' && notebooklm login
+#
+# A faixa é 0.7.x, que é a versão contra a qual o ciclo foi verificado ponta a ponta.
+# NÃO baixar para 0.3.x: aquela faixa grava a credencial em caminho diferente, e ter
+# as duas instaladas foi exatamente a causa do `Auth not found` — o PATH escolhia a
+# 0.3.4 do ~/.local e o login feito na 0.7.3 não era encontrado.
 
-notebooklm-py>=0.3.4,<0.4   # cliente NÃO-oficial do NotebookLM
+notebooklm-py>=0.7.3,<0.8   # cliente NÃO-oficial do NotebookLM
 pytest>=8.0                 # opcional: rodar a suíte com pytest

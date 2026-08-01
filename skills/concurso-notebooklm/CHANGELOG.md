@@ -2,6 +2,16 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.2.1] - 2026-07-31
+
+### Corrigido
+- **O `requirements.txt` instalava a versão que a 0.2.0 tinha acabado de diagnosticar
+  como culpada.** O pin era `>=0.3.4,<0.4`, mas todo o ciclo foi verificado contra a
+  **0.7.3**, e a 0.3.4 é justamente a faixa que grava a credencial em outro caminho —
+  a causa do `Auth not found` registrado abaixo. Quem seguisse o `README` e rodasse
+  `pip install -r` recebia o bug pronto. A faixa passa a ser `>=0.7.3,<0.8`, com o
+  motivo no próprio arquivo para ninguém baixar de volta sem saber o que quebra.
+
 ## [0.2.0] - 2026-07-31
 
 A **camada de rede**. A skill passa a criar o notebook, subir as fontes, disparar as

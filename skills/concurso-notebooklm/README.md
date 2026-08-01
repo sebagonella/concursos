@@ -5,8 +5,9 @@ prontos no vault: cria o notebook, sobe as fontes, gera as mídias e salva os ar
 com o nome que a `concurso-publica` reconhece — de modo que o site publique sem
 nenhum passo manual.
 
-Versão atual: **0.2.0** (camada de rede: cria o notebook, sobe as fontes, dispara as
-gerações e coleta os arquivos — verificado ponta a ponta contra o NotebookLM).
+Versão atual: **0.2.1** (camada de rede: cria o notebook, sobe as fontes, dispara as
+gerações e coleta os arquivos — verificado ponta a ponta contra o NotebookLM, com a
+`notebooklm-py` **0.7.3**, que é a faixa que o `requirements.txt` pina).
 
 ## O problema que ela resolve
 
