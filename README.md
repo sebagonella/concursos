@@ -205,7 +205,7 @@ O container usa **bind mount**, então atualizar o site é só sincronizar arqui
 
 | Documento | Para quê |
 |---|---|
-| [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | **As decisões de projeto e o porquê de cada uma**: por que três skills e não uma, por que o site é derivado, como funciona a identidade de um aprofundamento, a arquitetura de informação do site, e o diagrama do fluxo em versão nativa |
+| [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | **As decisões de projeto e o porquê de cada uma**: por que uma skill por ciclo de vida e não uma só, por que o site é derivado, por que a automação do NotebookLM é camada opcional, como funciona a identidade de um aprofundamento, e a arquitetura de informação do site |
 | [`docs/SETUP-VAULT.md`](docs/SETUP-VAULT.md) | Preparar o vault Obsidian: estrutura esperada em `30_AREAS/CARREIRA/CONCURSOS/`, plugins e fluxo de trabalho |
 | [`CLAUDE.md`](CLAUDE.md) | **Convenções invioláveis** — a maioria veio de bug real, e quebrá-las quebra coisa de novo. Leitura obrigatória antes de mexer no código |
 | [`deploy/README.md`](deploy/README.md) | Servir o site num servidor doméstico: Docker, rsync, DNS local, troca de porta e troubleshooting |
