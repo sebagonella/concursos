@@ -27,11 +27,25 @@ deploy-*/
 # scripts/install.sh gera a partir de skills/. A fonte é skills/ — versionar as
 # duas duplicaria tudo e abriria espaço para divergirem.
 # O .claude/CLAUDE.md (integração com o vault) é fonte e continua versionado.
-.claude/skills/
-.claude/agents/
+#
+# O glob é `**/` e não `.claude/` porque um `install.sh --local` rodado de dentro de
+# uma subpasta grava lá, não na raiz: já apareceu um deploy/.claude/ de 1,3 MB que o
+# padrão ancorado na raiz não pegava — e o Claude Code passou a carregar as quatro
+# skills duplicadas, com escopo `deploy:`, competindo com as originais.
+**/.claude/skills/
+**/.claude/agents/
 
 # Config local de deploy (host, usuário, caminhos da máquina)
 deploy/deploy.env
+
+# Credencial do NotebookLM: são ~15 cookies do Google e dão acesso à CONTA INTEIRA,
+# não só ao NotebookLM. Vivem fora do repo (em $NOTEBOOKLM_HOME, por padrão
+# ~/.notebooklm), mas estas entradas existem para o caso de alguém apontar o
+# NOTEBOOKLM_HOME para dentro do projeto — o erro é fácil e o estrago é grande.
+.notebooklm*/
+storage_state.json
+*.storage_state.json
+master_token.json
 
 # Editores
 .vscode/

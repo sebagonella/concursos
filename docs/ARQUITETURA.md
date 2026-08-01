@@ -4,11 +4,13 @@
 
 O projeto é uma coleção de skills do Claude Code que produzem material de estudo dentro de um vault Obsidian. Nenhuma delas é um serviço rodando: são **instruções + scripts** que o Claude Code executa sob demanda.
 
-Três etapas encadeadas, cada uma consumindo a saída da anterior:
+Três etapas encadeadas, cada uma consumindo a saída da anterior, mais uma camada
+opcional sobre a segunda:
 
 1. **`concurso-prep`** — o edital vira a estrutura de estudo no vault.
 2. **`concurso-aprofunda`** — o livro de referência vira assunto aprofundado, com flashcards e o pacote do NotebookLM.
 3. **`concurso-publica`** — o vault vira site estático, servido por Docker na rede doméstica.
+4. **`concurso-notebooklm`** — camada **opcional** que executa os pacotes do NotebookLM. Ver "NotebookLM manual, automação como camada opcional".
 
 ## O fluxo completo, do edital ao site no ar
 
@@ -43,9 +45,9 @@ O `build_subject_md.py`, por exemplo, cria o arquivo do assunto com a localizaç
 
 ## Decisões de projeto
 
-### Três skills, não uma
+### Uma skill por ciclo de vida, não uma só
 
-Cada skill tem responsabilidade e ciclo de vida próprios: `concurso-prep` roda uma vez por edital (e de novo em retificações); `concurso-aprofunda` roda por matéria/livro, quantas vezes for preciso; `concurso-publica` roda a cada vez que se quer republicar o site. Separá-las evita uma skill monolítica e permite evoluir cada uma sem risco para as outras.
+Cada skill tem responsabilidade e ciclo de vida próprios: `concurso-prep` roda uma vez por edital (e de novo em retificações); `concurso-aprofunda` roda por matéria/livro, quantas vezes for preciso; `concurso-publica` roda a cada vez que se quer republicar o site; `concurso-notebooklm` roda sob demanda, quando se quer gerar a mídia. Separá-las evita uma skill monolítica e permite evoluir cada uma sem risco para as outras — e, no caso da quarta, isola uma dependência frágil das três que não a têm.
 
 ### O site é derivado, o vault é a fonte
 
@@ -137,13 +139,13 @@ esconderia trabalho já feito. Aplica-se aqui a mesma regra de nunca fingir prec
 que rege a localização no livro: sem casamento exato, a página não afirma nada. Quem
 quiser o link fino preenche um `mapa-aliases.json` opcional.
 
-**O pacote NotebookLM é página por assunto, não por pacote.** Existem 92 pacotes no
-vault e 72 assuntos: entre `padrao--X` e `detalhado--X` do mesmo assunto, só o prompt
-de áudio difere — o resto é nome de arquivo. Uma página por pacote daria ~95% de
+**O pacote NotebookLM é página por assunto, não por pacote.** Hoje são 158 pacotes no
+vault para 121 assuntos: entre `padrao--X` e `detalhado--X` do mesmo assunto, só o
+prompt de áudio difere — o resto é nome de arquivo. Uma página por pacote daria ~95% de
 conteúdo repetido, então as versões viram abas. E é a única página do site cuja razão
-de existir é uma **ação**: o vault tem 92 roteiros prontos e um único assunto com
-mídia gerada, então o gargalo não é ter o roteiro, é executá-lo. Daí o botão de
-copiar em cada prompt.
+de existir é uma **ação**: são 158 roteiros prontos e um punhado de mídias geradas, ou
+seja, o gargalo nunca foi ter o roteiro, é executá-lo. Daí o botão de copiar em cada
+prompt — e, depois, a `concurso-notebooklm`, que ataca o mesmo gargalo por baixo.
 
 **Índices do vault são derivados, não republicados.** `00-INDICE.md` e `99-Status.md`
 existem para navegar no Obsidian; na web, a navegação do site **é** o índice, e o
@@ -194,7 +196,13 @@ O modelo 3 foi descartado: reproduz a obra. O modelo 2 entrega o que ajuda de fa
 
 ### NotebookLM manual, automação como camada opcional
 
-Não existe API pública de consumidor do NotebookLM. A via da comunidade (`notebooklm-py`) usa endpoints internos não-documentados do Google e pode quebrar sem aviso. Por isso a skill **gera o pacote de embarque** (fontes a subir, prompts prontos por gerável, roteiro de cliques) e o usuário executa manualmente. Se a automação for adicionada, entra como camada **sobre** o modo manual, que continua sendo o caminho garantido.
+Não existe API pública de consumidor do NotebookLM. A via da comunidade (`notebooklm-py`) usa endpoints internos não-documentados do Google e pode quebrar sem aviso. Por isso a `concurso-aprofunda` **gera o pacote de embarque** (fontes a subir, prompts prontos por gerável, roteiro de cliques) e o usuário executa — manualmente, sempre que quiser.
+
+A automação **entrou**, na `concurso-notebooklm`, e entrou exatamente na forma prevista: skill **separada**, para a dependência não contaminar as outras três — nenhuma delas tem dependência Python obrigatória, e a `concurso-publica` não tem nenhuma; e camada **sobre** o modo manual, nunca em substituição. Sem a biblioteca instalada, a skill degrada e o pacote continua completo — a suíte dela passa sem a dependência, porque o `install.sh` roda os testes logo depois de copiar.
+
+A divisão interna existe pelo mesmo motivo da fragilidade: **a lógica não toca a rede**. `pacote.py` (ler/escrever o pacote) e `plano.py` (o que gerar, com que nome) são stdlib puro e testáveis sem conexão; a fronteira de rede é fina e injetável. Quando o Google mudar algo por baixo, quebra num arquivo só.
+
+Duas restrições descobertas ao ler a biblioteca, e que moldaram o escopo: ela **não aceita prompt customizado para mapa mental** (o `PROMPT_MINDMAP` do pacote não seria enviado) e **baixa o mapa em JSON**, formato que o catálogo de mídias da `concurso-publica` não reconhece — o arquivo ficaria invisível no site. Por isso o mapa mental ficou **fora** da automação, e pedi-lo é recusado **com a razão**, não ignorado. Pelo mesmo princípio, a extensão do arquivo baixado sai dos **bytes**, não da declaração: o site casa prefixo *e* extensão, então nome errado não vira outro tipo de mídia — vira invisível, que é o pior desfecho por ser silencioso.
 
 ### Localização no livro: TOC primeiro, densidade como rede
 
@@ -212,5 +220,13 @@ Todas as dependências Python são opcionais e o comportamento degrada com aviso
 |---|---|
 | `reportlab` / `weasyprint` | leis saem só em `.md` (sem PDF) |
 | `pyyaml` | apenas `.meta.yml` legado indisponível; `.meta.json` é o padrão |
+| `python-docx` | editais `.docx` não são processados (PDF e MD seguem) |
 | `tesseract` | PDFs escaneados viram pendência em vez de serem lidos |
+| `notebooklm-py` | a `concurso-notebooklm` degrada: a camada de contrato (ler o pacote, planejar, nomear) continua, só a execução some. O pacote manual segue completo, e a suíte dela passa sem a biblioteca — o `install.sh` roda os testes logo depois de copiar |
 | `pdftotext` | bloqueia leitura de PDF (é o único praticamente obrigatório) |
+
+A `notebooklm-py` é caso à parte por ser a única **não-oficial**: roda sobre endpoints
+internos do Google e quebra sem aviso, o que é justamente o motivo de viver numa skill
+só. O `requirements.txt` dela pina a faixa `0.7.x`, verificada em campo; a 0.3.x grava
+a credencial em outro caminho e ter as duas instaladas produz um `Auth not found` que
+parece erro de login.

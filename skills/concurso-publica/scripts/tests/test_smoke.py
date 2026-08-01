@@ -58,6 +58,56 @@ def _mat_vault(base: Path, materia: str = "portugues",
     return base / escopo / "03-APROFUNDAMENTO" / materia
 
 
+def _template_pack() -> str | None:
+    """O `.tpl` real da `concurso-aprofunda`, quando as duas skills convivem.
+
+    Devolve None se a irmã não estiver ao lado (skill instalada sozinha) — mesmo
+    precedente de `test_copia_do_aprofundamento_id_nao_divergiu`.
+    """
+    # parents: [0]=tests [1]=scripts [2]=concurso-publica [3]=skills [4]=repo.
+    # Mesmos candidatos de `test_copia_do_aprofundamento_id_nao_divergiu`.
+    aqui = Path(__file__).resolve()
+    rel = Path("assets") / "templates" / "fonte-notebooklm.md.tpl"
+    for cand in (aqui.parents[3] / "concurso-aprofunda" / rel,
+                 aqui.parents[4] / "skills" / "concurso-aprofunda" / rel):
+        if cand.exists():
+            return cand.read_text(encoding="utf-8")
+    return None
+
+
+def _pack_como_a_aprofunda_gera(slug: str, concurso: str = "TESTE_2026",
+                                assunto: str = "Crase") -> str:
+    """Corpo do pacote no formato REAL, renderizado do template da skill irmã.
+
+    Antes o fixture escrevia a palavra `pack` como corpo, e o teste ad-hoc inventava
+    `- Studio → …` **como bullet** — no template real essa linha é parágrafo. O
+    fixture criou a realidade que o parser exigia, o teste ficou verde, e o vault
+    produziu `roteiro: []` em mapa mental e report. É o mesmo modo de falha do bug
+    do `_GERAL`, e é por isso que o corpo agora vem do template de verdade.
+    """
+    tpl = _template_pack()
+    if tpl is None:                       # sem a irmã, um mínimo honesto
+        return (f"# Pacote\n\n## 1. Fontes para subir no notebook\n\n"
+                f'Crie um notebook novo chamado **"{concurso} — {assunto}"** e adicione:\n\n'
+                f"1. **`{slug}.md`** — o resumo curado.\n\n"
+                f"## 2. 🎧 Podcast (Audio Overview)\n\n"
+                f"Studio → **Audio Overview** → clique em **Customize**.\n"
+                f"- **Formato:** Deep Dive\n\n```\nP\n```\n\n"
+                f"Salve nesta pasta como **`podcast-{slug}.m4a`**.\n")
+    corpo = tpl.split("---\n", 2)[-1]     # sem o frontmatter, que o chamador monta
+    for chave, valor in (("{CONCURSO}", concurso), ("{ASSUNTO}", assunto),
+                         ("{SLUG_ASSUNTO}", slug), ("{MATERIA}", "Português"),
+                         ("{TAG_ASSUNTO}", slug),
+                         ("{LISTA_FONTES}", f"1. **`{slug}.md`** — o resumo curado."),
+                         ("{PROMPT_AUDIO}", f"Foque em {assunto} para concurso."),
+                         ("{PROMPT_MINDMAP}", "Construa o mapa mental."),
+                         ("{PROMPT_VIDEO}", "Faca um video-aula."),
+                         ("{PROMPT_REPORT}", "Gere um guia de estudos."),
+                         ("{PERGUNTAS_CHAT}", "- O que mais cai?")):
+        corpo = corpo.replace(chave, valor)
+    return corpo
+
+
 # --------------------------------------------------------------------------- #
 # fixtures
 # --------------------------------------------------------------------------- #
@@ -84,7 +134,8 @@ def _montar_concurso(base: Path, com_midias=True, com_url_nb=False):
     (crase / "flashcards-crase.csv").write_text("P1;R1;t\nP2;R2;t\n", encoding="utf-8")
     url = 'notebooklm_url: "https://notebooklm.google.com/notebook/x"\n' if com_url_nb else ""
     (crase / "_fonte-notebooklm.md").write_text(
-        f"---\ntipo: fonte-notebooklm\n{url}---\npack\n", encoding="utf-8")
+        f"---\ntipo: fonte-notebooklm\n{url}---\n" + _pack_como_a_aprofunda_gera("crase"),
+        encoding="utf-8")
     if com_midias:
         (crase / "podcast-crase.m4a").write_bytes(b"AAA")
         (crase / "mapa-mental-crase.png").write_bytes(b"PNG")
@@ -447,6 +498,100 @@ def test_md2html_checkbox_vira_tarefa_com_estado():
     assert "tarefa feito" in h and "tarefa aberto" in h
 
 
+def test_md2html_lista_aninhada_preserva_a_hierarquia():
+    """Regressão: o conversor guardava UMA lista aberta, então subitem virava irmão
+    do pai e a hierarquia — que é a informação — sumia. Eram 408 linhas em 51
+    arquivos do vault."""
+    h = md2html.converter("- Pai\n  - Filho\n    - Neto\n- Tio\n")
+    # a sublista fica DENTRO do <li>, senão é HTML inválido
+    assert "<li>Pai\n<ul>" in h, "a sublista precisa abrir dentro do item pai"
+    assert h.count("<ul>") == 3, f"três níveis, três <ul>: {h.count('<ul>')}"
+    assert h.count("</ul>") == 3, "e todos fechados"
+    assert h.count("<li>") == 4
+    # o irmão do primeiro nível volta ao nível de fora
+    assert h.rstrip().endswith("<li>Tio\n</li>\n</ul>"), h[-60:]
+
+
+def test_md2html_lista_aninhada_nao_deixa_ul_solto_dentro_de_ul():
+    """`<ul>` como filho direto de `<ul>` é inválido — e é o que sai se alguém
+    fechar o `<li>` do pai antes de abrir a sublista."""
+    h = md2html.converter("- Pai\n  - Filho\n")
+    assert "</li>\n<ul>" not in h, "sublista não pode vir depois do </li> do pai"
+
+
+def test_md2html_tarefas_aninhadas_mantem_o_estado_de_cada_nivel():
+    h = md2html.converter("- [ ] Pai\n  - [x] Filho\n- [ ] Outro\n")
+    assert h.count('class="tarefas"') == 2, "uma lista por nível"
+    assert "tarefa feito" in h and h.count("tarefa aberto") == 2
+
+
+def test_md2html_item_de_lista_absorve_a_linha_de_continuacao():
+    """Regressão: linha indentada sem marcador virava PARÁGRAFO solto fora da lista.
+    O item perdia metade do texto — 838 linhas em 38 arquivos do vault — e, quando o
+    negrito atravessava a quebra, as duas metades caíam em conversões inline
+    diferentes e os asteriscos chegavam crus à página."""
+    h = md2html.converter(
+        "2. **Regência verbal** — quais verbos, e quais **mudam de\n"
+        "   sentido** conforme a preposição.\n")
+    assert h.count("<li>") == 1, "uma continuação não abre item novo"
+    assert "<p>" not in h, "e não vira parágrafo solto fora da lista"
+    assert "<strong>mudam de\nsentido</strong>" in h, h
+    assert "*" not in h, f"sobrou asterisco cru: {h}"
+
+
+def test_md2html_continuacao_nao_engole_a_sublista():
+    """Linha indentada COM marcador é sublista, não continuação — quem trata é o
+    laço principal, e confundir os dois perderia um nível inteiro."""
+    h = md2html.converter("- Pai que continua\n  na linha de baixo\n  - Filho\n- Tio\n")
+    assert h.count("<ul>") == 2, f"o filho precisa abrir sublista: {h}"
+    assert "na linha de baixo" in h.split("<ul>")[1], "a continuação fica no pai"
+    assert "<li>Filho" in h
+
+
+def test_md2html_negrito_contendo_italico():
+    """Regressão: a classe negada `[^*]+` no negrito fazia a linha inteira chegar
+    ao site com os asteriscos crus. São 139 linhas em 20 arquivos do vault, no
+    formato `**​*Cujo* não admite artigo**`."""
+    h = md2html.converter("- ***Cujo* não admite artigo depois** — regra.")
+    assert "<strong><em>Cujo</em> não admite artigo depois</strong>" in h, h
+    assert "*" not in h.replace("&#42;", ""), f"sobrou asterisco cru: {h}"
+
+
+def test_md2html_italico_contendo_negrito_continua_funcionando():
+    """A forma inversa já funcionava; a correção não pode quebrá-la."""
+    h = md2html.converter("*Fui eu **que fiz*** — relativo.")
+    assert "<em>Fui eu <strong>que fiz</strong></em>" in h, h
+
+
+def test_md2html_negrito_atravessa_quebra_de_linha():
+    """O vault quebra linha no meio de negrito o tempo todo — o texto que chega ao
+    conversor é um bloco inteiro, com `\\n` entre as linhas. Fechar o casamento na
+    quebra devolvia 1.406 asteriscos crus ao site; foi medido no HTML gerado."""
+    h = md2html.converter("texto **negrito que\ncruza a linha** fim")
+    assert "<strong>negrito que cruza a linha</strong>" in h, h
+    assert "*" not in h, h
+
+
+def test_md2html_negrito_italico_junto_nao_deixa_asterisco():
+    """`***x***` precisa ser tratado ANTES do negrito: o passo preguiçoso casaria
+    `**` + `*x` + `**` e deixaria um `*` na página."""
+    h = md2html.converter("***assim*** e ***outro***")
+    assert h.count("<strong><em>") == 2, h
+    assert "*" not in h, h
+
+
+def test_md2html_wikilink_com_pipe_CRU_dentro_de_tabela():
+    """Regressão: o pipe do wikilink era lido como separador — duas colunas viravam
+    quatro e o link aparecia em texto puro na página. O escapado (`\\|`) já era
+    tratado; o cru, que o vault também escreve, não era."""
+    h = md2html.converter(
+        "| Termo | Onde cai |\n|---|---|\n"
+        "| Pronome | [[regencia|regência]] e [[crase|crase]] |\n")
+    assert h.count("<td>") == 2, f"duas células, não quatro: {h}"
+    assert "[[" not in h, "o wikilink não pode sobrar cru na página"
+    assert ">regência<" in h and ">crase<" in h
+
+
 def test_md2html_escapa_html_perigoso():
     h = md2html.converter("<script>alert(1)</script> texto")
     assert "<script>" not in h
@@ -750,16 +895,21 @@ def test_escopo_vem_do_primeiro_componente_do_caminho():
 
 
 def test_midia_do_assunto_e_uniao_dos_aprofundamentos():
-    """Regressão: `midias` era herdada do aprofundamento PRINCIPAL, e como a
-    ordenação põe `detalhado` primeiro, um assunto cuja mídia estava no `padrao`
-    aparecia sem mídia. No vault real era o caso do único assunto com podcast,
-    vídeo e mapa mental — o site anunciava "0 com áudio" na matéria inteira.
+    """Regressão: `midias` era herdada do aprofundamento PRINCIPAL, então um assunto
+    cuja mídia estivesse no aprofundamento secundário aparecia sem mídia. No vault
+    real era o caso do único assunto com podcast, vídeo e mapa mental — o site
+    anunciava "0 com áudio" na matéria inteira.
+
+    A união não pode depender da ordem, e este teste tem de continuar exercitando o
+    caso difícil: a mídia fica no aprofundamento que NÃO é o principal. Como hoje o
+    principal é o `padrao`, é o `detalhado` que carrega o arquivo — o inverso do
+    arranjo original, mesma propriedade.
     """
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=False)
         alvo = _mat_vault(base) / "assuntos" / "crase"
-        # detalhado (que ordena primeiro) SEM mídia; padrao COM mídia
-        for nome, tem_midia in (("detalhado--pestana", False), ("padrao--pestana", True)):
+        # padrao (que ordena primeiro) SEM mídia; detalhado COM mídia
+        for nome, tem_midia in (("padrao--pestana", False), ("detalhado--pestana", True)):
             p = alvo / nome
             p.mkdir(parents=True)
             (p / f"crase--{nome}.md").write_text(
@@ -768,7 +918,7 @@ def test_midia_do_assunto_e_uniao_dos_aprofundamentos():
                 (p / f"podcast-crase--{nome}.m4a").write_bytes(b"A")
 
         a = sc.coletar_assunto(alvo)
-        assert a["aprofundamentos"][0]["nivel"] == "detalhado"      # principal
+        assert a["aprofundamentos"][0]["nivel"] == "padrao"         # principal
         assert a["aprofundamentos"][0]["midias"]["podcast"] is None
         assert a["midias"]["podcast"], "presença deve ser a UNIÃO, não a do principal"
 
@@ -1275,6 +1425,14 @@ def test_exemplo_do_modelo_constroi_de_verdade():
         def resolvedor(self, rota):
             return lambda alvo: None
 
+    # o pacote é a outra metade do contrato, e era onde o exemplo estava velho:
+    # trazia `roteiro: []` congelado em mapa mental e report
+    pack = _materias(modelo)[0]["assuntos"][0]["aprofundamentos"][0]["pack_notebooklm"]
+    assert pack["nome_notebook"], "exemplo sem nome do notebook: regere-o"
+    for q in pack["prompts"]:
+        assert q["roteiro"], f'exemplo com roteiro vazio em {q["chave"]}'
+        assert q["arquivo_saida"], f'exemplo sem arquivo de saída em {q["chave"]}'
+
     h = sb.bloco_plano(materia, _RotasFalsas(), "c/e/materias/x/index.html")
     assert "Pegadinhas da Quadrix neste tópico" in h
     assert "Leis-chave" in h                     # H3 fora do template
@@ -1588,6 +1746,124 @@ def test_materia_homonima_em_escopos_diferentes_nao_colide():
         assert not orfas, orfas
 
 
+def test_roteiro_le_instrucao_que_nao_e_bullet():
+    """Regressão: `Studio → …`, `Generate → …` e `Salve como …` são PARÁGRAFO no
+    template, e a regra antiga só via bullets. Mapa mental e report, cujas
+    instruções são todas parágrafo, chegavam ao site com `roteiro: []` — está
+    congelado assim no examples/site-model-exemplo.json."""
+    bloco = ('Studio → **Audio Overview** → clique em **Customize**.\n'
+             '- **Formato:** Deep Dive\n'
+             '- **Prompt "no que focar":**\n\n```\nP\n```\n\n'
+             'Generate → ⋮ → Download. O NotebookLM gera **`.m4a`**.\n'
+             'Salve nesta pasta como **`podcast-crase.m4a`**.\n')
+    r = sc._roteiro_do_bloco(bloco)
+    assert "Studio → Audio Overview → clique em Customize." in r, "entrada do Estúdio"
+    assert "Formato: Deep Dive" in r, "bullet de opção"
+    assert any(l.startswith("Generate") for l in r), "gerar e baixar"
+    assert any(l.startswith("Salve") for l in r), "onde salvar"
+    assert 'Prompt "no que focar":' not in r, "rótulo do fence não é roteiro"
+    assert "P" not in r, "conteúdo do prompt não vaza para o roteiro"
+
+
+def test_todo_geravel_tem_roteiro_e_nome_de_arquivo():
+    """Contra a falha silenciosa: roteiro vazio passou por versões porque nada
+    afirmava que roteiro vazio é defeito."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        pack = sc.coletar_pack_notebooklm(_mat_vault(base) / "assuntos" / "crase")
+        assert pack is not None
+        for p in pack["prompts"]:
+            assert p["roteiro"], f'{p["chave"]}: roteiro vazio'
+            assert p["arquivo_saida"], f'{p["chave"]}: sem nome de arquivo'
+
+
+def test_pack_nomeia_o_notebook_e_os_arquivos():
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        pack = sc.coletar_pack_notebooklm(_mat_vault(base) / "assuntos" / "crase")
+        assert pack["nome_notebook"] == "TESTE_2026 — Crase", "nome do notebook"
+        por_chave = {p["chave"]: p["arquivo_saida"] for p in pack["prompts"]}
+        assert por_chave.get("podcast") == "podcast-crase.m4a", "arquivo do podcast"
+        assert por_chave.get("mapa_mental") == "mapa-mental-crase.png", "arquivo do mapa mental"
+        assert por_chave.get("video") == "video-crase.mp4", "arquivo do vídeo"
+        assert por_chave.get("report") == "report-crase.md", "arquivo do report"
+
+
+def test_frontmatter_do_pack_vence_a_prosa():
+    """As chaves são CONTRATO; a regex de prosa é só o fallback dos packs antigos.
+    Extrair nome de arquivo de texto corrido foi a causa-raiz do roteiro vazio."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        p = _mat_vault(base) / "assuntos" / "crase" / "_fonte-notebooklm.md"
+        p.write_text(
+            '---\ntipo: fonte-notebooklm\nnome_notebook: "DO FRONTMATTER"\n'
+            'arquivo_podcast: "audio-oficial.m4a"\n---\n'
+            + _pack_como_a_aprofunda_gera("crase"), encoding="utf-8")
+        pack = sc.coletar_pack_notebooklm(p.parent)
+        assert pack["nome_notebook"] == "DO FRONTMATTER"
+        assert {q["chave"]: q["arquivo_saida"] for q in pack["prompts"]}["podcast"] \
+            == "audio-oficial.m4a"
+
+
+def test_pack_antigo_sem_as_chaves_novas_nao_quebra():
+    """Os pacotes do vault só ganham as chaves quando forem regerados, e o site lê
+    o vault como ele está hoje."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        p = _mat_vault(base) / "assuntos" / "crase" / "_fonte-notebooklm.md"
+        p.write_text("---\ntipo: fonte-notebooklm\n---\n"
+                     "## 2. 🎧 Podcast (Audio Overview)\n\n```\nP\n```\n",
+                     encoding="utf-8")
+        pack = sc.coletar_pack_notebooklm(p.parent)
+        assert pack["nome_notebook"] is None, "sem a chave e sem a prosa, não inventa"
+        assert pack["prompts"][0]["arquivo_saida"] is None
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "crase") / "notebooklm"
+             / "index.html").read_text(encoding="utf-8")
+        assert 'class="nome-notebook"' not in h, "sem dado, sem linha vazia"
+
+
+def test_pagina_notebooklm_mostra_nome_do_notebook_e_arquivo_por_geravel():
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "crase") / "notebooklm"
+             / "index.html").read_text(encoding="utf-8")
+        assert "TESTE_2026 — Crase" in h, "nome do notebook na página"
+        assert "podcast-crase.m4a" in h, "arquivo do podcast"
+        assert "mapa-mental-crase.png" in h, "arquivo do mapa mental"
+        assert "video-crase.mp4" in h, "arquivo do vídeo"
+        assert "report-crase.md" in h, "arquivo do report"
+        assert h.count('class="arquivo-saida"') == 4, "um por gerável"
+        assert "Salve nesta pasta como" in h, "roteiro completo, não só os bullets"
+
+
+def test_botao_de_copiar_alcanca_o_nome_do_notebook():
+    """`iniciarCopiar` fazia `closest('.prompt')`; um botão fora de um cartão de
+    prompt ficaria mudo — e nenhum assert de HTML perceberia, porque o botão
+    existe, só não faz nada."""
+    js = (ROOT.parent / "assets" / "site.js").read_text(encoding="utf-8")
+    assert ".copiavel" in js, "seletor do container copiável"
+    assert ".texto-copiavel" in js, "seletor do texto copiável"
+
+
+def test_o_que_o_coletor_espera_do_pack_existe_no_template_real():
+    """Fixture divergente é teste que se autoconfirma. As âncoras que o coletor usa
+    vivem em OUTRA skill; se o template mudar de forma, quebra aqui em vez de
+    esvaziar a página em silêncio."""
+    tpl = _template_pack()
+    if tpl is None:
+        return
+    for ancora in ('chamado **"{CONCURSO} — {ASSUNTO}"**',
+                   "## 1. Fontes para subir no notebook",
+                   "Salve nesta pasta como **`podcast-{SLUG_ASSUNTO}.m4a`**",
+                   "nome_notebook:", "arquivo_podcast:", "arquivo_mapa_mental:",
+                   "arquivo_video:", "arquivo_report:"):
+        assert ancora in tpl, ancora
+
+
 def test_pacote_notebooklm_vira_pagina_com_prompts():
     """Item 3 do pedido. O vault tem 92 pacotes prontos e um único assunto com mídia
     de verdade: o gargalo não é ter o roteiro, é executá-lo — daí a página existir
@@ -1600,7 +1876,8 @@ def test_pacote_notebooklm_vira_pagina_com_prompts():
             "# Pacote\n\n## 1. Fontes para subir no notebook\n\n"
             "1. **`crase.md`** — o resumo curado.\n\n"
             "## 2. 🎧 Podcast (Audio Overview)\n\n"
-            "- Studio → **Audio Overview** → **Customize**.\n"
+            # NÃO é bullet no template real — era essa a ficção do fixture
+            "Studio → **Audio Overview** → **Customize**.\n"
             "- Formato: Deep Dive\n\n```\nFoque em Crase para concurso.\n```\n\n"
             "## 3. 🧠 Mapa Mental (Mind Map)\n\n```\nConstrua o mapa mental.\n```\n\n"
             "## 7. 💬 Perguntas úteis no chat\n\n- O que mais cai?\n\n"
@@ -1916,8 +2193,8 @@ def test_varios_aprofundamentos_por_assunto():
         # 2 novos + o legado que já existia na fixture
         assert a["n_aprofundamentos"] == 3
         assert set(a["niveis"]) == {"padrao", "detalhado"}
-        # detalhado vem primeiro (é o principal)
-        assert a["aprofundamentos"][0]["nivel"] == "detalhado"
+        # padrao vem primeiro (é o principal: a aba que abre)
+        assert a["aprofundamentos"][0]["nivel"] == "padrao"
 
 
 def test_legado_continua_funcionando_sozinho():
@@ -2048,9 +2325,60 @@ def test_coleta_no_padrao_de_pastas_atual():
         _add_aprof_atual(base, "crase", "padrao--1f--f1-pestana")
         a = _assunto_do_modelo(_rodar(base), "crase")
         assert a["n_aprofundamentos"] == 3, a["n_aprofundamentos"]   # 2 novos + legado da fixture
-        # detalhado vem primeiro (ordenação por nível)
-        assert a["aprofundamentos"][0]["nivel"] == "detalhado"
-        assert a["aprofundamentos"][1]["nivel"] == "padrao"
+        # padrao vem primeiro (é o principal); o legado, sem identidade de fonte,
+        # fica atrás dos identificados do mesmo nível; detalhado por último
+        assert [x["aprofundamento"] for x in a["aprofundamentos"]] == [
+            "padrao--1f--f1-pestana", "original", "detalhado--1f--f1-pestana"]
+
+
+def test_aba_que_abre_e_a_do_nivel_padrao():
+    """Entra-se num assunto para REVISAR: a aba aberta é a do resumo de revisão, e
+    o tratamento exaustivo fica a um clique. Nada afirmava isso no HTML — a garantia
+    era indireta, via `aprofundamentos[0]`, e o site podia divergir sem ninguém ver.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = _mat_vault(base) / "assuntos" / "regencia-verbal-e-nominal"
+        for nome in ("detalhado--pestana", "padrao--pestana"):
+            p = alvo / nome
+            p.mkdir(parents=True)
+            (p / f"regencia--{nome}.md").write_text(
+                f'---\ntitle: "Regência"\nfontes: "Pestana"\n---\ncorpo do {nome}\n',
+                encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "regencia-verbal-e-nominal")
+             / "index.html").read_text(encoding="utf-8")
+
+        # a aba ativa é a primeira do HTML, e tem de ser a do padrão
+        abas = re.findall(r'<button class="aba( ativa)?"[^>]*>(.*?)</button>', h, re.S)
+        assert abas, "a página precisa ter abas quando há mais de um aprofundamento"
+        ativas = [rot for marca, rot in abas if marca]
+        assert len(ativas) == 1, f"exatamente uma aba ativa, achei {len(ativas)}"
+        assert "Padrão" in ativas[0], f"a aba aberta deveria ser a do padrão: {ativas[0]!r}"
+        # a aba ativa aponta para o painel do padrão (data-alvo casa com data-aprof)
+        alvo = re.search(r'class="aba ativa" data-alvo="([^"]+)"', h)
+        assert alvo, "a aba ativa precisa nomear o painel que abre"
+        assert alvo.group(1).startswith("padrao--"), f"aba aberta: {alvo.group(1)}"
+        painel = re.search(r'class="aprof ativo" data-aprof="([^"]+)"', h)
+        assert painel and painel.group(1) == alvo.group(1), "aba e painel ativos divergem"
+
+
+def test_desempate_entre_dois_padrao_e_alfabetico():
+    """Dois aprofundamentos do MESMO nível: abre o primeiro em ordem alfabética.
+    No vault são 8 assuntos assim — todos em Conhecimentos do DF."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = _mat_vault(base) / "assuntos" / "regencia-verbal-e-nominal"
+        # cadastrados fora de ordem de propósito
+        for nome in ("padrao--proprio", "padrao--linhares", "padrao--lc-94"):
+            p = alvo / nome
+            p.mkdir(parents=True)
+            (p / f"regencia--{nome}.md").write_text(
+                f'---\ntitle: "Regência"\nfontes: "X"\n---\nx\n', encoding="utf-8")
+        a = sc.coletar_assunto(alvo)
+        ids = [x["aprofundamento"] for x in a["aprofundamentos"] if x["nivel"] == "padrao"]
+        assert ids[:3] == ["padrao--lc-94", "padrao--linhares", "padrao--proprio"], ids
 
 
 def test_nivel_vem_da_pasta_mesmo_sem_frontmatter():
@@ -2059,8 +2387,8 @@ def test_nivel_vem_da_pasta_mesmo_sem_frontmatter():
         base = _montar_concurso(Path(d) / "TESTE_2026")
         _add_aprof_atual(base, "crase", "detalhado--2f--f1-pestana--f2-abreu")
         a = _assunto_do_modelo(_rodar(base), "crase")
-        ap = a["aprofundamentos"][0]
-        assert ap["nivel"] == "detalhado"
+        # escolhe pelo nível, não pelo índice: a ordem é assunto de outro teste
+        ap = next(x for x in a["aprofundamentos"] if x["nivel"] == "detalhado")
         assert ap["n_fontes_id"] == 2
         assert ap["fontes_id"] == ["pestana", "abreu"]
 

@@ -173,6 +173,7 @@
                     "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes/assuntos/crimes-preconceito-raca-cor/padrao--lei-7716+stf-ado-26/_fonte-notebooklm.md",
                     "status": "nao-criado",
                     "url": null,
+                    "nome_notebook": "SEDES_2026 — Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) — padrao--lei-7716+stf-ado-26",
                     "fontes": [
                       "`crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md` — o resumo curado deste assunto (fonte principal)."
                     ],
@@ -184,10 +185,14 @@
                         "titulo_secao": "🎧 Podcast (Audio Overview)",
                         "prompt": "Foque em Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para um concurso público. Explique as regras principais de forma didática, com exemplos práticos, e destaque as pegadinhas e os erros mais comuns que bancas exploram. Priorize o que mais cai em prova objetiva. Use linguagem clara, como uma aula de revisao para quem ja estudou o basico. Evite enrolacao e frases de efeito; va direto ao ponto.",
                         "roteiro": [
+                          "Studio → Audio Overview → clique em Customize.",
                           "Formato: Deep Dive (completo) · alternativas: Brief (revisão rápida), Critique, Debate.",
                           "Duração: Longer (mais completo) · ou Default/Shorter para revisão.",
-                          "Idioma: Português (Brasil)."
-                        ]
+                          "Idioma: Português (Brasil).",
+                          "Generate → ao terminar, ⋮ → Download. O NotebookLM gera .m4a.",
+                          "Salve nesta pasta como podcast-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.m4a."
+                        ],
+                        "arquivo_saida": "podcast-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.m4a"
                       },
                       {
                         "chave": "mapa_mental",
@@ -195,7 +200,12 @@
                         "rotulo": "Mapa mental",
                         "titulo_secao": "🧠 Mapa Mental (Mind Map)",
                         "prompt": "Construa o mapa mental de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) com estes ramos centrais: (1) CONCEITO/definicao; (2) REGRAS gerais; (3) CASOS ESPECIAIS e excecoes; (4) PEGADINHAS de prova; (5) CONEXOES com outros assuntos. Sob cada ramo, agrupe os subtopicos como nos-filhos, do mais cobrado ao menos. Priorize o que cai em concurso e mantenha os rotulos curtos.",
-                        "roteiro": []
+                        "roteiro": [
+                          "Studio → Mind Map → Customize (disponível no Plus desde mai/2026 — o prompt é lido como especificação de estrutura).",
+                          "Generate → explore os nós (cada nó abre um chat). Download (⋮ → Download) como imagem.",
+                          "Salve como mapa-mental-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.png."
+                        ],
+                        "arquivo_saida": "mapa-mental-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.png"
                       },
                       {
                         "chave": "video",
@@ -204,9 +214,13 @@
                         "titulo_secao": "🎬 Vídeo (Video Overview)",
                         "prompt": "Faca um video-aula explicativo sobre Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para quem estuda para concurso. Enfatize as regras que mais caem e mostre 2-3 exemplos resolvidos passo a passo. Dedique um trecho as pegadinhas classicas da banca. Publico: candidato que ja viu o basico e quer fixar e evitar erros.",
                         "roteiro": [
+                          "Studio → Video Overview → Customize.",
                           "Formato: Explainer (aula) · alternativa: Brief.",
-                          "Estilo visual: escolha um limpo/didático (ex.: \"Whiteboard\" ou \"Clean\")."
-                        ]
+                          "Estilo visual: escolha um limpo/didático (ex.: \"Whiteboard\" ou \"Clean\").",
+                          "Generate (leva ~10–15 min). Download.",
+                          "Salve como video-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.mp4."
+                        ],
+                        "arquivo_saida": "video-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.mp4"
                       },
                       {
                         "chave": "report",
@@ -214,7 +228,11 @@
                         "rotulo": "Relatório",
                         "titulo_secao": "📄 Report (Relatório / Guia de estudos)",
                         "prompt": "Gere um guia de estudos de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para concurso, com esta estrutura: 1) Resumo das regras essenciais; 2) Quadro de casos (obrigatorio/proibido/facultativo, quando aplicavel); 3) Lista de pegadinhas com exemplo de cada; 4) 5 dicas rapidas de memorizacao. Seja objetivo e use exemplos curtos.",
-                        "roteiro": []
+                        "roteiro": [
+                          "Studio → Reports → Create your own (ou escolha o template Study guide).",
+                          "Generate → o report é salvo como nota no notebook. Copie o conteúdo e salve nesta pasta como report-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md."
+                        ],
+                        "arquivo_saida": "report-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md"
                       }
                     ],
                     "perguntas": [

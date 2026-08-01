@@ -114,29 +114,47 @@ def leis_relacionadas(corpo: str, leis_dir: Path | None) -> list[str]:
     return out
 
 
+def clausula_fonte(nota: str) -> str:
+    """A âncora de TODO prompt é a nota curada do vault — nunca o livro.
+
+    Subir o livro (ou o recorte dele) é **opcional**: `montar_lista_fontes` o marca
+    como *(Referência)*. Prompt que nomeasse a obra mandava o modelo consultar uma
+    fonte que pode não estar no notebook — o prompt e a instrução de fontes se
+    contradiziam. Aqui só entra o nome do `.md` do aprofundamento, que é sempre o
+    item 1 da lista de fontes e, por isso, sempre está no notebook.
+
+    Se um prompt novo precisar citar material, cite POR AQUI. Há teste que varre
+    todos os blocos de prompt gerados e falha se algum nomear PDF, página ou obra.
+    """
+    return f'Baseie-se na nota "{nota}" deste notebook.'
+
+
 def montar_prompt_audio(assunto: str, materia: str, nivel: str = "padrao",
-                        fontes: str = "") -> str:
+                        nota: str = "") -> str:
+    fonte = f" {clausula_fonte(nota)}" if nota else ""
     if nivel == "detalhado":
-        base_fontes = f" Baseie-se nas fontes: {fontes}." if fontes else ""
         return (
             f"Faca um episodio APROFUNDADO sobre {assunto} para concurso publico."
-            f"{base_fontes} Trate os casos especiais e as excecoes, nao so a regra "
+            f"{fonte} Trate os casos especiais e as excecoes, nao so a regra "
             f"geral. Traga exemplos resolvidos comentando o raciocinio e mencione "
             f"as divergencias entre autores quando existirem. Publico: candidato "
             f"que ja domina o basico e quer fechar o assunto."
         )
     return (
-        f"Foque em {assunto} para um concurso público. Explique as regras principais "
-        f"de forma didática, com exemplos práticos, e destaque as pegadinhas e os erros "
-        f"mais comuns que bancas exploram. Priorize o que mais cai em prova objetiva. "
-        f"Use linguagem clara, como uma aula de revisao para quem ja estudou o basico. "
-        f"Evite enrolacao e frases de efeito; va direto ao ponto."
+        f"Foque em {assunto} para um concurso público.{fonte} Explique as regras "
+        f"principais de forma didática, com exemplos práticos, e destaque as pegadinhas "
+        f"e os erros mais comuns que bancas exploram. Priorize o que mais cai em prova "
+        f"objetiva. Use linguagem clara, como uma aula de revisao para quem ja estudou "
+        f"o basico. Evite enrolacao e frases de efeito; va direto ao ponto."
     )
 
 
-def montar_prompt_mindmap(assunto: str) -> str:
+def montar_prompt_mindmap(assunto: str, nota: str = "") -> str:
+    # aqui a cláusula vai na FRENTE: a frase de abertura termina em dois-pontos que
+    # introduzem a lista de ramos, e encaixar no meio partiria a enumeração
+    fonte = f"{clausula_fonte(nota)} " if nota else ""
     return (
-        f"Construa o mapa mental de {assunto} com estes ramos centrais: "
+        f"{fonte}Construa o mapa mental de {assunto} com estes ramos centrais: "
         f"(1) CONCEITO/definicao; (2) REGRAS gerais; (3) CASOS ESPECIAIS e excecoes; "
         f"(4) PEGADINHAS de prova; (5) CONEXOES com outros assuntos. "
         f"Sob cada ramo, agrupe os subtopicos como nos-filhos, do mais cobrado ao menos. "
@@ -144,18 +162,20 @@ def montar_prompt_mindmap(assunto: str) -> str:
     )
 
 
-def montar_prompt_video(assunto: str) -> str:
+def montar_prompt_video(assunto: str, nota: str = "") -> str:
+    fonte = f" {clausula_fonte(nota)}" if nota else ""
     return (
-        f"Faca um video-aula explicativo sobre {assunto} para quem estuda para concurso. "
-        f"Enfatize as regras que mais caem e mostre 2-3 exemplos resolvidos passo a passo. "
-        f"Dedique um trecho as pegadinhas classicas da banca. "
+        f"Faca um video-aula explicativo sobre {assunto} para quem estuda para "
+        f"concurso.{fonte} Enfatize as regras que mais caem e mostre 2-3 exemplos "
+        f"resolvidos passo a passo. Dedique um trecho as pegadinhas classicas da banca. "
         f"Publico: candidato que ja viu o basico e quer fixar e evitar erros."
     )
 
 
-def montar_prompt_report(assunto: str) -> str:
+def montar_prompt_report(assunto: str, nota: str = "") -> str:
+    fonte = f" {clausula_fonte(nota)}" if nota else ""
     return (
-        f"Gere um guia de estudos de {assunto} para concurso, com esta estrutura: "
+        f"Gere um guia de estudos de {assunto} para concurso.{fonte} Use esta estrutura: "
         f"1) Resumo das regras essenciais; 2) Quadro de casos (obrigatorio/proibido/"
         f"facultativo, quando aplicavel); 3) Lista de pegadinhas com exemplo de cada; "
         f"4) 5 dicas rapidas de memorizacao. Seja objetivo e use exemplos curtos."
@@ -185,42 +205,75 @@ def montar_lista_fontes(assunto_md: Path, leis: list[str], fm: dict) -> str:
     return "\n".join(linhas)
 
 
-def herdar_campos(destino: Path) -> tuple[str, str]:
-    """Lê do pack existente os campos que só o usuário sabe preencher.
+# chaves do pacote que o gerador NÃO sabe reconstruir: são escritas por fora, à mão
+# pelo usuário ou pela automação. `notebooklm_url` e `notebooklm_status` têm lugar
+# fixo no template; qualquer outra `notebooklm_*` é reemitida no bloco EXTRA.
+CAMPOS_FIXOS_NB = ("notebooklm_url", "notebooklm_status")
+CHAVE_NB = re.compile(r"^(notebooklm_[a-z0-9_]+):\s*(.*)$", re.MULTILINE)
 
-    Devolve `(notebooklm_url, notebooklm_status)`, com os padrões de um pack novo
-    quando o arquivo não existe ou não tem as chaves. O `notebooklm_url` é o único
-    dado do pacote que não é derivável: tudo o mais (fontes, prompts, roteiro,
-    perguntas) o gerador reconstrói a partir do assunto.
+
+def herdar_campos(destino: Path) -> dict:
+    """Lê do pack existente tudo que o gerador não sabe reconstruir.
+
+    Devolve `{"url":…, "status":…, "extras": {chave: valor}}`. O corpo do pacote é
+    100% derivável do assunto — fontes, prompts, roteiro, perguntas —, mas o bloco
+    `notebooklm_*` não: ele é escrito por FORA, pelo usuário que cola o link ou pela
+    automação que registra o notebook criado. Sem herdar, a regeneração manda tudo
+    para o `.bak.md` e o site perde o botão "Abrir no NotebookLM" sem erro nenhum.
+
+    Herda por PREFIXO, não por lista: campo novo que a automação passe a gravar
+    sobrevive sozinho, sem precisar lembrar de vir aqui. Foi justamente esquecer de
+    estender esta função que apagaria `notebooklm_id` na primeira regeração.
     """
+    vazio = {"url": "", "status": "nao-criado", "extras": {}}
     if not destino.exists():
-        return "", "nao-criado"
+        return vazio
     try:
         txt = destino.read_text(encoding="utf-8")
     except OSError:
-        return "", "nao-criado"
+        return vazio
     m = re.match(r"^---\s*\n(.*?)\n---\s*\n", txt, re.DOTALL)
     if not m:
-        return "", "nao-criado"
-    fm = m.group(1)
+        return vazio
 
-    def ler(chave: str, padrao: str) -> str:
-        achado = re.search(rf"^{chave}:\s*(.*)$", fm, re.MULTILINE)
-        if not achado:
-            return padrao
-        valor = achado.group(1).strip().strip('"').strip("'")
+    achados = {}
+    for chave, bruto in CHAVE_NB.findall(m.group(1)):
+        valor = bruto.strip().strip('"').strip("'")
         if valor.lower() in ("", "null", "~"):
-            return padrao
-        return valor
+            continue
+        achados[chave] = valor
 
-    return ler("notebooklm_url", ""), ler("notebooklm_status", "nao-criado")
+    return {
+        "url": achados.get("notebooklm_url", ""),
+        "status": achados.get("notebooklm_status", "nao-criado"),
+        "extras": {k: v for k, v in achados.items() if k not in CAMPOS_FIXOS_NB},
+    }
+
+
+def bloco_extras_nb(extras: dict) -> str:
+    """As chaves `notebooklm_*` herdadas que não têm lugar fixo no template."""
+    return "\n".join(f'{k}: "{v}"' for k, v in sorted(extras.items()))
 
 
 def preencher(tpl: str, ctx: dict) -> str:
     out = tpl
     for k, v in ctx.items():
         out = out.replace("{" + k + "}", str(v))
-    return out
+    return _frontmatter_sem_linha_vazia(out)
+
+
+def _frontmatter_sem_linha_vazia(txt: str) -> str:
+    """Tira linhas em branco de dentro do frontmatter.
+
+    O bloco de campos herdados fica vazio no caso comum (pacote sem automação), e um
+    placeholder vazio deixaria uma linha solta no meio do YAML. Só o frontmatter é
+    tocado — o corpo depende das linhas em branco para separar os blocos Markdown.
+    """
+    m = re.match(r"^(---\s*\n)(.*?)(\n---\s*\n)", txt, re.DOTALL)
+    if not m:
+        return txt
+    limpo = "\n".join(l for l in m.group(2).split("\n") if l.strip())
+    return m.group(1) + limpo + m.group(3) + txt[m.end():]
 
 
 def main():
@@ -253,7 +306,8 @@ def main():
 
             base = assunto_md.stem          # nome único do aprofundamento
             nivel = (fm.get("nivel") or "padrao").strip()
-            fontes_fm = (fm.get("fontes") or "").strip()
+            # a nota do vault é a âncora dos prompts; o livro NUNCA entra neles
+            nota = assunto_md.name
             sufixo_nome = "" if pasta == subdir else f" — {fm.get('aprofundamento', pasta.name)}"
             ctx = {
                 "ASSUNTO": assunto + sufixo_nome,
@@ -262,10 +316,10 @@ def main():
                 "TAG_ASSUNTO": subdir.name,
                 "SLUG_ASSUNTO": base,
                 "LISTA_FONTES": montar_lista_fontes(assunto_md, leis, fm),
-                "PROMPT_AUDIO": montar_prompt_audio(assunto, args.materia, nivel, fontes_fm),
-                "PROMPT_MINDMAP": montar_prompt_mindmap(assunto),
-                "PROMPT_VIDEO": montar_prompt_video(assunto),
-                "PROMPT_REPORT": montar_prompt_report(assunto),
+                "PROMPT_AUDIO": montar_prompt_audio(assunto, args.materia, nivel, nota),
+                "PROMPT_MINDMAP": montar_prompt_mindmap(assunto, nota),
+                "PROMPT_VIDEO": montar_prompt_video(assunto, nota),
+                "PROMPT_REPORT": montar_prompt_report(assunto, nota),
                 "PERGUNTAS_CHAT": montar_perguntas(assunto),
             }
             destino = pasta / "_fonte-notebooklm.md"
@@ -274,7 +328,10 @@ def main():
             # Sem isso, a regeneração manda o link do notebook para o `.bak.md` e o
             # botão "Abrir no NotebookLM" desaparece do site sem erro nenhum — é a
             # única informação do pacote que não dá para regerar.
-            ctx["NOTEBOOKLM_URL"], ctx["NOTEBOOKLM_STATUS"] = herdar_campos(destino)
+            herdado = herdar_campos(destino)
+            ctx["NOTEBOOKLM_URL"] = herdado["url"]
+            ctx["NOTEBOOKLM_STATUS"] = herdado["status"]
+            ctx["NOTEBOOKLM_EXTRA"] = bloco_extras_nb(herdado["extras"])
 
             novo = preencher(tpl, ctx)
             # preservar trabalho do usuário: só sobrescreve com backup, e só se mudou

@@ -1,6 +1,6 @@
 ---
 name: concurso-publica
-version: 0.10.0
+version: 0.11.3
 description: Use quando o usuário quiser transformar a estrutura de um concurso já gerada no vault (pelas skills concurso-prep e concurso-aprofunda) em um site estático navegável para uso local/rede doméstica. Publica TODO o conteúdo abaixo da pasta do concurso, espelhando a organização do vault (COMUM e um galho por cargo) - edital e análise da banca, cronograma, mapas de matéria, materiais e leis baixadas, histórico, sinergia, discursiva, títulos e o aprofundamento. Cada matéria tem duas visões (Plano, do mapa do edital, e Estudo, dos assuntos aprofundados); no Plano, cada tópico leva o literal do edital, os subtópicos derivados, o material recomendado, as pegadinhas da banca, a meta de questões e as seções que o mapa tiver além dessas. Cada assunto tem o podcast tocando, o vídeo rodando, mapa mental e report embutidos, flashcards como quiz e uma página com os prompts do pacote NotebookLM prontos para copiar. Triggers - "publicar o concurso como site", "gerar páginas web do concurso", "site do vault", "ver o material no navegador", "montar o site de estudo", "levar os mapas de matéria para a web", "ver as pegadinhas da banca no site", "publicar o pacote do NotebookLM".
 ---
 
@@ -17,15 +17,6 @@ Terceira etapa do fluxo: **vault → site estático**. Consome a saída das etap
 5. **NotebookLM interativo por link**: o botão "Abrir no NotebookLM" aparece só se `notebooklm_url:` estiver preenchida no frontmatter do `_fonte-notebooklm.md` do assunto. Sem iframe do Google (bloqueado por política deles).
 
 Mídia ausente = seção ausente na página, sem quebrar (degradação graciosa).
-
-## Estado de implementação
-
-| Subsistema | Status |
-|---|---|
-| A — `site_collector.py` (vault → site-model.json) | ✅ implementado |
-| B — `site_builder.py` + `md2html.py` + assets (modelo → HTML) | ✅ implementado |
-| C — Quiz de flashcards embutido | ✅ implementado (no builder) |
-| D — Busca client-side | 🔜 próxima entrega |
 
 ## Estrutura de saída
 
@@ -74,50 +65,43 @@ quiser o link fino preenche `mapa-aliases.json` na pasta da matéria (opcional):
 site é o índice, e o progresso do status vira a barra do hub do escopo. Republicá-los
 criaria uma segunda lista que envelhece.
 
-**Novidades da 0.3.0:** tema claro/escuro, índice raiz com todos os concursos
-(deploy incremental via manifesto `.concurso.json`), assuntos agrupados por
-prioridade (alta/média/base), seção "Como a banca cobra" antes dos assuntos,
-download de todas as mídias e suporte aos 8 tipos do Estúdio do NotebookLM
-(áudio, vídeo, slides, mapa mental, infográfico, relatório, teste, tabela).
-
-**Novidades da 0.4.0:** concursos agrupados por **órgão** no índice raiz;
-suporte a **vários aprofundamentos por assunto** (fontes e níveis diferentes),
-com seletor em abas na página do assunto — as mídias de cada aprofundamento ficam
-em `media/<id>/`, sem colidir.
-
-**Novidades da 0.5.0:** leitura do padrão de pastas atual da `concurso-aprofunda`
-(0.3.0):
+**Como o aprofundamento é lido.** O padrão de pastas da `concurso-aprofunda` é
 
 ```
 assuntos/{slug-assunto}/{nivel}--{fonte1}[+{fonte2}]/
 ```
 
-O nível e as fontes passam a ser derivados do **nome da pasta**, que é mais
-confiável que o frontmatter (material antigo pode não ter `nivel:`). Os layouts
-anteriores (`aprofundamentos/{id}/` e o legado plano) continuam sendo lidos — o
-site não pode quebrar por material que o usuário ainda não migrou.
+e o nível e as fontes saem do **nome da pasta**, que é mais confiável que o
+frontmatter (material antigo pode não ter `nivel:`). Os layouts anteriores
+(`aprofundamentos/{id}/` e o legado plano) continuam sendo lidos — o site não pode
+quebrar por material que o usuário ainda não migrou. Vários aprofundamentos do mesmo
+assunto viram abas na página, e a mídia de cada um fica em `media/<id>/`, sem colidir.
 
 > A convenção vive em `scripts/aprofundamento_id.py`, **cópia sincronizada** da
 > fonte em `concurso-aprofunda`. Não edite aqui: edite lá e copie por cima. Há
 > teste de smoke que falha se as duas divergirem.
 
-**Novidades da 0.7.0:** escopos COMUM/cargo espelhando o vault; **todo** o conteúdo
-abaixo do concurso (edital, cronograma, materiais e leis, histórico, sinergia,
-discursiva, títulos) com anexos copiados; mapas de matéria na aba **Plano**; pacote
-NotebookLM como página, com botão de copiar em cada prompt; resolvedor global de
-wikilinks (mortos caíram de 96 para 22 no vault real); sumário lateral em documento
-longo. Corrigido o agrupamento por cargo, que nunca funcionou.
-
 Nos cards de assunto, um selo sinaliza **quantas fontes** e **quais níveis**
 existem (Padrão / Detalhado / ambos), reaproveitando a bolha do cartão-resposta:
-meia bolha = padrão, bolha cheia = detalhado.
+meia bolha = padrão, bolha cheia = detalhado. A aba que abre é a do nível `padrao`.
 
 **Selo só para mídia que existe.** No card, os tipos ausentes não aparecem: numa
 matéria de 11 assuntos, mostrar os 8 tipos em cinza são 88 ícones que afogam o
 título. A grade completa, com os ausentes, fica na página do assunto — onde "falta
 gerar" é acionável, porque é de lá que se chega ao prompt do NotebookLM.
 
+O site suporta os **8 tipos do Estúdio** do NotebookLM (áudio, vídeo, slides, mapa
+mental, infográfico, relatório, teste, tabela), detectados por presença de arquivo;
+tem tema claro/escuro, índice raiz com os concursos agrupados por órgão (deploy
+incremental via manifesto `.concurso.json`), assuntos agrupados por prioridade, a
+seção "Como a banca cobra" antes da lista, sumário lateral em documento longo e
+download de todas as mídias.
+
 Suíte de smoke completa (`bash scripts/test-all.sh`), com uma regressão por defeito já corrigido.
+
+> O histórico de versões vive no [`CHANGELOG.md`](CHANGELOG.md). Este arquivo descreve
+> o estado atual: uma lista de "novidades da versão X" aqui vira changelog duplicado e
+> já ficou sete versões para trás uma vez.
 
 ## Fluxo
 
@@ -143,7 +127,7 @@ Suíte de smoke completa (`bash scripts/test-all.sh`), com uma regressão por de
    - abrir via index.html ou servir na rede local (python -m http.server)
 ```
 
-## O modelo coletado (contrato entre A e B)
+## O modelo coletado (o contrato entre coletor e builder)
 
 `site-model.json`: concurso → meta → **escopos[]** → { `tipo` (comum/cargo),
 `nome`, `slug`, `secoes[]`, `materias[]`, `progresso` }.
@@ -170,8 +154,8 @@ quebrar. Ver docstring do `site_collector.py` para o formato completo.
 
 ## Scripts
 
-- `site_collector.py` — **(A)** varre o concurso e monta o modelo do site
-- `site_builder.py` — **(B/C)** gera as páginas HTML com mídias embutidas e quiz
+- `site_collector.py` — varre o concurso e monta o modelo do site
+- `site_builder.py` — gera as páginas HTML com mídias embutidas e o quiz de flashcards
 - `md2html.py` — conversor Markdown→HTML próprio (sem dependências; o site roda offline)
 - `tests/test_smoke.py` — suíte standalone
 

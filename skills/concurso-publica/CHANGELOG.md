@@ -2,6 +2,86 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.11.3] - 2026-07-31
+
+### Corrigido
+- **O `SKILL.md` acumulava changelog dentro do orquestrador.** Eram quatro blocos
+  "Novidades da 0.3.0 / 0.4.0 / 0.5.0 / 0.7.0" — e pararam aí, com a skill em 0.11.2,
+  sete versões depois. O que era decisão de projeto (como o aprofundamento é lido, por
+  que o selo só mostra mídia existente, a cópia sincronizada do `aprofundamento_id.py`)
+  virou descrição do estado atual, sem moldura de versão; o resto é papel do
+  `CHANGELOG.md`. É a mesma lição que a `concurso-aprofunda` já tinha registrado no
+  seu README ao remover o roadmap que contradizia o changelog.
+- **Tabela "Estado de implementação" removida.** Os três primeiros subsistemas estavam
+  ✅ havia muito tempo e o quarto, a busca client-side, era uma promessa de "próxima
+  entrega" feita na 0.3.0 e não cumprida em onze versões. As referências órfãs aos
+  rótulos `(A)`, `(B/C)` e "contrato entre A e B" passaram a nomear os scripts.
+
+## [0.11.2] - 2026-07-31
+
+### Corrigido
+Quatro defeitos de renderização do `md2html.py`, todos medidos no vault antes e
+depois. No HTML gerado dos dois concursos: **1.406 asteriscos crus → 0**, wikilink
+não resolvido **→ 0**, e **3.969 sublistas aninhadas** em 338 páginas onde antes a
+hierarquia era achatada.
+
+- **Lista aninhada chegava ACHATADA ao site.** O conversor guardava *uma* lista
+  aberta, então o subitem virava irmão do pai e a hierarquia — que é a informação —
+  sumia. Eram 408 linhas em 51 arquivos. Agora há uma pilha por nível de indentação,
+  e a sublista abre **dentro** do `<li>` do pai: `<ul>` como filho direto de `<ul>` é
+  HTML inválido, e fechar o `<li>` antes era o jeito errado de fazer parecer certo.
+- **Item de lista perdia a linha de continuação.** Linha indentada sem marcador virava
+  parágrafo solto fora da lista — 838 linhas em 38 arquivos. Pior: quando o negrito
+  atravessava a quebra, as duas metades caíam em conversões inline diferentes e os
+  asteriscos chegavam crus à página. A continuação passa a ser juntada ao item
+  **antes** da conversão inline. Linha indentada que *tem* marcador continua sendo
+  sublista, não continuação.
+- **`**​*negrito* contendo itálico**` não convertia.** A classe negada `[^*]+` parava
+  no primeiro `*` interno e a linha inteira chegava ao site com os asteriscos crus —
+  139 linhas em 20 arquivos. Passa a aceitar `*` dentro, com `***x***` tratado antes
+  (senão o passo preguiçoso casaria `**` + `*x` + `**` e deixaria um `*` solto). A
+  forma inversa, `*Fui eu **que fiz***`, já funcionava e tem teste para continuar
+  funcionando.
+- **Wikilink com pipe CRU quebrava a tabela.** O `|` do link era lido como separador:
+  duas colunas viravam quatro e o link aparecia em texto puro. O escapado (`\|`) já
+  era tratado; o cru, que o vault também escreve, não era. Agora o miolo de `[[…]]` é
+  mascarado antes de dividir a linha, o que cobre as duas formas.
+
+> Nota de método: o negrito usa `[\s\S]+?`, não `.+?`. O texto que chega ao conversor
+> inline é um bloco inteiro com as linhas ainda separadas por `\n`, e o vault quebra
+> linha no meio de negrito o tempo todo — `.` fecharia o casamento na quebra. Foi
+> exatamente o que aconteceu na primeira tentativa desta correção, e a medição no
+> site gerado (1.406 asteriscos) é que denunciou.
+
+### Adicionado
+- Sete testes de regressão, um por defeito e um por invariante: hierarquia preservada,
+  ausência de `<ul>` inválido, estado das tarefas por nível, continuação que não engole
+  a sublista, negrito atravessando quebra de linha, e as duas formas de pipe em tabela.
+
+## [0.11.1] - 2026-07-31
+
+### Alterado
+- **O assunto abre na aba do nível `padrao`**, não mais no `detalhado`. Entra-se num assunto para revisar; o tratamento exaustivo fica a um clique. O desempate dentro do mesmo nível continua alfabético pelo id do aprofundamento — o que decide os 8 assuntos do vault com dois `padrao`. Muda também o que o card mostra, porque o primeiro aprofundamento **representa** o assunto: descrição, bolha de progresso, contagem de flashcards e URL do NotebookLM passam a vir do `padrao`. Efeito colateral bem-vindo: o único assunto do vault com mídia gerada guarda os 7 arquivos em `padrao--pestana`, que era justamente a aba fechada.
+
+### Corrigido
+- **O aprofundamento do layout plano legado podia sequestrar a aba.** Ele não tem identidade de fonte e recebe o id `original`, que vem antes de `padrao--*` no alfabeto — abriria nele em vez do aprofundamento de verdade. Passa a ordenar depois dos identificados do mesmo nível. Não há nenhum no vault hoje; é rede para o caso.
+
+### Adicionado
+- Dois testes que afirmam no **HTML** qual aba abre (`aba ativa` + `data-alvo` casando com o painel) e que o desempate entre dois `padrao` é alfabético. Antes a garantia era indireta, via `aprofundamentos[0]`, e o site podia divergir sem ninguém ver.
+
+## [0.11.0] - 2026-07-31
+
+### Corrigido
+- **A página do pacote NotebookLM não dizia com que nome criar o notebook nem com que nome salvar cada arquivo** — as duas informações sem as quais o roteiro não se executa sem abrir o Obsidian. O nome do notebook nunca chegava (só a lista numerada da seção 1 era lida, e o nome está na frase que a introduz), e o nome do arquivo vivia numa linha que o parser de roteiro descartava.
+- **`_roteiro_do_bloco()` exigia bullet e descartava as instruções que mais importam.** No template real, `Studio → …`, `Generate → …` e `Salve … como …` são **parágrafo**, não item de lista. Resultado: o roteiro do **mapa mental** e o do **report**, cujas instruções são todas parágrafo, saíam **vazios** — está congelado assim no `examples/site-model-exemplo.json`. A regra agora é aberta: toda linha de instrução entra, e o que é estrutura (blockquote, título, lista de fontes) sai. Lista fechada falha em silêncio; regra aberta falha à vista.
+- **O fixture inventava a realidade que o parser exigia.** Ele escrevia `- Studio → …` **como bullet**, o que no template real não é bullet, e o corpo do pacote era a palavra `pack`. O teste ficava verde enquanto o vault produzia roteiro vazio — o mesmo modo de falha do bug do `_GERAL`. Agora o fixture **renderiza o `.tpl` real** da skill irmã, e `test_o_que_o_coletor_espera_do_pack_existe_no_template_real` quebra se o template mudar de forma.
+- **O botão de copiar não alcançaria nada fora de um cartão de prompt** (`closest(".prompt")`): existiria e não faria nada, sem erro visível. Passou a aceitar `.copiavel`/`.texto-copiavel`, com teste que trava os seletores.
+
+### Adicionado
+- `pack_notebooklm.nome_notebook` e `prompts[].arquivo_saida` no modelo — os identificadores que a automação vai consumir. Lidos do frontmatter do pacote (contrato) com a prosa como **fallback**, para os pacotes do vault que ainda não foram regerados.
+- A página mostra o nome do notebook **por aprofundamento** (dois aprofundamentos = dois notebooks, com nomes diferentes; no cabeçalho da página apareceria o nome errado nas outras abas) e o nome do arquivo em cada cartão de gerável.
+- `examples/site-model-exemplo.json` atualizado — trazia `roteiro: []` congelado — e o teste do exemplo agora afirma roteiro não vazio e arquivo de saída em todos os geráveis.
+
 ## [0.10.0] - 2026-07-30
 
 ### Adicionado

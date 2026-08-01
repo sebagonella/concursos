@@ -24,6 +24,8 @@ edital) e **Estudo** (os assuntos aprofundados). No Plano, cada tópico traz o l
 do edital e o checklist derivado à vista, e a um clique o material recomendado, as
 pegadinhas da banca, a meta de questões e o que mais o mapa tiver escrito.
 
-Versão atual: **0.10.0** (cobertura do edital em % por matéria, com as lacunas
-nomeadas; o que existe em cada assunto; e todo o material recomendado consolidado
-por tópico).
+Versão atual: **0.11.3** (correção de documentação: o `SKILL.md` acumulava "novidades
+da versão X" que pararam na 0.7.0 e uma entrega prometida desde a 0.3.0). Na 0.11.2:
+quatro defeitos de renderização — lista aninhada deixa de achatar, item de lista não
+perde a linha de continuação, negrito contendo itálico converte, e o pipe cru de
+wikilink não quebra mais a tabela.

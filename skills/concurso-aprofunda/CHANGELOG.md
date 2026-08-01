@@ -2,6 +2,43 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.7.2] - 2026-07-31
+
+### Corrigido
+- **O `SKILL.md` e o `README` descreviam o mundo anterior à `concurso-notebooklm`.**
+  Diziam, em três lugares, que a automação do NotebookLM "não existe no repo hoje" e
+  que a geração da mídia é manual por decisão de projeto — enquanto a skill irmã já
+  estava no repo, na 0.2.x, verificada ponta a ponta. O manual continua sendo o caminho
+  garantido; o que mudou é que agora há alternativa, e omiti-la escondia trabalho feito.
+- **A Etapa 7 ainda dizia que `herdar_campos()` preserva "os dois únicos campos"**
+  `notebooklm_url` e `notebooklm_status`. A 0.7.1 justamente trocou isso por herança
+  por prefixo `notebooklm_*` — o texto descrevia o bug que a versão anterior corrigiu.
+
+## [0.7.1] - 2026-07-31
+
+### Corrigido
+- **Regerar o pacote apagava tudo que a automação escrevesse nele.** `herdar_campos()` herdava exatamente duas chaves — `notebooklm_url` e `notebooklm_status`. Qualquer campo novo (o id do notebook, a data da criação, o que a integração precisa para não recriar o que já existe) ia para o `.bak.md` na regeração seguinte, **em silêncio** — o mesmo defeito que a função foi criada para evitar com a URL, repetido um nível acima. A herança passa a ser por **prefixo** `notebooklm_*`: campo novo sobrevive sem ninguém lembrar de estender a função. Campo presente mas vazio continua não sendo herdado, para não fossilizar `notebooklm_id: ""`.
+
+### Adicionado
+- Bloco `{NOTEBOOKLM_EXTRA}` no template, onde os campos herdados sem lugar fixo são reemitidos, e limpeza de linha vazia no frontmatter — o placeholder fica vazio no caso comum e deixaria uma linha solta no meio do YAML.
+
+## [0.7.0] - 2026-07-31
+
+### Corrigido
+- **O prompt mandava o NotebookLM usar uma fonte que podia não estar lá.** No nível `detalhado`, o prompt de áudio injetava `Baseie-se nas fontes: {fontes}` com o nome do arquivo do livro — mas a própria seção "Fontes para subir" marca o recorte do livro como *(Referência)* **opcional**, e o padrão é subir só a nota curada do vault. Prompt e instrução se contradiziam. Eram **20 dos 158 pacotes** do vault. Agora **os quatro prompts** ancoram na nota, por `clausula_fonte()`, e o único nome citado é o do `.md` que a seção 1 manda subir como fonte principal.
+- **O migrador de pacotes não enxergava um único pacote do vault.** `fix_notebooklm_packs.py` procurava o assunto em `{assunto}/{assunto}.md` — o layout plano legado — enquanto todos os 158 pacotes vivem em `{assunto}/{nivel}--{fonte}/`. Ele imprimia "Nenhum assunto encontrado" e **saía com sucesso**: migração que não migra e não reclama. O teste passava porque o fixture usava o layout que o gerador não emite mais. Agora o inventário vem de `pastas_de_aprofundamento()`/`arquivo_principal()` do próprio gerador — a regra de layout deixa de existir em dois lugares — e não achar nada **falha alto**.
+- **Backup duplicado no migrador.** Ele copiava o pacote para `.bak.md` incondicionalmente, inclusive quando nada mudaria, e o backup condicional do `notebooklm_pack.py` o sobrescrevia em seguida. Removido: o backup é do gerador, que só copia quando o conteúdo mudou.
+
+### Adicionado
+- **Guarda sistêmica contra citar a obra no prompt.** `test_prompt_nunca_manda_consultar_o_livro` gera pacotes para as combinações representativas (livro · norma · `--proprio` · `padrao` · `detalhado`), varre **todos** os blocos cercados e falha se algum casar `.pdf`, `págs.`, `páginas`, `capítulo`, a formulação antiga, ou qualquer termo que **só** o `fontes:`/`localizacao_livro:` conheça. Vale para os prompts que ainda serão escritos — é o análogo do teste que barra cor fixa fora das variáveis de tema, na `concurso-publica`.
+- **Teto de tamanho do prompt** (`test_prompt_cabe_no_campo_do_estudio`): o campo "Customize" do Estúdio trunca, e o fim do prompt é onde ficam as instruções de conteúdo. Pior caso real medido: 490 caracteres.
+- **O pacote declara o que a automação precisa**, em chaves planas no frontmatter: `nome_notebook`, `arquivo_podcast`, `arquivo_mapa_mental`, `arquivo_video`, `arquivo_report`. Antes esses identificadores só existiam na prosa, e extrair nome de arquivo por regex de texto corrido era exatamente o que fazia o roteiro do mapa mental e o do report chegarem **vazios** ao site.
+
+## [0.6.1] - 2026-07-30
+
+### Corrigido
+- **Marcar um subtópico como concluído no Obsidian renomeava o assunto.** O plugin **Tasks** acrescenta `✅ 2026-07-30` ao fim da linha, e o `assuntos_do_topico.py` só limpava isso por acidente: o corte nos dois-pontos ("Tema: explicação") descartava o resto da linha. Num item **sem** `:` a data entrava no nome — `criacao-de-brasilia-…-plano-de-metas-2026-07-30` — e o slug deixava de casar com a pasta já existente no vault, fazendo um assunto **já aprofundado parecer não aprofundado** em qualquer verificação mapa↔pastas. Agora os marcadores do Tasks (`✅ ❌ ➕ 🛫 ⏳ 📅 🔁 🆔 ⛔` e as cinco prioridades `🔺 ⏫ 🔼 🔽 ⏬`) são removidos **antes** do corte nos dois-pontos, de modo que os dois formatos de item ficam limpos. Emoji fora desse conjunto pertence ao nome e é preservado — há teste que trava isso.
+
 ## [0.6.0] - 2026-07-30
 
 ### Corrigido

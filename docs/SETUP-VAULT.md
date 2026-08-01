@@ -59,11 +59,25 @@ Onde colocar os insumos (sugestão):
 
 1. **Edital novo** → rodar `concurso-prep` → estrutura completa criada.
 2. **Aprofundar uma matéria** → rodar `concurso-aprofunda` com o livro → assuntos + flashcards + pacotes NotebookLM.
-3. **Gerar os derivados** → abrir a página `notebooklm/` do assunto no site (ou o
-   `_fonte-notebooklm.md` no vault), copiar os prompts e rodar no NotebookLM. Ao
-   terminar, **colar a URL do notebook em `notebooklm_url:`** no pack: é a única
-   condição para o botão "Abrir no NotebookLM" aparecer no site. A regeneração do
-   pack preserva esse valor.
+3. **Gerar os derivados** → dois caminhos para o mesmo pacote:
+   - **À mão (garantido)**: abrir a página `notebooklm/` do assunto no site (ou o
+     `_fonte-notebooklm.md` no vault), copiar os prompts e rodar no NotebookLM. Ao
+     terminar, **colar a URL do notebook em `notebooklm_url:`** no pack: é a única
+     condição para o botão "Abrir no NotebookLM" aparecer no site. A regeneração do
+     pack preserva esse valor.
+   - **Automatizado (opcional)**: rodar `concurso-notebooklm`, que cria o notebook,
+     sobe as fontes, dispara as gerações e depois coleta os arquivos já com o nome que
+     o site detecta — incluindo a URL, gravada sozinha. Depende da `notebooklm-py`,
+     que não é oficial e quebra sem aviso; sem ela, vale o caminho de cima.
+
+     ```bash
+     python3 ~/.claude/skills/concurso-notebooklm/scripts/nlm_run.py \
+       --assuntos-dir "<...>/03-APROFUNDAMENTO/<materia>/assuntos" \
+       --leis-dir "<...>/_COMUM/04-MATERIAIS/leis-baixadas" --dry-run
+     ```
+
+     O `--dry-run` funciona **sem** a biblioteca instalada: é o relatório honesto do
+     que falta gerar. O mapa mental fica de fora da automação em qualquer caso.
 4. **Edital retificado / saiu o oficial** → rodar `concurso-prep --reconciliar` → nova versão lado a lado, com diff e progresso migrado.
 5. **Publicar o site** → rodar `concurso-publica` (ou `./deploy/deploy.sh --concurso-dir <...>`) → site estático com as mídias embutidas, servido no servidor doméstico.
 

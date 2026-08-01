@@ -9,6 +9,7 @@ Skills do [Claude Code](https://claude.com/claude-code) que automatizam a prepar
 | **`concurso-prep`** | 1 | Do **edital** → estrutura completa de estudos: cronograma adaptativo (até 4 fases, conforme o prazo), mapas por matéria, análise da banca, histórico do órgão, leis baixadas (MD+PDF), sinergias entre concursos |
 | **`concurso-aprofunda`** | 2 | Do **livro de referência** → um `.md` por assunto (resumo próprio + páginas do livro + citações curtas), flashcards (Obsidian/Anki) e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM |
 | **`concurso-publica`** | 3 | Do **vault** → site estático navegável com **todo** o conteúdo do concurso, espelhando a organização em COMUM e cargos: edital, cronograma, mapas de matéria, leis, histórico, sinergia, discursiva e o aprofundamento — com o podcast tocando, o vídeo rodando, flashcards como quiz e os prompts do NotebookLM a um toque |
+| **`concurso-notebooklm`** | 3+ | Executa os pacotes NotebookLM que a Etapa 2 deixou prontos: cria o notebook, sobe as fontes, gera as mídias e salva os arquivos com o nome que o site reconhece. **Opcional** — o modo manual continua valendo, e a biblioteca usada não é oficial |
 
 Cada etapa consome a saída da anterior.
 
@@ -44,12 +45,23 @@ flowchart TB
 
     vaultB["🗂️ <b>Vault · aprofundamento</b><br/><b>03-APROFUNDAMENTO/</b>{materia}/assuntos/{assunto}/{nivel}--{fonte}/<br/>resumo próprio · flashcards (Obsidian + Anki) · <code>_fonte-notebooklm.md</code>"]
 
-    subgraph NB["<b>NotebookLM</b> — manual, por decisão de projeto (não há API pública)"]
+    subgraph NB["<b>NotebookLM</b> — o mesmo pacote, por dois caminhos"]
         direction LR
-        n1["Sobe as fontes e<br/>cola os 4 prompts"]
-        n2["Baixa podcast .m4a ·<br/>vídeo .mp4 · mapa .png ·<br/>report .md"]
-        n3["Cola a URL em<br/><code>notebooklm_url:</code>"]
-        n1 --> n2 --> n3
+        subgraph MAN["<b>manual</b> — o caminho garantido"]
+            direction TB
+            n1["Sobe as fontes e<br/>cola os 4 prompts"]
+            n2["Baixa podcast .m4a ·<br/>vídeo .mp4 · mapa .png ·<br/>report .md"]
+            n3["Cola a URL em<br/><code>notebooklm_url:</code>"]
+            n1 --> n2 --> n3
+        end
+        subgraph AUTO["<b>concurso-notebooklm</b> — opcional"]
+            direction TB
+            m1["<b>nlm_run</b><br/>cria o notebook, sobe as<br/>fontes e dispara — não espera"]
+            m2["<b>nlm_coleta</b><br/>baixa e nomeia pelo<br/><code>arquivo_*</code> do pacote;<br/><i>extensão vem dos bytes</i>"]
+            m3["grava <code>notebooklm_*</code><br/>no frontmatter do pacote"]
+            m1 --> m2 --> m3
+        end
+        MAN ~~~ AUTO
     end
 
     vaultC["🗂️ <b>Vault · com as mídias</b><br/>mídia ao lado do assunto, detectada por <b>presença de arquivo</b>"]
@@ -92,18 +104,21 @@ flowchart TB
     classDef fonte fill:#E8ECF8,stroke:#16307E,stroke-width:2px,color:#101425
     classDef vaultBox fill:#FFFDF0,stroke:#C9A227,stroke-width:2px,color:#23262E
     classDef manual fill:#FFF3E0,stroke:#C0392B,stroke-dasharray:5 3,color:#23262E
+    classDef auto fill:#F3EFFA,stroke:#5B3FA8,stroke-dasharray:5 3,color:#23262E
     classDef saida fill:#E9F5EE,stroke:#1E7A4C,stroke-width:2px,color:#23262E
     classDef recon fill:#FBE9E7,stroke:#C0392B,color:#23262E
 
     class edital,livro fonte
     class vaultA,vaultB,vaultC vaultBox
     class n1,n2,n3 manual
+    class m1,m2,m3 auto
     class site,nav saida
     class ret recon
 ```
 
 Fonte em [`docs/fluxo-concurso.mmd`](docs/fluxo-concurso.mmd), que traz também as notas
-de layout. Por que este desenho e não outro está em
+de layout, e export em [`docs/fluxo-concurso.png`](docs/fluxo-concurso.png) para onde o
+Mermaid não renderiza. Por que este desenho e não outro está em
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md#o-fluxo-completo-do-edital-ao-site-no-ar).
 
 ### Destaques
@@ -190,7 +205,7 @@ O container usa **bind mount**, então atualizar o site é só sincronizar arqui
 
 | Documento | Para quê |
 |---|---|
-| [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | **As decisões de projeto e o porquê de cada uma**: por que três skills e não uma, por que o site é derivado, como funciona a identidade de um aprofundamento, a arquitetura de informação do site, e o diagrama do fluxo em versão nativa |
+| [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | **As decisões de projeto e o porquê de cada uma**: por que uma skill por ciclo de vida e não uma só, por que o site é derivado, por que a automação do NotebookLM é camada opcional, como funciona a identidade de um aprofundamento, e a arquitetura de informação do site |
 | [`docs/SETUP-VAULT.md`](docs/SETUP-VAULT.md) | Preparar o vault Obsidian: estrutura esperada em `30_AREAS/CARREIRA/CONCURSOS/`, plugins e fluxo de trabalho |
 | [`CLAUDE.md`](CLAUDE.md) | **Convenções invioláveis** — a maioria veio de bug real, e quebrá-las quebra coisa de novo. Leitura obrigatória antes de mexer no código |
 | [`deploy/README.md`](deploy/README.md) | Servir o site num servidor doméstico: Docker, rsync, DNS local, troca de porta e troubleshooting |
@@ -205,6 +220,7 @@ Cada skill tem a mesma anatomia: `SKILL.md` é o orquestrador que o Claude execu
 | `concurso-prep` | [`SKILL.md`](skills/concurso-prep/SKILL.md) | [`README.md`](skills/concurso-prep/README.md) | [`CHANGELOG.md`](skills/concurso-prep/CHANGELOG.md) |
 | `concurso-aprofunda` | [`SKILL.md`](skills/concurso-aprofunda/SKILL.md) | [`README.md`](skills/concurso-aprofunda/README.md) | [`CHANGELOG.md`](skills/concurso-aprofunda/CHANGELOG.md) |
 | `concurso-publica` | [`SKILL.md`](skills/concurso-publica/SKILL.md) | [`README.md`](skills/concurso-publica/README.md) | [`CHANGELOG.md`](skills/concurso-publica/CHANGELOG.md) |
+| `concurso-notebooklm` | [`SKILL.md`](skills/concurso-notebooklm/SKILL.md) | [`README.md`](skills/concurso-notebooklm/README.md) | [`CHANGELOG.md`](skills/concurso-notebooklm/CHANGELOG.md) |
 
 ### Subagents da Etapa 1
 

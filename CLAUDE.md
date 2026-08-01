@@ -14,11 +14,12 @@ Orientação para o Claude Code trabalhando neste repositório.
 
 Coleção de **skills do Claude Code** que automatizam a preparação para concursos públicos brasileiros, gerando conteúdo estruturado direto num **vault Obsidian**.
 
-O fluxo tem três etapas encadeadas:
+O fluxo tem três etapas encadeadas, mais uma camada opcional:
 
 1. **`concurso-prep`** (Etapa 1) — a partir de um edital (PDF/DOCX/MD), monta a estrutura completa de estudos: cronograma, mapas por matéria, análise da banca, histórico do órgão, materiais (leis baixadas em MD+PDF), sinergias entre concursos. Suporta concurso *previsto* (sem edital ainda) e *reconciliação/retificação* quando o edital sai ou muda.
 2. **`concurso-aprofunda`** (Etapa 2) — consome a saída da Etapa 1 + um livro de referência denso. Localiza cada assunto no livro, gera um `.md` por assunto (resumo próprio + ponteiros de página + citações curtas), flashcards nativos e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM.
 3. **`concurso-publica`** (Etapa 3) — transforma a pasta de um concurso em **site estático** que espelha a organização do vault (`{concurso}/{comum|cargo}/`) e publica **todo** o conteúdo abaixo do concurso: edital, cronograma, mapas de matéria, materiais e leis, histórico, sinergia, discursiva, títulos e o aprofundamento, com mídias embutidas, quiz de flashcards e uma página por assunto para o pacote NotebookLM. Cada matéria abre em duas visões — **Plano** (o mapa do edital) e **Estudo** (os assuntos aprofundados). Decisões travadas: gerador próprio em Python (sem Node), por concurso, uso local/rede doméstica, **site só leitura** (progresso lido do vault na geração; o vault é a única fonte de verdade), link NotebookLM apenas se `notebooklm_url:` preenchida (sem iframe do Google).
+4. **`concurso-notebooklm`** (camada opcional sobre a Etapa 2) — **executa** os pacotes que a `concurso-aprofunda` preparou: cria o notebook, sobe as fontes, gera as mídias e salva os arquivos com o nome que a `concurso-publica` detecta. Roda **sob demanda**, por assunto ou por matéria. A biblioteca usada (`notebooklm-py`) **não é oficial** e quebra sem aviso, então a automação é sempre **opcional** e o modo manual segue completo.
 
 O repositório é versionado no GitHub e instalado localmente no Claude Code do usuário.
 
@@ -37,11 +38,14 @@ skills/
 │   ├── assets/templates/
 │   ├── scripts/
 │   └── examples/
-└── concurso-publica/       # Etapa 3 — concurso → site estático
+├── concurso-publica/       # Etapa 3 — concurso → site estático
+│   ├── SKILL.md
+│   ├── assets/             # site.css, site.js (sem CDN: o site roda offline)
+│   ├── scripts/            # site_collector.py, site_builder.py, md2html.py
+│   └── examples/           # site-model-exemplo.json (contrato coletor→builder)
+└── concurso-notebooklm/    # camada opcional — executa os pacotes no NotebookLM
     ├── SKILL.md
-    ├── assets/             # site.css, site.js (sem CDN: o site roda offline)
-    ├── scripts/            # site_collector.py, site_builder.py, md2html.py
-    └── examples/           # site-model-exemplo.json (o contrato entre A e B)
+    └── scripts/            # pacote.py (contrato) e plano.py (o que gerar)
 
 scripts/install.sh          # instalador único (instala/atualiza todas as skills)
 scripts/test-all.sh         # roda as suítes de todas as skills
@@ -53,8 +57,9 @@ deploy/                     # Docker + rsync para servir o site num servidor dom
 docs/
 ├── ARQUITETURA.md          # decisões de projeto e o porquê + diagrama do fluxo
 ├── SETUP-VAULT.md          # preparar o vault Obsidian
-├── fluxo-concurso.mmd      # fonte Mermaid do diagrama
-└── fluxo-concurso.png      # o mesmo diagrama em imagem (referenciado no README)
+├── fluxo-concurso.mmd      # fonte Mermaid do diagrama (o README renderiza o bloco)
+└── fluxo-concurso.png      # export do .mmd, para onde o Mermaid não renderiza;
+                            # regerar junto ao editar o .mmd (comando no cabeçalho dele)
 ```
 
 > O índice navegável de toda a documentação está no [`README.md`](README.md#documentação).
@@ -119,7 +124,10 @@ Estas regras vieram de bugs reais. Quebrá-las volta a quebrar coisas.
 - **Fixture tem de espelhar a saída real da skill anterior**: dois defeitos ficaram verdes por anos porque o fixture inventava o que o gerador não produz — assuntos sob `03-MAPAS-MATERIAS` (a `concurso-aprofunda` usa `03-APROFUNDAMENTO`) e uma chave `notebooklm_url` que o template nunca escrevia. Fixture divergente é teste que se autoconfirma.
 - **Cores só via variáveis de tema**: nada de hex fixo para cor de texto no CSS, senão o tema escuro quebra (já aconteceu com `strong`). Toda variável precisa existir nos dois temas — há teste que barra isso.
 - **Deploy é sincronização**: o container usa bind mount; atualizar o site é rsync, sem rebuild nem restart. Não introduzir passos de build no deploy.
-- **Preservar trabalho do usuário**: re-execuções não apagam resumos, flashcards ou progresso. Scripts que sobrescrevem artefatos do usuário devem fazer backup (ver `fix_notebooklm_packs.py`).
+- **Preservar trabalho do usuário**: re-execuções não apagam resumos, flashcards ou progresso. Scripts que sobrescrevem artefatos do usuário devem fazer backup — e **num lugar só**: quem faz é `notebooklm_pack.py`, que copia para `.bak.md` apenas quando o conteúdo mudou. O wrapper `fix_notebooklm_packs.py` duplicava esse backup incondicionalmente e o resultado era sobrescrito logo depois.
+- **Regra de layout mora no gerador, nunca copiada**: `fix_notebooklm_packs.py` reimplementava a busca do `.md` do assunto e ficou preso no formato plano legado — achava **zero** dos 158 pacotes do vault e saía com sucesso. Quem varre pastas de aprofundamento usa `pastas_de_aprofundamento()`/`arquivo_principal()`, e não achar nada **falha alto**.
+- **O prompt do NotebookLM aponta para a nota do vault, nunca para o livro**: subir o recorte da obra é opcional, então prompt que a nomeia manda o modelo consultar fonte que pode não estar no notebook. A cláusula sai de `clausula_fonte()`, num lugar só, e há teste que varre **todos** os blocos gerados procurando `.pdf`, página, capítulo ou termo que só o `fontes:` conheça.
+- **O que a automação consome é contrato, não prosa**: `nome_notebook` e `arquivo_*` vivem no frontmatter do pacote. Extrair nome de arquivo por regex de texto corrido foi o que fez o roteiro do mapa mental e o do report chegarem vazios ao site.
 
 ## Ao evoluir uma skill
 
@@ -144,4 +152,4 @@ O vault de destino segue PARA/Johnny-Decimal, com os concursos em `30_AREAS/CARR
 ## Escopo e limites
 
 - O conteúdo gerado é material de estudo — **não substitui a leitura do edital oficial**. Datas e regras devem ser conferidas na fonte.
-- A integração com o NotebookLM é **manual** por decisão de projeto: não há API pública de consumidor, e a via da comunidade (`notebooklm-py`) usa endpoints não-oficiais e pode quebrar. A skill prepara o pacote; o usuário sobe e clica. Se um dia a automação entrar, será **camada opcional** sobre o modo manual, nunca substituindo-o.
+- A integração com o NotebookLM tem **dois modos, e o manual é o garantido**: não há API pública de consumidor, e a via da comunidade (`notebooklm-py`) usa endpoints não-oficiais que quebram sem aviso. A `concurso-aprofunda` prepara o pacote e o usuário sobe e clica; a `concurso-notebooklm` executa o mesmo pacote automaticamente, como **camada opcional** — nunca em substituição. Sem a biblioteca, a skill degrada e o pacote continua completo.

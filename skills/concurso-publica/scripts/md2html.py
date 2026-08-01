@@ -145,8 +145,23 @@ def _inline(texto: str, wikilink_resolver=None) -> str:
     # links markdown [texto](url)
     texto = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', texto)
 
-    # negrito e itálico
-    texto = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", texto)
+    # negrito e itálico, nesta ordem — e a ordem é o que faz funcionar.
+    #
+    # `***x***` vem primeiro porque o passo do negrito, sendo preguiçoso, casaria
+    # `**` + `*x` + `**` e deixaria um `*` solto na página.
+    #
+    # O negrito aceita `*` DENTRO (`[\s\S]+?` no lugar do antigo `[^*]+`): o vault
+    # escreve `**​*Cujo* não admite artigo**` — negrito contendo itálico — em 139
+    # linhas de 20 arquivos, e com a classe negada a linha inteira chegava ao site
+    # com os asteriscos crus. A forma inversa (`*Fui eu **que fiz***`) já funcionava
+    # e continua funcionando.
+    #
+    # `[\s\S]` e não `.`: o negrito PRECISA cruzar linha. O texto que chega aqui é um
+    # bloco inteiro — parágrafo ou blockquote, com as linhas ainda separadas por
+    # `\n` —, e o vault quebra linha no meio de negrito o tempo todo. Usar `.` fecha
+    # o casamento na quebra e devolve 1.406 asteriscos crus ao site; foi medido.
+    texto = re.sub(r"\*\*\*([\s\S]+?)\*\*\*", r"<strong><em>\1</em></strong>", texto)
+    texto = re.sub(r"\*\*([\s\S]+?)\*\*", r"<strong>\1</strong>", texto)
     texto = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"<em>\1</em>", texto)
 
     # URL nua vira link. O "Material recomendado" dos mapas escreve
@@ -190,13 +205,70 @@ def converter(md: str, wikilink_resolver=None, pular_frontmatter=True,
     linhas = md.split("\n")
     out: list[str] = []
     i = 0
-    lista_aberta: str | None = None   # 'ul' | 'ol' | None
+    # Pilha de listas abertas, uma entrada por nível de indentação. Era um único
+    # `lista_aberta`, e por isso toda lista aninhada chegava ACHATADA ao site: os
+    # subitens viravam irmãos dos pais e a hierarquia — que é a informação — sumia.
+    # Eram 408 linhas em 51 arquivos do vault.
+    #
+    # Cada nível guarda se o seu `<li>` está aberto, porque a sublista tem de ficar
+    # DENTRO dele: `<ul>` como filho direto de `<ul>` é HTML inválido, e fechar o
+    # `<li>` antes da sublista era o jeito errado de fazer parecer certo.
+    pilha: list = []      # [{"tag", "classe", "indent", "li"}]
 
-    def fechar_lista():
-        nonlocal lista_aberta
-        if lista_aberta:
-            out.append(f"</{lista_aberta}>")
-            lista_aberta = None
+    def _fechar_nivel():
+        n = pilha.pop()
+        if n["li"]:
+            out.append("</li>")
+        out.append(f"</{n['tag']}>")
+
+    def fechar_lista(ate: int | None = None):
+        """Fecha tudo (ate=None) ou só os níveis mais fundos que `ate`."""
+        while pilha and (ate is None or pilha[-1]["indent"] > ate):
+            _fechar_nivel()
+        if ate is None and pilha:
+            pass
+
+    def abrir_item(indent: int, tag: str, classe: str, corpo: str):
+        """Emite um `<li>` no nível certo, abrindo e fechando o que for preciso."""
+        fechar_lista(ate=indent)
+        if pilha and pilha[-1]["indent"] == indent:
+            if pilha[-1]["tag"] != tag or pilha[-1]["classe"] != classe:
+                _fechar_nivel()
+            elif pilha[-1]["li"]:
+                out.append("</li>")
+                pilha[-1]["li"] = False
+        if not pilha or pilha[-1]["indent"] < indent:
+            # aninhada: o `<li>` do pai continua ABERTO e recebe esta sublista
+            out.append(f'<{tag} class="{classe}">' if classe else f"<{tag}>")
+            pilha.append({"tag": tag, "classe": classe, "indent": indent, "li": False})
+        out.append(corpo)
+        pilha[-1]["li"] = True
+
+    def _indent(l: str) -> int:
+        expandida = l.expandtabs(4)
+        return len(expandida) - len(expandida.lstrip())
+
+    def _corpo_do_item(j: int, texto: str) -> tuple:
+        """Junta as linhas de continuação ao texto do item, e devolve `(texto, j)`.
+
+        As linhas têm de ser juntadas ANTES de ir para o conversor inline: o vault
+        quebra a linha no meio de negrito, e convertendo linha a linha as duas
+        metades caem em chamadas diferentes — o `**` fica órfão dos dois lados e os
+        asteriscos chegam crus à página. Linha indentada que TEM marcador de lista
+        não é continuação: é sublista, e quem trata é o laço principal.
+        """
+        j += 1
+        while j < len(linhas):
+            seguinte = linhas[j]
+            if not seguinte.strip():
+                break
+            if not seguinte[:1].isspace():
+                break
+            if re.match(r"^\s*(?:[-*]|\d+[.)])\s+", seguinte):
+                break
+            texto += "\n" + seguinte.strip()
+            j += 1
+        return texto, j
 
     while i < len(linhas):
         linha = linhas[i]
@@ -265,11 +337,15 @@ def converter(md: str, wikilink_resolver=None, pular_frontmatter=True,
             fechar_lista()
             def celulas(l):
                 l = l.strip().strip("|")
-                # dividir só em pipe NÃO escapado: dentro de tabela o wikilink vem
-                # como `[[alvo\|rotulo]]`, e dividir nele partia o link em duas
-                # células. Depois de dividir, o `\|` volta a ser `|` para o
-                # wikilink ser reconhecido normalmente.
-                return [c.strip().replace("\\|", "|")
+                # O pipe do wikilink não é separador de célula. Escapado (`\|`) o
+                # `(?<!\\)` já dava conta, mas o vault também escreve `[[alvo|rótulo]]`
+                # CRU dentro de tabela — e aí a célula virava quatro, com o link
+                # aparecendo em texto puro na página. Mascarar o miolo de `[[…]]`
+                # antes de dividir resolve as duas formas de uma vez.
+                l = re.sub(r"\[\[[^\]]*\]\]",
+                           lambda m: m.group(0).replace("\\|", "\x02").replace("|", "\x02"),
+                           l)
+                return [c.strip().replace("\x02", "|")
                         for c in re.split(r"(?<!\\)\|", l)]
             cabecalho = celulas(linhas[i])
             i += 2
@@ -291,39 +367,29 @@ def converter(md: str, wikilink_resolver=None, pular_frontmatter=True,
         # checkbox (é um item de lista especial — vira lista de tarefas)
         m = re.match(r"^\s*[-*]\s+\[([ xX])\]\s+(.*)$", linha)
         if m:
-            if lista_aberta != "ul":
-                fechar_lista()
-                out.append('<ul class="tarefas">')
-                lista_aberta = "ul"
-            feito = m.group(1).lower() == "x"
-            marca = "feito" if feito else "aberto"
-            conteudo = _inline(html.escape(m.group(2)), wikilink_resolver)
-            out.append(f'<li class="tarefa {marca}">'
+            marca = "feito" if m.group(1).lower() == "x" else "aberto"
+            texto, i = _corpo_do_item(i, m.group(2))
+            conteudo = _inline(html.escape(texto), wikilink_resolver)
+            abrir_item(_indent(linha), "ul", "tarefas",
+                       f'<li class="tarefa {marca}">'
                        f'<span class="bolha" aria-hidden="true"></span>'
-                       f'<span>{conteudo}</span></li>')
-            i += 1
+                       f'<span>{conteudo}</span>')
             continue
 
         # lista não ordenada
         m = re.match(r"^\s*[-*]\s+(.*)$", linha)
         if m:
-            if lista_aberta != "ul":
-                fechar_lista()
-                out.append("<ul>")
-                lista_aberta = "ul"
-            out.append(f"<li>{_inline(html.escape(m.group(1)), wikilink_resolver)}</li>")
-            i += 1
+            texto, i = _corpo_do_item(i, m.group(1))
+            abrir_item(_indent(linha), "ul", "",
+                       f"<li>{_inline(html.escape(texto), wikilink_resolver)}")
             continue
 
         # lista ordenada
         m = re.match(r"^\s*\d+[.)]\s+(.*)$", linha)
         if m:
-            if lista_aberta != "ol":
-                fechar_lista()
-                out.append("<ol>")
-                lista_aberta = "ol"
-            out.append(f"<li>{_inline(html.escape(m.group(1)), wikilink_resolver)}</li>")
-            i += 1
+            texto, i = _corpo_do_item(i, m.group(1))
+            abrir_item(_indent(linha), "ol", "",
+                       f"<li>{_inline(html.escape(texto), wikilink_resolver)}")
             continue
 
         # parágrafo (agrupa linhas até em branco)
