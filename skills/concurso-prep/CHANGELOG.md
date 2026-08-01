@@ -5,6 +5,203 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.8.1] - 2026-08-01
+
+Higiene: os itens pequenos que o diagnóstico levantou e que, somados, eram o que fazia
+duas execuções da skill produzirem estruturas diferentes.
+
+### Corrigido
+- **O `SKILL.md` se contradizia sobre o cronograma.** A Etapa 4.5 mandava gravar o
+  `cronograma-oficial.md` em `{CARGO}/02-CRONOGRAMA/`; a árvore de "Estrutura gerada"
+  o punha em `_COMUM/01-EDITAL/`, e é o que o vault faz. Resolvido a favor da árvore,
+  com o motivo escrito: o cronograma oficial é **do concurso** (inscrição, prova,
+  resultado) e igual para todos os cargos — repeti-lo por cargo seria duplicar. O que é
+  por cargo é o `cronograma-macro.md`.
+- **O nome do arquivo da discursiva não era fixo**: a Etapa 9.6 só dizia a pasta, então
+  o SEDES gerou `guia-discursiva.md` e o BB `discursiva.md`. Fixado em
+  `guia-discursiva.md`. (Arquivos já existentes não são renomeados — renomear quebra
+  wikilink e progresso.)
+- **O log de validação ignorava o item 15**: `validate_output.py` gravava sempre na raiz
+  de `.logs/`, e o vault real acumulou **43 `validacao-*.json` soltos**, sem como saber
+  de qual concurso era cada um. Passa a gravar em `.logs/{CONCURSO}/`.
+
+### Modificado
+- **`cronograma-semanal.md.tpl` deixou de ser órfão.** Estava listado nos templates e
+  nunca foi produzido em nenhuma das duas execuções reais. Em vez de apagá-lo — são 55
+  linhas úteis, com uma matéria foco por semana e checkboxes, e o modo previsto já fala
+  em "Semana 1, Semana 2…" — ganhou uso declarado como **Etapa 4.6 opcional**, gerada
+  quando o usuário pedir esse nível de detalhe. Sem mudança na saída padrão.
+
+### Notas
+- 1 teste novo; 53 na suíte da skill.
+- Fica **pendente e é do usuário**: `SEDES_2026/.meta.yml.arquivado`, resíduo da migração
+  para `.meta.json`. É arquivo no vault, e a skill não escreve no vault sem confirmação.
+
+## [1.8.0] - 2026-08-01
+
+### Adicionado
+- **Etapa 9b — avaliação de títulos, por cargo.** O artefato `08-TITULOS.md` já era
+  publicado pelo site (o `site_collector` reconhece `08-TITULOS` e trata arquivo solto,
+  não só pasta) e já existia no vault, feito à mão. O que faltava era o **produtor**:
+  nenhuma etapa da skill gerava. A etapa extrai do edital o quadro de atribuição de
+  pontos (alínea, título, pontuação, máximo), o teto total, as regras de entrega e monta
+  o checklist de documentos, separando titulação acadêmica de experiência profissional —
+  que costuma ser a alínea de maior peso e a que exige mais tempo de coleta.
+- **A condição é POR CARGO**, lida de `estrutura_prova_por_cargo[{CARGO}].titulos.presente`
+  com queda para o campo agregado. Títulos raramente valem para todos: no SEDES o edital
+  os dá **exclusivamente ao EDAS**.
+- `assets/templates/titulos.md.tpl`, modelado no artefato real do vault.
+- **`check_titulos` no validador, nos dois sentidos** — cargo elegível sem
+  `08-TITULOS.md`, e arquivo existindo em cargo que o meta diz não ter títulos. Cada
+  lado denuncia um erro diferente. Rodado contra o SEDES real, o segundo caso dispara na
+  hora: o ASSISTENTE-SOCIAL tem o arquivo e o `.meta.json` grava um único
+  `titulos.presente: false` com a ressalva em prosa — o campo afirma o falso para um dos
+  três cargos, e é campo que alimenta o diff estrutural da retificação.
+
+### Notas
+- 4 testes novos; 52 na suíte da skill.
+- A etapa não inventa pontuação: o quadro é dado do edital, e alínea que não ficar clara
+  vira pendência para conferência humana.
+
+## [1.7.0] - 2026-08-01
+
+Segunda metade da revisão comportamental: reconciliação, coleta e o subagent que não
+conseguia ler o próprio template. O fluxo de reconciliação **nunca tinha rodado** — não
+existe nenhum `V2`/`V3` no vault — então ele foi executado ponta a ponta em sandbox,
+sobre cópia do SEDES e do BB, nos dois casos (A: previsto → oficial; B: oficial →
+retificado). Um defeito novo apareceu só por causa disso, e está abaixo.
+
+### Corrigido
+- **A reconciliação multi-cargo era cega.** `diff_editais.py` lia apenas `materias[]` e
+  não conhecia `materias_por_cargo`. Medido no SEDES real: removendo 3 tópicos da matéria
+  específica do ASSISTENTE-SOCIAL, o diff reportava **0 removidos** — num concurso de 3
+  cargos, mudança em 2 deles passava em silêncio. Agora roda **por cargo** (item 8), lê
+  `materias[].cargos_ids` e `materias_por_cargo`, aceita `--cargo`, e avisa quando um
+  cargo é criado ou extinto entre as versões.
+- **O diff estrutural não via vagas nem salário** — os campos que, junto com as datas,
+  são o que retificação mexe (B.4). Ele procurava `vagas_ac`/`salario` na raiz, e o
+  `.meta.json` do SEDES guarda em `cargo.vagas_imediatas`/`cargo.remuneracao`. Achado ao
+  rodar o CASO B: mudar as vagas de 133 para 150 não produzia mudança nenhuma. Passa a
+  procurar nos dois lugares e a comparar **por cargo**, porque uma retificação pode mexer
+  nas vagas de um só.
+- **O cabeçalho do relatório era fixo** em "Previsto (V1) vs Oficial (V2)", inclusive
+  numa retificação — o B.5 manda ajustar.
+- **`edital_hash` era regra sem executor.** O `SKILL.md` define, desde a 1.3.0, o SHA-256
+  do **texto extraído**; sem script, cada execução escolheu: o SEDES gravou o hash dos
+  **bytes do PDF**, o BB gravou o do texto (mais um `edital_pdf_sha256` que o SKILL não
+  definia). No SEDES, portanto, o R.0.2 nunca reconhecia "edital idêntico", e um mesmo
+  edital re-salvo viraria `V3-RETIFICADO` espúrio. Novo `scripts/edital_hash.py`, com
+  canonicalização definida (CRLF, espaço no fim de linha, linhas em branco no fim) — sem
+  ela o hash muda com detalhe irrelevante. Diagnostica o caso do SEDES por nome e recusa
+  hashear PDF-imagem, porque texto vazio colide entre editais diferentes.
+- **`fetch_lei.py` gravava casca e reportava sucesso.** Com o Planalto sem responder, ele
+  avisava "texto extraido muito curto", **gravava o `.md` só com cabeçalho (384 chars),
+  imprimia `OK md:` e saía com `rc=0`** — o arquivo entrava no vault com cara de lei
+  baixada. Agora abaixo de `MIN_CHARS_LEI` (800) **nada é gravado** e o exit é 5.
+- **O `materia-mapper` não tinha `Read`** (`tools: WebSearch, Write`) e o Passo 6 da spec
+  dele mandava usar `assets/templates/mapa-materia.md.tpl` — um arquivo que ele não
+  conseguia abrir. O template estava morto para o único agent que deveria consumi-lo, e o
+  frontmatter era improvisado a cada execução: três execuções seguidas produziram três
+  formatos diferentes (`questoes_estimadas: 8-10`, `questoes_estimadas: 4`,
+  `estimativa_questoes: "4-6"`), nenhum igual ao template, nenhum com `cargos:`. Ganhou
+  `Read`, mais a instrução explícita de que os tópicos literais vêm inline e de que ir à
+  web buscá-los não é alternativa.
+- **Os templates não traziam o frontmatter que o vault exige.** Só o `mapa-materia` tinha
+  `tipo:`; nenhum tinha `status:`/`data:`. Os campos existiam nos arquivos do vault
+  porque foram inventados na hora — daí o mesmo artefato ter saído `tipo: mapa-materia`
+  num concurso e `tipo: documentacao` no outro. Os 12 templates passam a trazer `data`,
+  `data_atualizacao`, `tipo` e `status`, com valores do vocabulário canônico do vault.
+- **`tipo: reconciliacao` não existe no vocabulário do vault** (divergência pré-existente
+  no `diff-reconciliacao.md.tpl`). Sem consumidor e sem nenhuma nota usando; passou a
+  `documentacao`.
+
+### Notas
+- 9 testes novos; 48 na suíte da skill.
+- O que a reconciliação ponta a ponta mostrou e **não** é código: no `.meta.json` do
+  SEDES, todo o conteúdo específico de um cargo é **um único "tópico"** de milhares de
+  caracteres. O diff funciona, mas a granularidade dele é a do meta — remover "um tópico"
+  ali apaga o programa inteiro do cargo. É consequência da granularidade grosseira do run
+  de 15/07, e a decisão de identidade declarada abre o caminho para corrigir sem quebrar
+  vínculo.
+
+## [1.6.0] - 2026-08-01
+
+Revisão comportamental da skill: em vez de reler a documentação, rodou-se a 1.5.0 em
+sandbox contra o edital do SEDES que o vault já tinha processado em 15/07. O que os
+dois resultados não batendo revelou está abaixo.
+
+### Adicionado
+- **`assets/schema-edital.json` — contrato único da Etapa 2.** Até aqui o `SKILL.md`
+  documentava uma `materias[]` plana e o `agents/edital-parser.md` documentava três
+  chaves (`materias_gerais`, `materias_especificas_comuns`, `materias_especificas_cargo`).
+  Dois documentos do mesmo repo, contratos incompatíveis, e a conversão de um para o
+  outro ficava com o modelo, sem regra escrita: é a raiz de o `.meta.json` do SEDES e o
+  do BB terem saído com schemas diferentes entre si e do documentado — e de o BB ter
+  ficado sem o conteúdo programático de um cargo inteiro. Os dois documentos agora
+  **referenciam** o schema em vez de descrever cada um o seu.
+- **`scripts/materia_id.py` — fonte de verdade da identidade de matéria.** Resolve o
+  `materia_id` **reusando o que já está declarado no `.meta.json`** em vez de
+  re-derivar; id novo é proposta e sai com código 2, exigindo confirmação. Contra os 20
+  títulos reais do SEDES: 6 resolvidos (2 deles por similaridade — o parser de hoje
+  escreveu "Conhecimentos do **Distrito Federal**…" onde o de 15/07 tinha "do **DF**…",
+  e o id sobreviveu com os 58 assuntos que pendem dele), 14 pedindo confirmação.
+  Decisão em `identidade-da-materia-declarada-e-persistida`.
+- **`scripts/validate_parsed.py`** — valida a saída da Etapa 2 contra o schema e **para
+  o fluxo**. Era o executor que faltava: regra sem executor é regra que cada execução
+  interpreta do seu jeito. Contra as saídas reais acusa 15 violações na do parser e 11
+  no `.meta.json` do BB. Checador em stdlib, com uma inversão deliberada: **toda
+  palavra-chave usada no schema tem de estar implementada, senão o script falha alto** —
+  checador parcial silencioso é a doença que esta versão conserta.
+- Checagens de coerência que o JSON Schema não expressa: cargo validado sem nenhuma
+  matéria, `cargos_ids` apontando para cargo inexistente, `materia_id` repetido, modo
+  oficial sem `prova_data`.
+
+### Corrigido
+- **`check_soma_questoes` passava por vacuidade — e o SEDES era o caso.** O regex só
+  casava inteiro único, mas a estimativa honesta é uma **faixa** (o edital não distribui
+  questões por matéria), e era assim que os 9 mapas do SEDES escreviam: `~14 a 16
+  questões`. Nenhum casava, o check abortava com `INFO` e reportava OK. O concurso onde
+  a soma "passava" era o único onde ela nunca tinha sido calculada. Agora o regex aceita
+  faixa, a soma compara o total com um **intervalo**, e mapa sem estimativa é
+  **problema**, não `INFO`. Com isso o SEDES revela uma divergência real que estava
+  invisível: os mapas do ASSISTENTE-SOCIAL estimam 76-90 questões numa prova de 60.
+- **`check_wikilinks` não conhecia a raiz do vault**: os 19 "links quebrados" do SEDES
+  apontavam para três PDFs que **existem** em `40_RECURSOS/LIVROS/`, fora da pasta do
+  concurso. O concurso fechava em exit 1 por problema nenhum — e validador que dá alarme
+  falso deixa de ser lido. Ganhou `--vault-root`, com auto-detecção via `.obsidian/`.
+  SEDES caiu de 19 problemas para 1 (o real, acima).
+- **Mapa órfão deixou de ser `INFO`**: mapa que não corresponde a nenhuma matéria do
+  `.meta.json` é conteúdo programático perdido. Foi assim que as três matérias do
+  AGENTE-COMERCIAL do BB ficaram fora do meta, avisadas só por uma linha que não contava
+  como problema. O BB passa de 2 problemas para 7, todos legítimos.
+- **A Etapa 5 roteava pelo campo errado**: `cargos[]` traz o nome legível ("EDAS Serviço
+  Social") e `cargos_ids[]` traz o slug. Seguida à risca, a regra criava a pasta
+  `EDAS Serviço Social/03-MAPAS-MATERIAS/`, com espaço e acento, contra a convenção
+  UPPERCASE que o próprio validador checa.
+- **`check_structure` não exigia o que a Etapa 10.1 promete**: `00-INDICE.md` por pasta
+  (o SEDES gerava, o BB não, e nada acusava) nem `_COMUM/03-MAPAS-COMUNS` em concurso
+  multi-cargo.
+- **`estrutura_prova` não era por cargo**, e o meta afirmava o falso: o edital do SEDES
+  dá títulos exclusivamente ao EDAS, e o `.meta.json` grava `titulos.presente: false`
+  com uma observação em prosa — errado para um dos três cargos, num campo que alimenta o
+  diff estrutural da retificação. Documentado `estrutura_prova_por_cargo`.
+- **O nome da pasta do cargo vinha do texto digitado em `--cargo`**, então dependia de
+  como a pessoa escrevia (`"TDAS Agente Social"` → `TDAS-AGENTE-SOCIAL`, enquanto o vault
+  usa `AGENTE-SOCIAL`). Passa a vir de `cargos_validados[].sigla`.
+- **A Etapa 5 mandava passar os tópicos ao `materia-mapper` sem dizer que tem de ser
+  inline.** O agent declara `tools: WebSearch, Write` — ele **não lê arquivo**, e o modo
+  de falha observado é ir à web reconstruir os tópicos do edital a partir de blog de
+  cursinho.
+- **Fixture que inventava o que o gerador não produz**: o fixture base criava dois mapas
+  sem matéria correspondente — coisa que a skill nunca gera — e era isso que fazia o
+  teste de cobertura conviver com mapa órfão sem reclamar.
+
+### Notas
+- 12 testes novos, um por defeito, com a saída real do run de 01/08 como fixture.
+- O `materia-mapper` continua sem `Read` e o `fetch_lei.py` continua gravando `.md` de
+  casca com `rc=0`; o `diff_editais.py` continua cego a `materias_por_cargo`. Ficaram
+  para a 1.7.0.
+
 ## [1.5.0] - 2026-07-30
 
 ### Modificado

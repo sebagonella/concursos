@@ -1,4 +1,8 @@
 ---
+data: {{DATA_GERACAO}}
+data_atualizacao: {{DATA_GERACAO}}
+tipo: cronograma
+status: execucao
 title: "Cronograma Relativo - {CARGO_NOME}"
 concurso: "{ORGAO} (previsto)"
 status: PREVISTO

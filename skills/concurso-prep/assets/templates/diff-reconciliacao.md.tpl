@@ -1,6 +1,6 @@
 ---
 title: "Diff: Previsto vs Oficial - {ORGAO} {ANO}"
-tipo: reconciliacao
+tipo: documentacao
 gerado_em: {DATA_RECONCILIACAO}
 versao_anterior: V1-PREVISTO
 versao_atual: V2-OFICIAL

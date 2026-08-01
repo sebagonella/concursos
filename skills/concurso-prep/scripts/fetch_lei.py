@@ -23,6 +23,7 @@ Exit codes:
     2 = baixou e gerou MD, mas nao conseguiu gerar PDF
     3 = argumentos invalidos
     4 = fonte fora da whitelist (quando --whitelist e passada)
+    5 = a pagina nao trouxe a lei (texto abaixo de MIN_CHARS_LEI); NADA e gravado
 """
 import argparse
 import re
@@ -219,6 +220,11 @@ def dominio_permitido(url: str, whitelist: list[str]) -> bool:
 # --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
+# Abaixo disto nao se baixou a lei: e cabecalho, pagina de erro ou resposta vazia.
+# A LOAS inteira tem ~90 mil chars; o menor decreto util passa folgado de 800.
+MIN_CHARS_LEI = 800
+
+
 def main():
     ap = argparse.ArgumentParser(description="Baixa lei e gera MD + PDF")
     ap.add_argument("url")
@@ -248,8 +254,18 @@ def main():
         sys.exit(1)
 
     texto = html_para_texto(html)
-    if len(texto) < 200:
-        sys.stderr.write("AVISO: texto extraido muito curto; a pagina pode nao ser a lei.\n")
+    # Texto curto = nao se baixou a lei. Antes isto era um AVISO no stderr e o
+    # script seguia: gravava um .md so com cabecalho (384 chars para a LOAS),
+    # imprimia "OK md:" e saia com codigo 0. O arquivo entrava no vault com cara
+    # de lei baixada, e nada distinguia "baixei" de "nao baixei nada".
+    # Nao achar tem de falhar alto — e a mesma regra que ja vale para quem varre
+    # pastas de aprofundamento.
+    if len(texto) < MIN_CHARS_LEI:
+        sys.stderr.write(
+            f"ERRO: so {len(texto)} chars extraidos de {args.url} (minimo "
+            f"{MIN_CHARS_LEI}). A pagina nao e a lei, ou a fonte nao respondeu. "
+            f"NADA foi gravado — registre pendencia e baixe manualmente.\n")
+        sys.exit(5)
 
     resultados = {}
 

@@ -1,4 +1,8 @@
 ---
+data: {{DATA_GERACAO}}
+data_atualizacao: {{DATA_GERACAO}}
+tipo: status
+status: execucao
 tags:
   - concurso/{{ORGAO_SLUG}}/{{ANO}}
   - status

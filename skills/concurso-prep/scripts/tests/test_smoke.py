@@ -22,6 +22,8 @@ sys.path.insert(0, str(ROOT))
 
 import slugify  # noqa: E402
 import diff_editais as de  # noqa: E402
+import materia_id as mid  # noqa: E402
+import edital_hash as eh  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -87,6 +89,10 @@ def _montar_vault(base: Path, total_q=100, est1=40, est2=60):
         "estrutura_prova": {"objetiva": {"total_questoes": total_q}},
     }), encoding="utf-8")
     (b / "00-INDICE.md").write_text("# Indice\n[[00-INDICE]]\n", encoding="utf-8")
+    # Indice por pasta: a Etapa 10.1 gera, e o fixture tem de espelhar a saida
+    # real da skill — sem eles o fixture testava um vault que a skill nao produz.
+    (b / "EDAS/03-MAPAS-MATERIAS/00-INDICE.md").write_text("# Mapas\n", encoding="utf-8")
+    (b / "_COMUM/04-MATERIAIS/00-INDICE.md").write_text("# Materiais\n", encoding="utf-8")
     (b / "EDAS/03-MAPAS-MATERIAS/01.md").write_text(f"# A\n**Estimativa**: {est1} questoes\n", encoding="utf-8")
     (b / "EDAS/03-MAPAS-MATERIAS/02.md").write_text(f"# B\nEstimativa: {est2} questoes\n", encoding="utf-8")
     (b / "EDAS/02-CRONOGRAMA/cronograma-oficial.md").write_text("# crono\n", encoding="utf-8")
@@ -116,6 +122,11 @@ def _montar_vault_com_materias(base: Path, com_mapa=True, materia_id=True):
     meta["materias_por_cargo"] = {
         "EDAS": [{"nome": "Serviço Social", "topicos": ["b"]}]}
     (b / ".meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    # Os mapas genericos do fixture base nao correspondem a materia nenhuma — a
+    # skill nunca produz isso, e mante-los aqui fazia o teste de cobertura
+    # conviver com dois mapas orfaos sem reclamar.
+    for generico in ("01.md", "02.md"):
+        (b / "EDAS/03-MAPAS-MATERIAS" / generico).unlink(missing_ok=True)
     fm_id = "materia_id: lingua-portuguesa\n" if materia_id else ""
     (b / "EDAS/03-MAPAS-MATERIAS/01-lingua-portuguesa.md").write_text(
         f"---\n{fm_id}---\n# Mapa\n**Estimativa**: 40 questoes\n", encoding="utf-8")
@@ -312,6 +323,468 @@ def test_diff_aceita_pasta_do_concurso():
         assert v1 == {"M": ["1 A", "2 B"]}
         assert len(v2["M"]) == 3
 
+
+
+# --------------------------------------------------------------------------- #
+# materia_id — identidade declarada e persistida (ADR de 2026-08-01)
+# --------------------------------------------------------------------------- #
+# Meta como o do SEDES: ids declarados em `materias[]` E em `materias_por_cargo`
+# (nenhum dos dois é completo sozinho).
+META_DECLARADO = {
+    "materias": [
+        {"nome": "Língua Portuguesa", "materia_id": "lingua-portuguesa"},
+        {"nome": "Conhecimentos do DF, Política para Mulheres, Legislação e Primeiros Socorros",
+         "materia_id": "conhecimentos-df-legislacao-primeiros-socorros"},
+        {"nome": "Programas, Benefícios e Instrumentos Socioassistenciais do DF",
+         "materia_id": "programas-beneficios-df"},
+    ],
+    "materias_por_cargo": {
+        "ASSISTENTE-SOCIAL": [
+            {"nome": "Direitos, Violações de Direitos e Vulnerabilidades Sociais",
+             "materia_id": "direitos-violacoes-vulnerabilidades"},
+        ]
+    },
+}
+
+
+def test_materia_id_reusa_o_declarado_mesmo_com_titulo_reescrito():
+    """O defeito que motivou o ADR: re-derivar o id a cada execução.
+
+    O parser de 01/08 escreveu 'Conhecimentos do Distrito Federal...' onde o de
+    15/07 tinha 'Conhecimentos do DF...'. Derivando, o id muda e os 58 assuntos
+    aprofundados sob ele ficam órfãos. Resolvendo contra o declarado, não muda.
+    """
+    decl = mid.carregar_declarados(META_DECLARADO)
+    got, origem, _ = mid.resolver(
+        "Conhecimentos do Distrito Federal, Política para Mulheres, "
+        "Legislação e Primeiros Socorros", decl)
+    assert got == "conhecimentos-df-legislacao-primeiros-socorros", got
+    assert origem == "similar", origem
+
+
+def test_materia_id_le_tambem_o_formato_por_cargo():
+    decl = mid.carregar_declarados(META_DECLARADO)
+    got, origem, _ = mid.resolver(
+        "Direitos, Violações de Direitos e Vulnerabilidades Sociais", decl)
+    assert got == "direitos-violacoes-vulnerabilidades", got
+    assert origem == "declarado", origem
+
+
+def test_materia_id_e_estavel_entre_execucoes():
+    decl = mid.carregar_declarados(META_DECLARADO)
+    nomes = [m["nome"] for m in META_DECLARADO["materias"]]
+    a = [mid.resolver(n, decl)[0] for n in nomes]
+    b = [mid.resolver(n, decl)[0] for n in nomes]
+    assert a == b == ["lingua-portuguesa",
+                      "conhecimentos-df-legislacao-primeiros-socorros",
+                      "programas-beneficios-df"], a
+
+
+def test_materia_id_derivacao_nao_substitui_declaracao():
+    """Trava a tese do ADR: derivar erra, e é por isso que se declara.
+
+    Se um dia alguém 'melhorar' o propor_id a ponto de acertar sempre, este
+    teste avisa — e a conversa volta a ser sobre persistir, não sobre derivar.
+    """
+    divergem = [m["nome"] for m in META_DECLARADO["materias"]
+                if mid.propor_id(m["nome"]) != m["materia_id"]]
+    assert len(divergem) >= 2, divergem
+
+
+def test_materia_id_candidato_a_divisao_exige_virgula():
+    """Sem exigir vírgula, a heurística marcava 3 das 20 matérias reais do
+    SEDES — duas delas falso positivo."""
+    heterogenea = ("Conhecimentos do Distrito Federal, Política para Mulheres, "
+                   "Legislação e Primeiros Socorros")
+    assert mid.candidato_a_divisao(heterogenea)[0] is True
+
+    # coordenação só com "e": uma área com complemento composto, não uma lista
+    for coesa in ("Noções de Saúde Mental e Uso de Álcool e Outras Drogas",
+                  "População em Situação de Rua e Noções de Abordagem e Acolhimento"):
+        assert mid.candidato_a_divisao(coesa)[0] is False, coesa
+
+    # vírgulas, mas com complemento compartilhado no fim: aspectos de UMA área
+    coesa_com_virgula = "Fundamentos, Organização, Gestão e Marcos Operacionais do SUAS"
+    assert mid.candidato_a_divisao(coesa_com_virgula)[0] is False
+
+
+# --------------------------------------------------------------------------- #
+# validate_parsed — o contrato da Etapa 2
+# --------------------------------------------------------------------------- #
+def _parsed_valido():
+    return {
+        "orgao": "Secretaria X", "orgao_sigla": "SEDES", "ano": 2026,
+        "banca": "Instituto Quadrix",
+        "datas_chave": {"prova_data": "2026-09-06"},
+        "cargos_validados": [{"nome_completo": "Agente Social", "sigla": "AGENTE-SOCIAL"}],
+        "estrutura_prova": {"objetiva": {"total_questoes": 60}},
+        "materias": [{
+            "nome": "Língua Portuguesa", "materia_id": "lingua-portuguesa",
+            "tipo": "gerais", "subitem_edital": "20.2.2.1",
+            "topicos": ["1 Compreensão de textos."],
+            "cargos_ids": ["AGENTE-SOCIAL"],
+        }],
+    }
+
+
+def _validar_parsed(dado):
+    import validate_parsed as vp
+    schema = json.loads((ROOT.parent / "assets" / "schema-edital.json")
+                        .read_text(encoding="utf-8"))
+    erros = []
+    vp._validar(dado, schema, "$", erros)
+    return erros + vp.checagens_de_coerencia(dado)
+
+
+def test_validate_parsed_aceita_saida_conforme():
+    assert _validar_parsed(_parsed_valido()) == []
+
+
+def test_validate_parsed_pega_cargo_sem_nenhuma_materia():
+    """O defeito do BB: AGENTE-COMERCIAL validado e sem conteúdo programático
+    em lugar nenhum do meta. Uma reconciliação perderia o cargo inteiro."""
+    d = _parsed_valido()
+    d["cargos_validados"].append({"nome_completo": "Cuidador", "sigla": "CUIDADOR-SOCIAL"})
+    erros = _validar_parsed(d)
+    assert any("CUIDADOR-SOCIAL" in e and "NENHUMA matéria" in e for e in erros), erros
+
+
+def test_validate_parsed_pega_cargo_id_desconhecido():
+    d = _parsed_valido()
+    d["materias"][0]["cargos_ids"] = ["CARGO-FANTASMA"]
+    erros = _validar_parsed(d)
+    assert any("CARGO-FANTASMA" in e for e in erros), erros
+
+
+def test_validate_parsed_pega_materia_id_repetido():
+    d = _parsed_valido()
+    d["materias"].append(dict(d["materias"][0]))
+    erros = _validar_parsed(d)
+    assert any("repetido" in e for e in erros), erros
+
+
+def test_validate_parsed_exige_sigla_uppercase():
+    d = _parsed_valido()
+    d["cargos_validados"][0]["sigla"] = "Agente Social"
+    erros = _validar_parsed(d)
+    assert any("sigla" in e for e in erros), erros
+
+
+def test_validate_parsed_exige_topicos_nao_vazios():
+    """`topicos` vazio é matéria sem conteúdo programático — e o mapper não tem
+    como ir buscar o literal em lugar nenhum (ele não lê arquivo)."""
+    d = _parsed_valido()
+    d["materias"][0]["topicos"] = []
+    erros = _validar_parsed(d)
+    assert any("topicos" in e for e in erros), erros
+
+
+def test_validate_parsed_nunca_valida_menos_que_o_schema():
+    """Anti-vacuidade: se o schema usar palavra-chave que o checador não
+    implementa, isso é ERRO — não silêncio. É a lição do check_soma_questoes,
+    que 'passava' no SEDES porque não casava nada."""
+    import validate_parsed as vp
+    schema = json.loads((ROOT.parent / "assets" / "schema-edital.json")
+                        .read_text(encoding="utf-8"))
+    assert vp.conferir_cobertura(schema) == []
+
+
+# --------------------------------------------------------------------------- #
+# validate_output — os checks que passavam sem verificar nada
+# --------------------------------------------------------------------------- #
+def test_estimativa_aceita_faixa():
+    """Os 9 mapas do SEDES escrevem faixa ('~14 a 16 questões'). O regex antigo
+    só casava inteiro, então não casava NENHUM — o check abortava com INFO e
+    reportava OK. O concurso onde a soma 'passava' era o único onde ela nunca
+    tinha sido calculada."""
+    casos = {
+        "**Estimativa**: ~14 a 16 questões (das 40)": (14, 16),
+        "**Estimativa**: ~12–14 questões": (12, 14),
+        "**Estimativa**: 8-10 questões": (8, 10),
+        "Estimativa desta matéria**: ~10 a 12 questões": (10, 12),
+        "**Estimativa**: 15 questões": (15, 15),
+        "**Estimativa**: ~4 questões (faixa 3–5)": (4, 4),
+    }
+    for texto, esperado in casos.items():
+        assert vo.faixa_estimada(texto) == esperado, (texto, vo.faixa_estimada(texto))
+
+
+def test_estimativa_ainda_ignora_meta_de_treino():
+    """A correção não pode reabrir o defeito de 1.3.1: o checklist de estudo
+    ('- [ ] 20 questões de treino') somava 3769 numa prova de 70."""
+    assert vo.faixa_estimada("- [ ] 20 questões de treino\n- [ ] 50 questões") is None
+
+
+def test_soma_sem_estimativa_nao_e_info():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        mapas = root / "CARGO-X" / "03-MAPAS-MATERIAS"
+        mapas.mkdir(parents=True)
+        (mapas / "01-lingua.md").write_text("# Mapa\nsem estimativa aqui\n",
+                                            encoding="utf-8")
+        meta = {"estrutura_prova": {"objetiva": {"total_questoes": 60}}}
+        issues = vo.check_soma_questoes(root, meta, 5.0)
+        reais = [i for i in issues if not i.startswith("INFO:")]
+        assert reais, issues
+        assert any("SEM ESTIMATIVA" in i for i in reais), reais
+
+
+def test_soma_com_faixa_aceita_total_dentro_do_intervalo():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        mapas = root / "CARGO-X" / "03-MAPAS-MATERIAS"
+        mapas.mkdir(parents=True)
+        (mapas / "01-a.md").write_text("**Estimativa**: 25 a 35 questões\n",
+                                       encoding="utf-8")
+        (mapas / "02-b.md").write_text("**Estimativa**: 25 a 35 questões\n",
+                                       encoding="utf-8")
+        meta = {"estrutura_prova": {"objetiva": {"total_questoes": 60}}}
+        reais = [i for i in vo.check_soma_questoes(root, meta, 5.0)
+                 if not i.startswith("INFO:")]
+        assert reais == [], reais
+
+
+def test_wikilink_para_fora_do_concurso_nao_e_falso_positivo():
+    """Os 19 'links quebrados' do SEDES apontavam para PDFs que existem em
+    40_RECURSOS/LIVROS/ — fora da pasta do concurso, dentro do vault."""
+    with tempfile.TemporaryDirectory() as d:
+        vault = Path(d)
+        (vault / ".obsidian").mkdir()
+        livro = vault / "40_RECURSOS" / "LIVROS"
+        livro.mkdir(parents=True)
+        (livro / "manual.pdf").write_bytes(b"%PDF-1.4 x")
+        root = vault / "30_AREAS" / "CARREIRA" / "CONCURSOS" / "X_2026"
+        root.mkdir(parents=True)
+        (root / "nota.md").write_text(
+            "ver [[40_RECURSOS/LIVROS/manual.pdf]]\n", encoding="utf-8")
+
+        assert len(vo.check_wikilinks(root)) == 1          # sem vault: acusa
+        assert vo.check_wikilinks(root, vault) == []       # com vault: resolve
+        assert vo.achar_vault_root(root) == vault
+
+
+def test_mapa_orfao_e_problema_nao_info():
+    """Mapa sem matéria no meta é conteúdo programático perdido — foi assim que
+    o BB ficou com as 3 matérias do AGENTE-COMERCIAL fora do .meta.json."""
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        mapas = root / "CARGO-X" / "03-MAPAS-MATERIAS"
+        mapas.mkdir(parents=True)
+        (mapas / "01-vendas.md").write_text(
+            "---\nmateria_id: vendas-e-negociacao\n---\n", encoding="utf-8")
+        meta = {"materias": [{"nome": "Língua Portuguesa",
+                              "materia_id": "lingua-portuguesa"}]}
+        issues = vo.check_cobertura_mapas(root, meta)
+        orfao = [i for i in issues if "vendas" in i]
+        assert orfao and not orfao[0].startswith("INFO:"), issues
+
+
+def test_estrutura_exige_mapas_comuns_em_multicargo():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "00-INDICE.md").write_text("x", encoding="utf-8")
+        (root / ".meta.json").write_text("{}", encoding="utf-8")
+        for p in ("01-EDITAL", "04-MATERIAIS", "05-HISTORICO-CONCURSO", "06-SINERGIA"):
+            (root / "_COMUM" / p).mkdir(parents=True)
+        (root / "_COMUM" / "04-MATERIAIS" / "00-INDICE.md").write_text("x", encoding="utf-8")
+        for c in ("CARGO-A", "CARGO-B"):
+            (root / c).mkdir()
+        issues = vo.check_structure(root)
+        assert any("03-MAPAS-COMUNS" in i for i in issues), issues
+
+
+# --------------------------------------------------------------------------- #
+# diff_editais — reconciliação POR CARGO (item 8)
+# --------------------------------------------------------------------------- #
+def _meta_multicargo(topicos_servico_social):
+    """Espelha o .meta.json real do SEDES: `materias[]` só traz as de um cargo e o
+    resto vive em `materias_por_cargo`."""
+    return {
+        "modo": "oficial",
+        "materias": [{"nome": "Língua Portuguesa", "topicos": ["1 Crase.", "2 Regência."]}],
+        "materias_por_cargo": {
+            "AGENTE-SOCIAL": [
+                {"nome": "Língua Portuguesa", "topicos": ["1 Crase.", "2 Regência."]},
+                {"nome": "Específicos — Agente", "topicos": ["1 Rede.", "2 PSB."]},
+            ],
+            "ASSISTENTE-SOCIAL": [
+                {"nome": "Língua Portuguesa", "topicos": ["1 Crase.", "2 Regência."]},
+                {"nome": "Específicos — Serviço Social", "topicos": topicos_servico_social},
+            ],
+        },
+    }
+
+
+def test_diff_enxerga_mudanca_em_cargo_que_nao_esta_em_materias():
+    """O defeito: removi 3 tópicos da matéria do ASSISTENTE-SOCIAL no SEDES real e o
+    diff reportou 0 removidos. Ele lia só `materias[]` — num concurso de 3 cargos,
+    mudança em 2 deles passava em silêncio."""
+    with tempfile.TemporaryDirectory() as d:
+        v1, v2 = Path(d) / "v1.json", Path(d) / "v2.json"
+        v1.write_text(json.dumps(_meta_multicargo(["1 Ética.", "2 Pesquisa.", "3 Estado."])),
+                      encoding="utf-8")
+        v2.write_text(json.dumps(_meta_multicargo(["1 Ética."])), encoding="utf-8")
+        r = de.diff_por_cargo(de.carregar_por_cargo(v1), de.carregar_por_cargo(v2))
+        assert r["resumo"]["n_removidos"] == 2, r["resumo"]
+        assert r["por_cargo"]["ASSISTENTE-SOCIAL"]["resumo"]["n_removidos"] == 2
+        assert r["por_cargo"]["AGENTE-SOCIAL"]["resumo"]["n_removidos"] == 0
+
+
+def test_diff_avisa_cargo_criado_ou_extinto():
+    with tempfile.TemporaryDirectory() as d:
+        v1, v2 = Path(d) / "v1.json", Path(d) / "v2.json"
+        m1 = _meta_multicargo(["1 Ética."])
+        m2 = json.loads(json.dumps(m1))
+        del m2["materias_por_cargo"]["AGENTE-SOCIAL"]
+        m2["materias_por_cargo"]["CUIDADOR-SOCIAL"] = [
+            {"nome": "Específicos — Cuidador", "topicos": ["1 Acolhimento."]}]
+        v1.write_text(json.dumps(m1), encoding="utf-8")
+        v2.write_text(json.dumps(m2), encoding="utf-8")
+        r = de.diff_por_cargo(de.carregar_por_cargo(v1), de.carregar_por_cargo(v2))
+        assert r["cargos_removidos"] == ["AGENTE-SOCIAL"], r["cargos_removidos"]
+        assert r["cargos_novos"] == ["CUIDADOR-SOCIAL"], r["cargos_novos"]
+
+
+def test_diff_le_cargos_ids_do_schema_novo():
+    with tempfile.TemporaryDirectory() as d:
+        v = Path(d) / "v.json"
+        v.write_text(json.dumps({"materias": [
+            {"nome": "LP", "topicos": ["a"], "cargos_ids": ["A", "B"]},
+            {"nome": "Esp", "topicos": ["b"], "cargos_ids": ["B"]}]}), encoding="utf-8")
+        pc = de.carregar_por_cargo(v)
+        assert set(pc) == {"A", "B"}
+        assert set(pc["B"]) == {"LP", "Esp"} and set(pc["A"]) == {"LP"}
+
+
+def test_diff_estrutural_acha_vagas_fora_da_raiz():
+    """Descoberto rodando a reconciliação ponta a ponta: mudar
+    `cargo.vagas_imediatas` de 133 para 150 no SEDES não produzia mudança nenhuma.
+    O diff olhava só a raiz, e o `.meta.json` do SEDES guarda vagas e salário em
+    `cargo.*` — justamente o que retificação mexe (B.4)."""
+    m1 = {"cargo": {"vagas_imediatas": 133, "remuneracao": 4762.97}}
+    m2 = {"cargo": {"vagas_imediatas": 150, "remuneracao": 4762.97}}
+    campos = {m["campo"] for m in de.diff_estrutural(m1, m2)}
+    assert "Vagas (AC imediatas)" in campos, campos
+    assert "Salário" not in campos, campos
+
+
+def test_diff_estrutural_por_cargo():
+    """Retificação pode mexer nas vagas de UM cargo; o número agregado esconde."""
+    m1 = {"cargos_multi": [{"sigla": "A", "vagas_total": 10},
+                           {"sigla": "B", "vagas_total": 20}]}
+    m2 = {"cargos_multi": [{"sigla": "A", "vagas_total": 10},
+                           {"sigla": "B", "vagas_total": 35}]}
+    campos = {m["campo"] for m in de.diff_estrutural(m1, m2)}
+    assert "Vagas totais [B]" in campos, campos
+    assert "Vagas totais [A]" not in campos, campos
+
+
+def test_diff_cabecalho_muda_entre_caso_A_e_B():
+    """O B.5 manda ajustar o cabeçalho na retificação; ele era fixo em
+    'Previsto (V1) vs Oficial (V2)' em qualquer caso."""
+    assert "Previsto" in de.titulo_do_caso({"modo": "previsto"}, {"modo": "oficial"})
+    assert "Retificado" in de.titulo_do_caso({"modo": "oficial"}, {"modo": "oficial"})
+
+
+# --------------------------------------------------------------------------- #
+# edital_hash — a regra que não tinha executor
+# --------------------------------------------------------------------------- #
+def test_edital_hash_e_do_texto_e_reproduzivel():
+    assert eh.hash_texto("Art. 1º\nTexto.") == eh.hash_texto("Art. 1º\nTexto.")
+
+
+def test_edital_hash_ignora_ruido_irrelevante():
+    """Hash que muda com CRLF ou espaço no fim de linha acusa retificação onde não
+    houve — e o R.0.2 decide reconciliação com base nele."""
+    base = "Art. 1º\nTexto da lei."
+    assert eh.hash_texto(base) == eh.hash_texto("Art. 1º\r\nTexto da lei.  ")
+    assert eh.hash_texto(base) == eh.hash_texto(base + "\n\n\n")
+
+
+def test_edital_hash_distingue_texto_de_bytes():
+    """O SEDES gravou o hash dos BYTES do PDF onde o SKILL manda gravar o do TEXTO.
+    São valores diferentes, e confundi-los faz o R.0.2 nunca reconhecer 'idêntico'."""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "e.txt"
+        # CRLF e linhas em branco no fim: e onde a canonicalizacao faz efeito e o
+        # hash do texto deixa de ser o dos bytes. Num PDF a diferenca e sempre
+        # grande; aqui basta que exista.
+        p.write_bytes("Art. 1º\r\nTexto.  \r\n\r\n".encode("utf-8"))
+        r = eh.hashes_do_edital(p)
+        assert r["edital_hash"] == eh.hash_texto("Art. 1º\nTexto."), r["edital_hash"]
+        assert r["edital_hash"] != eh.hash_bytes(p)
+
+
+# --------------------------------------------------------------------------- #
+# Etapa 9b — títulos por cargo
+# --------------------------------------------------------------------------- #
+def _vault_titulos(base: Path, meta_extra: dict, com_arquivo: list[str]):
+    root = base / "X_2026"
+    for c in ("EDAS-SERVICO-SOCIAL", "TDAS-AGENTE-SOCIAL"):
+        (root / c).mkdir(parents=True)
+        if c in com_arquivo:
+            (root / c / "08-TITULOS.md").write_text("# Títulos\n", encoding="utf-8")
+    meta = {"estrutura_prova": {"objetiva": {"total_questoes": 60}}}
+    meta.update(meta_extra)
+    return root, meta
+
+
+def test_titulos_acusa_cargo_elegivel_sem_arquivo():
+    with tempfile.TemporaryDirectory() as d:
+        root, meta = _vault_titulos(
+            Path(d),
+            {"estrutura_prova_por_cargo": {
+                "EDAS-SERVICO-SOCIAL": {"titulos": {"presente": True}},
+                "TDAS-AGENTE-SOCIAL": {"titulos": {"presente": False}}}},
+            com_arquivo=[])
+        issues = vo.check_titulos(root, meta)
+        assert any("EDAS-SERVICO-SOCIAL" in i and i.startswith("FALTA") for i in issues), issues
+        assert not any("TDAS" in i for i in issues), issues
+
+
+def test_titulos_acusa_meta_incoerente():
+    """O caso real do SEDES: o ASSISTENTE-SOCIAL (que é EDAS) tem 08-TITULOS.md e o
+    meta grava um único `titulos.presente: false` com a ressalva em prosa."""
+    with tempfile.TemporaryDirectory() as d:
+        root, meta = _vault_titulos(
+            Path(d),
+            {"estrutura_prova": {"objetiva": {"total_questoes": 60},
+                                 "titulos": {"presente": False,
+                                             "obs": "exclusiva para EDAS"}}},
+            com_arquivo=["EDAS-SERVICO-SOCIAL"])
+        issues = vo.check_titulos(root, meta)
+        assert any("META INCOERENTE" in i and "EDAS-SERVICO-SOCIAL" in i
+                   for i in issues), issues
+
+
+def test_titulos_ok_quando_por_cargo_esta_correto():
+    with tempfile.TemporaryDirectory() as d:
+        root, meta = _vault_titulos(
+            Path(d),
+            {"estrutura_prova_por_cargo": {
+                "EDAS-SERVICO-SOCIAL": {"titulos": {"presente": True}},
+                "TDAS-AGENTE-SOCIAL": {"titulos": {"presente": False}}}},
+            com_arquivo=["EDAS-SERVICO-SOCIAL"])
+        assert vo.check_titulos(root, meta) == []
+
+
+def test_template_titulos_existe_e_tem_o_que_a_etapa_promete():
+    tpl = (ROOT.parent / "assets" / "templates" / "titulos.md.tpl").read_text(
+        encoding="utf-8")
+    for campo in ("{{QUADRO_ALINEAS}}", "{{MAX_PONTOS}}", "{{REGRAS_ENTREGA}}",
+                  "{{CHECKLIST_EXPERIENCIA}}", "tipo: documentacao"):
+        assert campo in tpl, campo
+
+
+def test_log_de_validacao_vai_para_a_subpasta_do_concurso():
+    """Item 15: log por concurso. Gravando na raiz de `.logs/`, o vault real acumulou
+    43 `validacao-*.json` soltos, sem como saber de qual concurso era cada um."""
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_vault(Path(d))
+        (Path(d) / ".logs").mkdir()
+        _run_validate(b)
+        assert list((Path(d) / ".logs" / "SEDES_2026").glob("validacao-*.json"))
+        assert not list((Path(d) / ".logs").glob("validacao-*.json"))
 
 
 def _run_standalone():
