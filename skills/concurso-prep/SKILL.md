@@ -1,6 +1,6 @@
 ---
 name: concurso-prep
-version: 1.8.1
+version: 1.9.0
 description: Use quando o usuário fornecer um edital de concurso público (PDF/DOCX/MD) e pedir para montar a estrutura de estudos completa, OU quando pedir para começar a estudar para um concurso ainda SEM edital/data (concurso previsto/esperado — usa o edital anterior como proxy), OU quando o edital oficial sair/for retificado e for preciso reconciliar/atualizar o que já foi gerado. Triggers comuns - "preparar concurso", "analisar edital", "montar cronograma de concurso", "estudar para concurso da {órgão}", "concurso previsto sem edital", "começar antes do edital", "edital saiu, atualizar", "edital foi retificado", "reconciliar edital". Gera no vault Obsidian estrutura completa - cronograma adaptativo (ou relativo sem datas no modo previsto), mapas por matéria, materiais de referência (leis baixadas em Markdown E PDF), histórico do órgão, provas anteriores e concursos com sinergia. Suporta multi-cargo (pasta única com subpastas por cargo), modo previsto (--modo previsto) e reconciliação/retificação (--reconciliar).
 ---
 
@@ -593,6 +593,9 @@ Em `scripts/`:
   prova entre versões, **por cargo**. Lê `materias[].cargos_ids` e `materias_por_cargo`
 - `edital_hash.py` — **fonte de verdade do `edital_hash`**: SHA-256 do texto
   canonicalizado, mais o `edital_pdf_sha256` dos bytes. Não calcule o hash em outro lugar
+- `migrar_meta.py` — **(migração)** completa o `.meta.json` de um concurso gerado por
+  versão anterior: `cargos_validados`, `estrutura_prova_por_cargo`, `cargos_ids` e as
+  matérias que ficaram de fora. Dry-run por padrão; pendência impede a escrita
 - `validate_output.py` — validação pós-geração
 - `log_helper.py` — utilitário de logging (com subpasta por concurso)
 - `tests/test_smoke.py` — suíte de smoke tests (pytest ou standalone)
