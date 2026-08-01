@@ -1403,9 +1403,14 @@ def coletar_concurso(base: Path) -> dict:
     return {
         "concurso": base.name,
         "dir": str(base),
+        # Allowlist deliberada: o modelo do site é contrato público e não deve
+        # carregar o `.meta.json` inteiro. `cargos_validados` entrou porque vagas e
+        # salário vivem LÁ num concurso multi-cargo — sem ele, os dois campos nunca
+        # renderizavam, já que a raiz não tem número que represente 3 cargos com
+        # vagas e salários diferentes.
         "meta": {k: v for k, v in meta.items() if k in
                  ("orgao", "ano", "banca", "modo", "datas_chave", "estrutura_prova",
-                  "vagas_ac", "vagas_total", "salario")},
+                  "vagas_ac", "vagas_total", "salario", "cargos_validados")},
         "escopos": escopos,
         # alias de compatibilidade: `--modelo site-model.json` é contrato público e
         # documentado no SKILL.md. Sai numa versão futura, com aviso.

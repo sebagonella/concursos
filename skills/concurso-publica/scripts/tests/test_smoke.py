@@ -2437,6 +2437,57 @@ def test_copia_do_aprofundamento_id_nao_divergiu():
         "edite o original e copie por cima")
 
 
+def _modelo_real(meta: dict) -> dict:
+    """Modelo vindo do COLETOR, não montado à mão.
+
+    Montar o dicionário campo a campo é inventar o que o gerador produz — o
+    antipadrão que já deixou dois defeitos verdes por anos neste repo. Aqui o
+    coletor monta, e o teste só troca o `meta`.
+    """
+    d = tempfile.mkdtemp()
+    base = Path(d) / "X_2026"
+    (base / "_COMUM" / "01-EDITAL").mkdir(parents=True)
+    (base / ".meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    return sc.coletar_concurso(base)
+
+
+def test_ficha_mostra_vagas_e_salario_por_cargo():
+    """Num concurso multi-cargo, vagas e salário vivem em `cargos_validados[]`, não
+    na raiz — o SEDES tem 3 cargos com valores diferentes e não existe número de raiz
+    que os represente. Lendo só da raiz, os dois campos NUNCA renderizavam."""
+    modelo = _modelo_real({"banca": "Quadrix", "cargos_validados": [
+        {"sigla": "AGENTE-SOCIAL", "vagas_total": 532, "salario": 4762.97},
+        {"sigla": "ASSISTENTE-SOCIAL", "vagas_total": 500, "salario": 6693.38}]})
+    html = sb.pagina_capa(modelo, sb.Rotas(), "index.html")
+    assert "Vagas (AC) por cargo" in html
+    assert "AGENTE-SOCIAL: 532" in html and "ASSISTENTE-SOCIAL: 500" in html
+    assert "R$ 6.693,38" in html, "salário numérico tem de sair como moeda"
+
+
+def test_ficha_prefere_a_raiz_quando_ela_existe():
+    """Concurso de cargo único continua mostrando o valor agregado, sem 'por cargo'."""
+    modelo = _modelo_real({"vagas_ac": 23, "salario": "R$ 6.071,09",
+                           "cargos_validados": [{"sigla": "X", "vagas_total": 99}]})
+    html = sb.pagina_capa(modelo, sb.Rotas(), "index.html")
+    assert "por cargo" not in html
+    assert "23" in html
+
+
+def test_collector_repassa_cargos_validados():
+    """A allowlist do modelo é deliberada, mas `cargos_validados` faltava nela — e é
+    de lá que vêm vagas e salário no multi-cargo."""
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d) / "X_2026"
+        (base / "_COMUM" / "01-EDITAL").mkdir(parents=True)
+        (base / ".meta.json").write_text(json.dumps({
+            "orgao": "X", "banca": "B",
+            "cargos_validados": [{"sigla": "A", "vagas_total": 10, "salario": 1.5}],
+            "campo_que_nao_deve_vazar": "x"}), encoding="utf-8")
+        m = sc.coletar_concurso(base)
+        assert m["meta"].get("cargos_validados"), m["meta"]
+        assert "campo_que_nao_deve_vazar" not in m["meta"]
+
+
 def _run_standalone():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     falhas = 0
