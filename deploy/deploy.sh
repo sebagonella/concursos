@@ -181,7 +181,14 @@ if ! command -v rsync &> /dev/null; then
   exit 1
 fi
 
-RSYNC_OPTS=(-az --delete --human-readable --info=stats1)
+# --chmod normaliza a permissao NO DESTINO. Sem ele, o `-a` preserva a permissao
+# da origem, e arquivo que esta 0600 no vault chega 0600 no servidor — o nginx do
+# container roda com outro usuario e devolve 403. Aconteceu de verdade: um podcast
+# de 41 MB do SEDES ficou inacessivel no site enquanto as outras 85 midias abriam,
+# porque so aquele arquivo estava 0600 na origem.
+# O site e artefato DERIVADO: a permissao dele nao deve depender de como o arquivo
+# acabou salvo no vault.
+RSYNC_OPTS=(-az --delete --chmod=D755,F644 --human-readable --info=stats1)
 [[ $DRY_RUN -eq 1 ]] && RSYNC_OPTS+=(--dry-run --itemize-changes)
 
 echo "🚀 Enviando para $alvo:$CONCURSOS_DIR/site/ ..."
