@@ -44,8 +44,17 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   "passava" por não encontrar nada.
 - `--json` era poluído pelo aviso de dry-run e não era JSON válido.
 
+### Corrigido (dois defeitos que só apareceram ao APLICAR no vault)
+- **As matérias novas saíam sem `materia_id`** — logo, sem o campo que as liga ao
+  aprofundamento e ao site. O id não é derivado do nome (isso seria re-derivar
+  identidade, o que o ADR proíbe): sai do `materia_id` que o mapa correspondente já
+  declara. Sem mapa de onde tirá-lo, é pendência.
+- **`tipo: 'especificos'`** é vocabulário legado e não existe no schema. Passa a ser
+  normalizado pelo escopo: `especificos_comuns` quando vale para mais de um cargo,
+  `especificos_cargo` quando é de um só.
+
 ### Notas
-- 7 testes novos; 60 na suíte da skill.
+- 9 testes novos; 62 na suíte da skill.
 - A conferência das matérias extraídas **rodou de verdade** nos três casos do BB:
   14/14, 4/4 e 17/17 tópicos entre edital e mapa.
 - Fora do escopo deste script, e ainda pendentes no BB: os dois `00-INDICE.md` que a

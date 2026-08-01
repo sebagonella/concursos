@@ -866,6 +866,27 @@ def test_comum_significa_mais_de_um_nao_todos():
         assert pend == [], pend
 
 
+def test_materia_nova_recebe_materia_id_do_mapa():
+    """Matéria nova sem `materia_id` não se liga ao aprofundamento nem ao site — o
+    campo É o vínculo. E derivá-lo do nome seria re-derivar identidade, que é o que
+    o ADR proíbe: o mapa já declara a dela."""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        (p / "AGENTE-COMERCIAL" / "03-MAPAS-MATERIAS").mkdir(parents=True)
+        (p / "AGENTE-COMERCIAL" / "03-MAPAS-MATERIAS" / "08-vendas-e-negociacao.md"
+         ).write_text("---\nmateria_id: vendas-e-negociacao\n---\n", encoding="utf-8")
+        assert mm.materia_id_do_mapa(p, "Vendas e Negociação") == "vendas-e-negociacao"
+        assert mm.materia_id_do_mapa(p, "Materia Que Nao Existe") is None
+
+
+def test_tipo_legado_e_normalizado_para_o_vocabulario_do_schema():
+    """`especificos` é vocabulário legado e o schema só conhece três valores; o
+    escopo decide entre comum e de cargo."""
+    assert mm.normalizar_tipo("especificos", 1) == "especificos_cargo"
+    assert mm.normalizar_tipo("especificos", 3) == "especificos_comuns"
+    assert mm.normalizar_tipo("gerais", 1) == "gerais"
+
+
 def test_materia_extraida_sem_mapa_para_conferir_vira_pendencia():
     """Segunda fonte ausente não pode virar silêncio — é a mesma armadilha do check
     que 'passava' porque não encontrava nada."""

@@ -187,7 +187,12 @@ def escopo_pelo_vault(pasta: Path) -> dict[str, set[str]]:
 
 def corr_cargos_ids(meta: dict, pasta: Path) -> tuple[list | None, list[str]]:
     materias = meta.get("materias") or []
-    if not materias or all(m.get("cargos_ids") for m in materias):
+    if not materias:
+        return None, []
+    falta = [m for m in materias
+             if not m.get("cargos_ids")
+             or m.get("tipo") not in ("gerais", "especificos_comuns", "especificos_cargo")]
+    if not falta:
         return None, []
 
     todos = [c.get("sigla") or c.get("slug")
@@ -234,6 +239,7 @@ def corr_cargos_ids(meta: dict, pasta: Path) -> tuple[list | None, list[str]]:
                     f"materia {m.get('nome')!r}: meta diz {sorted(cargos)} e o mapa "
                     f"mora em {sorted(do_vault)} — confira antes de gravar")
         novo["cargos_ids"] = cargos
+        novo["tipo"] = normalizar_tipo(novo.get("tipo", ""), len(cargos))
         saida.append(novo)
     return saida, pend
 
@@ -272,6 +278,36 @@ def topicos_do_edital(texto: str, nome: str) -> list[str]:
         if txt:
             itens.append(f"{num} - {txt}")
     return itens
+
+
+def materia_id_do_mapa(pasta: Path, nome: str) -> str | None:
+    """O `materia_id` da matéria, lido do mapa que já existe no vault.
+
+    Matéria nova sem `materia_id` é matéria que não se liga a aprofundamento nem ao
+    site — o campo é o vínculo. Derivar do nome seria re-derivar identidade, que é
+    justamente o que o ADR proíbe; o mapa já declara a dela, então é de lá que sai.
+    """
+    alvo = normalizar(nome)
+    for sub in PASTAS_MAPA:
+        for md in pasta.glob(f"*/{sub}/*.md"):
+            if alvo != normalizar(re.sub(r"^\d{2}[-_ ]+", "", md.stem)):
+                continue
+            fm = re.match(r"^---\s*\n(.*?)\n---", md.read_text(encoding="utf-8"), re.S)
+            if fm:
+                m = re.search(r"^materia_id:\s*(\S+)", fm.group(1), re.M)
+                if m:
+                    return m.group(1).strip()
+            return re.sub(r"^\d{2}[-_ ]+", "", md.stem)
+    return None
+
+
+def normalizar_tipo(tipo: str, n_cargos: int) -> str:
+    """`especificos` e vocabulario legado; o schema so conhece tres valores."""
+    if tipo in ("gerais", "especificos_comuns", "especificos_cargo"):
+        return tipo
+    if tipo in ("especificos", "especifico", None, ""):
+        return "especificos_comuns" if n_cargos > 1 else "especificos_cargo"
+    return tipo
 
 
 def topicos_do_mapa(pasta: Path, nome: str) -> list[str]:
@@ -324,7 +360,13 @@ def corr_materias_faltantes(meta: dict, pasta: Path) -> tuple[list | None, list[
         elif len(do_mapa) != len(do_edital):
             pend.append(f"materia {nome!r}: o edital tem {len(do_edital)} topicos e o "
                         f"mapa lista {len(do_mapa)} — confira antes de gravar")
-        novas.append({"nome": nome, "tipo": "especificos_cargo",
+        mid = materia_id_do_mapa(pasta, nome)
+        if not mid:
+            pend.append(f"materia {nome!r}: sem mapa de onde tirar o materia_id — "
+                        f"sem ele a materia nao se liga ao aprofundamento nem ao site")
+            continue
+        novas.append({"nome": nome, "materia_id": mid,
+                      "tipo": "especificos_cargo",
                       "subitem_edital": "Anexo III", "topicos": do_edital,
                       "cargos_ids": sorted(cargos), "questoes": None,
                       "origem": "migrar_meta: extraido do anexo do edital"})
