@@ -99,6 +99,23 @@ curl -I http://concursos.casa:8099/           # o site
 
 ## Solução de problemas
 
+### Uma mídia dá 403 e as outras abrem
+
+O `rsync -a` preserva a permissão da origem. Arquivo que está `0600` no vault chega
+`0600` no servidor, e o nginx do container — que roda com outro usuário — devolve
+**403** só naquele arquivo. Aconteceu com um podcast de 41 MB do SEDES enquanto as
+outras 85 mídias abriam normalmente.
+
+Desde a correção o deploy sincroniza com `--chmod=D755,F644`, normalizando a
+permissão **no destino**: o site é artefato derivado e não deve herdar como o arquivo
+acabou salvo no vault. Para conferir que não há resíduo antigo no servidor:
+
+```bash
+ssh <user>@<host> "find /opt/docker/concursos/site -type f ! -perm -o=r | wc -l"
+# 0 = nenhum arquivo ilegível para o nginx
+```
+
+
 **"Não resolve o nome"** — falta o registro DNS local (ou a entrada no `hosts`). Teste primeiro pelo IP: `http://IP-DO-SERVIDOR:8099/`.
 
 **Porta ocupada** — o `--setup` confere antes de subir e diz quem está usando. Para trocar, basta a variável; o mapeamento do compose a segue:

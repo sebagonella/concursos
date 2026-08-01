@@ -8,7 +8,7 @@
 #   bash scripts/install.sh                        # todas, global (~/.claude/)
 #   bash scripts/install.sh --local                # todas, local (.claude/)
 #   bash scripts/install.sh --only concurso-prep   # apenas uma skill
-#   bash scripts/install.sh --uninstall            # remove as skills do projeto
+#   bash scripts/install.sh --uninstall            # remove as skills E os subagents
 #   bash scripts/install.sh --list                 # lista as skills disponíveis
 
 set -euo pipefail
@@ -85,6 +85,23 @@ if [[ "$ACTION" == "uninstall" ]]; then
       echo "🗑️  Removida: $s"
     fi
   done
+
+  # Os subagents são instalados em $CLAUDE_DIR/agents/ (fora de skills/), e o
+  # uninstall não os removia: sobravam 5 arquivos apontando para skills que não
+  # existiam mais. Remove APENAS os que este repositório instala — comparando
+  # pelo nome com skills/*/agents/ — para nunca apagar agent de outro projeto
+  # que divida o mesmo diretório.
+  n_agents=0
+  for origem_agent in "$SKILLS_DIR"/*/agents/*.md; do
+    [[ -f "$origem_agent" ]] || continue
+    alvo_agent="$CLAUDE_DIR/agents/$(basename "$origem_agent")"
+    if [[ -f "$alvo_agent" ]]; then
+      rm -f "$alvo_agent"
+      n_agents=$((n_agents + 1))
+    fi
+  done
+  [[ $n_agents -gt 0 ]] && echo "🗑️  $n_agents subagent(s) removido(s) de $CLAUDE_DIR/agents/"
+
   echo "✅ Desinstalação concluída."
   exit 0
 fi

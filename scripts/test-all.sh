@@ -41,6 +41,23 @@ for d in "$SKILLS_DIR"/*/; do
   echo ""
 done
 
+# Suites de shell: os scripts que mexem no ambiente do usuario (install/deploy)
+# nao eram cobertos por nada, e foi ai que passou o defeito do --uninstall
+# deixando subagents orfaos.
+for suite_sh in "$REPO_ROOT"/scripts/tests/test_*.sh; do
+  [[ -f "$suite_sh" ]] || continue
+  nome_sh="$(basename "$suite_sh" .sh)"
+  echo "▶️  $nome_sh"
+  total=$((total + 1))
+  if saida=$(bash "$suite_sh" 2>&1); then
+    echo "$saida" | tail -1 | sed 's/^/   /'
+  else
+    echo "$saida" | sed 's/^/   /'
+    falhas=$((falhas + 1))
+  fi
+  echo ""
+done
+
 # Limpar caches gerados pelos testes
 find "$SKILLS_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
