@@ -383,7 +383,7 @@ concurso-prep/
 
 ## 📜 Changelog
 
-Histórico de versões em [CHANGELOG.md](CHANGELOG.md). Versão atual: **1.8.1** — a revisão comportamental de 01/08/2026: contrato único da Etapa 2, identidade de matéria declarada e persistida, reconciliação por cargo, etapa de títulos e um validador que deixou de dar alarme falso.
+Histórico de versões em [CHANGELOG.md](CHANGELOG.md). Versão atual: **1.9.0** — a revisão comportamental de 01/08/2026 (contrato único da Etapa 2, identidade de matéria declarada e persistida, reconciliação por cargo, etapa de títulos e um validador que deixou de dar alarme falso), mais o `migrar_meta.py`, que completa o `.meta.json` dos concursos já gerados sem reexecutar a skill.
 
 ---
 
