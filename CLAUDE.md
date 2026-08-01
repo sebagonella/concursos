@@ -42,7 +42,7 @@ skills/
 │   ├── SKILL.md
 │   ├── assets/             # site.css, site.js (sem CDN: o site roda offline)
 │   ├── scripts/            # site_collector.py, site_builder.py, md2html.py
-│   └── examples/           # site-model-exemplo.json (o contrato entre A e B)
+│   └── examples/           # site-model-exemplo.json (contrato coletor→builder)
 └── concurso-notebooklm/    # camada opcional — executa os pacotes no NotebookLM
     ├── SKILL.md
     └── scripts/            # pacote.py (contrato) e plano.py (o que gerar)
@@ -57,8 +57,9 @@ deploy/                     # Docker + rsync para servir o site num servidor dom
 docs/
 ├── ARQUITETURA.md          # decisões de projeto e o porquê + diagrama do fluxo
 ├── SETUP-VAULT.md          # preparar o vault Obsidian
-├── fluxo-concurso.mmd      # fonte Mermaid do diagrama
-└── fluxo-concurso.png      # o mesmo diagrama em imagem (referenciado no README)
+├── fluxo-concurso.mmd      # fonte Mermaid do diagrama (o README renderiza o bloco)
+└── fluxo-concurso.png      # export do .mmd, para onde o Mermaid não renderiza;
+                            # regerar junto ao editar o .mmd (comando no cabeçalho dele)
 ```
 
 > O índice navegável de toda a documentação está no [`README.md`](README.md#documentação).

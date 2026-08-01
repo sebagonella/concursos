@@ -2,6 +2,21 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.11.3] - 2026-07-31
+
+### Corrigido
+- **O `SKILL.md` acumulava changelog dentro do orquestrador.** Eram quatro blocos
+  "Novidades da 0.3.0 / 0.4.0 / 0.5.0 / 0.7.0" — e pararam aí, com a skill em 0.11.2,
+  sete versões depois. O que era decisão de projeto (como o aprofundamento é lido, por
+  que o selo só mostra mídia existente, a cópia sincronizada do `aprofundamento_id.py`)
+  virou descrição do estado atual, sem moldura de versão; o resto é papel do
+  `CHANGELOG.md`. É a mesma lição que a `concurso-aprofunda` já tinha registrado no
+  seu README ao remover o roadmap que contradizia o changelog.
+- **Tabela "Estado de implementação" removida.** Os três primeiros subsistemas estavam
+  ✅ havia muito tempo e o quarto, a busca client-side, era uma promessa de "próxima
+  entrega" feita na 0.3.0 e não cumprida em onze versões. As referências órfãs aos
+  rótulos `(A)`, `(B/C)` e "contrato entre A e B" passaram a nomear os scripts.
+
 ## [0.11.2] - 2026-07-31
 
 ### Corrigido
