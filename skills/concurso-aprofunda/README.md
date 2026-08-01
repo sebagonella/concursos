@@ -7,7 +7,8 @@ Segunda etapa do fluxo de preparação para concursos. Consome a saída da skill
 1. **Localiza no livro** cada assunto já mapeado da matéria — por sumário (TOC) ou, na falta dele, por densidade de termos. Saída: página exata + score de confiança.
 2. **Gera um `.md` por assunto** no vault, no **Modelo 2**: resumo completo próprio + ponteiros de página + trechos-âncora curtos citados. Não copia a obra.
 3. **Flashcards nativos** por assunto (Obsidian + Anki), sem depender do NotebookLM.
-4. **Prepara a ponte NotebookLM** (podcast/mapa mental) para a etapa seguinte.
+4. **Prepara a ponte NotebookLM** (podcast/mapa mental) para a etapa seguinte — o
+   pacote é executável à mão ou pela `concurso-notebooklm`.
 
 ## Níveis e múltiplos aprofundamentos
 
@@ -107,18 +108,24 @@ O `.md` de cada assunto traz um resumo **original** (escrito do zero), a **local
 
 A localização vem com score. Assuntos não encontrados ou de baixa confiança viram **pendências explícitas** para conferência manual — a skill nunca inventa uma página.
 
-## O que ainda não existe
+## Executar o pacote automaticamente (opcional)
 
-- **Automação do NotebookLM.** A camada manual está pronta e é a garantida: a skill
-  gera o pacote com as fontes e os prompts, e a `concurso-publica` publica isso como
-  página com botão de copiar. A automação (via `notebooklm-py`, que usa endpoints
-  internos não-documentados do Google) entraria como camada **opcional** por cima,
-  nunca substituindo o modo manual.
+A camada manual está pronta e continua sendo **a garantida**: esta skill gera o pacote
+com as fontes e os prompts, e a `concurso-publica` publica isso como página com botão
+de copiar.
+
+Quem quiser pular os cliques usa a [`concurso-notebooklm`](../concurso-notebooklm/README.md),
+que executa o mesmo pacote — cria o notebook, sobe as fontes, gera as mídias e salva os
+arquivos com o nome que o site reconhece. Ela é camada **opcional por cima**, nunca em
+substituição: depende da `notebooklm-py`, que usa endpoints internos não-documentados do
+Google e quebra sem aviso. Sem a biblioteca, o pacote gerado aqui continua completo.
 
 O histórico de versões vive no [CHANGELOG.md](CHANGELOG.md) — antes havia um roadmap
 aqui que repetia e contradizia o changelog.
 
-Versão atual: **0.7.1** (todo prompt do NotebookLM ancora na **nota do vault**, nunca
-no livro — que é fonte opcional no notebook; o pacote declara o nome do notebook e o
-de cada arquivo de saída como contrato; e o migrador de pacotes voltou a enxergar o
-layout atual, que ele não via desde a 0.5.0).
+Versão atual: **0.7.2** (correção de documentação: o `SKILL.md` ainda afirmava que a
+automação do NotebookLM não existia no repo, e descrevia `herdar_campos()` pela regra
+que a 0.7.1 já havia substituído). Na 0.7.1: todo prompt do NotebookLM ancora na **nota
+do vault**, nunca no livro — que é fonte opcional no notebook; o pacote declara o nome
+do notebook e o de cada arquivo de saída como contrato; e o migrador de pacotes voltou
+a enxergar o layout atual, que ele não via desde a 0.5.0.

@@ -2,6 +2,18 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.7.2] - 2026-07-31
+
+### Corrigido
+- **O `SKILL.md` e o `README` descreviam o mundo anterior à `concurso-notebooklm`.**
+  Diziam, em três lugares, que a automação do NotebookLM "não existe no repo hoje" e
+  que a geração da mídia é manual por decisão de projeto — enquanto a skill irmã já
+  estava no repo, na 0.2.x, verificada ponta a ponta. O manual continua sendo o caminho
+  garantido; o que mudou é que agora há alternativa, e omiti-la escondia trabalho feito.
+- **A Etapa 7 ainda dizia que `herdar_campos()` preserva "os dois únicos campos"**
+  `notebooklm_url` e `notebooklm_status`. A 0.7.1 justamente trocou isso por herança
+  por prefixo `notebooklm_*` — o texto descrevia o bug que a versão anterior corrigiu.
+
 ## [0.7.1] - 2026-07-31
 
 ### Corrigido

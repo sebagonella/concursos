@@ -1,6 +1,6 @@
 ---
 name: concurso-aprofunda
-version: 0.7.1
+version: 0.7.2
 description: Use quando o usuário já tem uma preparação de concurso montada no vault (pela skill concurso-prep) e quer APROFUNDAR uma matéria a partir de um material denso — tipicamente um livro de referência (PDF/EPUB) que está no vault. A skill localiza no livro cada assunto já mapeado daquela matéria (via sumário ou busca por densidade de termos), gera um arquivo .md por assunto no vault com resumo completo próprio + ponteiros de página + trechos-âncora curtos citados (Modelo 2, sem copiar a obra), e produz flashcards nativos (Obsidian + Anki). Prepara também o insumo para a Etapa NotebookLM (podcast, mapa mental), tratada separadamente. Suporta DOIS NÍVEIS de profundidade (padrao = resumo de revisão; detalhado = tratamento exaustivo com exemplos resolvidos e questões comentadas) e VÁRIOS APROFUNDAMENTOS por assunto (fontes diferentes convivem lado a lado). Triggers - "aprofundar português com o livro X", "pegar os assuntos do livro", "mapear o livro de referência", "gerar flashcards do assunto", "extrair assuntos do material para o vault", "aprofundar mais/mais detalhado esse assunto", "aprofundar com outro livro/outra fonte", "versão detalhada do assunto".
 ---
 
@@ -107,8 +107,8 @@ fonte sai suspeito, reportando pendência em vez de gravar um path ruim.
 
 Cobre a localização no livro, os `.md` de assunto em dois níveis, os flashcards
 nativos (Obsidian + Anki) e o **pacote NotebookLM**, que a `concurso-publica`
-publica como página com prompts copiáveis. A geração da mídia em si é manual, no
-NotebookLM — ver "Ponte NotebookLM".
+publica como página com prompts copiáveis. A geração da mídia acontece fora daqui:
+à mão no NotebookLM, ou pela `concurso-notebooklm` — ver "Ponte NotebookLM".
 
 ## Parâmetros
 
@@ -285,10 +285,12 @@ NotebookLM — ver "Ponte NotebookLM".
    - UM notebook POR ASSUNTO (decisão de design: foco e qualidade; casa com reaproveitamento).
    - O frontmatter sai com notebooklm_url: "" para o usuário colar o link depois de
      criar o notebook — é o que faz o botão "Abrir no NotebookLM" aparecer no site.
-   - Reexecutar é SEGURO: herdar_campos() traz notebooklm_url e notebooklm_status do
-     pack antigo. São os dois únicos campos que o gerador não sabe reconstruir; sem
-     esse cuidado a URL digitada à mão iria para o .bak.md e o botão desapareceria
-     do site sem erro nenhum.
+   - Reexecutar é SEGURO: herdar_campos() traz do pack antigo TODO o bloco
+     `notebooklm_*` — herança por PREFIXO, não por lista de campos. O corpo do pacote
+     é 100% derivável do assunto, mas esse bloco é escrito por FORA: pelo usuário que
+     cola o link, ou pela concurso-notebooklm que registra o notebook criado. Sem
+     isso a URL digitada à mão iria para o .bak.md e o botão desapareceria do site
+     sem erro nenhum — e cada campo novo da automação repetiria o mesmo sumiço.
    - Sem --leis-dir a seção de fontes lista só o .md do assunto; passe a pasta de
      leis-baixadas para as normas relacionadas entrarem como fonte sugerida.
 
@@ -323,7 +325,7 @@ NotebookLM — ver "Ponte NotebookLM".
 
 ## Ponte NotebookLM
 
-A ponte é **manual por decisão de projeto**, e o ciclo está fechado:
+O modo manual é **o caminho garantido**, e o ciclo está fechado:
 
 1. Esta skill gera o `_fonte-notebooklm.md` por aprofundamento — as fontes a subir (o
    `.md` do assunto e, com `--leis-dir`, as normas relacionadas) e os prompts prontos.
@@ -341,11 +343,18 @@ Divisão de responsabilidades por artefato:
 - **Flashcards e resumo** → gerados nativamente por esta skill, com melhor controle e
   sem dependência frágil.
 
-> **Automação continua fora**, e não por falta de tempo: não existe API pública de
-> consumidor do NotebookLM, e a via da comunidade (`notebooklm-py`) usa endpoints
-> internos não-documentados do Google, que quebram sem aviso. Se um dia entrar, será
-> camada **opcional** sobre o modo manual — que é o caminho garantido — nunca em
-> substituição. Nada disso existe no repo hoje.
+> **A automação existe, na `concurso-notebooklm`, e é camada opcional.** Ela executa
+> este mesmo pacote — cria o notebook, sobe as fontes, dispara as gerações e salva os
+> arquivos com o nome que o site detecta —, poupando os passos **3 e 4** acima (o 1 é
+> insumo dela e o 2 segue igual). Continua
+> valendo o motivo de ela ser separada: não há API pública de consumidor do NotebookLM,
+> e a via da comunidade (`notebooklm-py`) usa endpoints internos não-documentados do
+> Google, que quebram sem aviso. Por isso a dependência mora **só lá**, esta skill
+> segue sem ela, e o modo manual nunca é substituído.
+>
+> **Mapa mental fica fora da automação**: a biblioteca não aceita prompt customizado
+> para ele e baixa JSON, que o site não reconhece como mídia. O roteiro da seção 3 do
+> pacote continua sendo o caminho.
 
 ## Scripts
 
