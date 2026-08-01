@@ -45,12 +45,23 @@ flowchart TB
 
     vaultB["🗂️ <b>Vault · aprofundamento</b><br/><b>03-APROFUNDAMENTO/</b>{materia}/assuntos/{assunto}/{nivel}--{fonte}/<br/>resumo próprio · flashcards (Obsidian + Anki) · <code>_fonte-notebooklm.md</code>"]
 
-    subgraph NB["<b>NotebookLM</b> — manual, por decisão de projeto (não há API pública)"]
+    subgraph NB["<b>NotebookLM</b> — o mesmo pacote, por dois caminhos"]
         direction LR
-        n1["Sobe as fontes e<br/>cola os 4 prompts"]
-        n2["Baixa podcast .m4a ·<br/>vídeo .mp4 · mapa .png ·<br/>report .md"]
-        n3["Cola a URL em<br/><code>notebooklm_url:</code>"]
-        n1 --> n2 --> n3
+        subgraph MAN["<b>manual</b> — o caminho garantido"]
+            direction TB
+            n1["Sobe as fontes e<br/>cola os 4 prompts"]
+            n2["Baixa podcast .m4a ·<br/>vídeo .mp4 · mapa .png ·<br/>report .md"]
+            n3["Cola a URL em<br/><code>notebooklm_url:</code>"]
+            n1 --> n2 --> n3
+        end
+        subgraph AUTO["<b>concurso-notebooklm</b> — opcional"]
+            direction TB
+            m1["<b>nlm_run</b><br/>cria o notebook, sobe as<br/>fontes e dispara — não espera"]
+            m2["<b>nlm_coleta</b><br/>baixa e nomeia pelo<br/><code>arquivo_*</code> do pacote;<br/><i>extensão vem dos bytes</i>"]
+            m3["grava <code>notebooklm_*</code><br/>no frontmatter do pacote"]
+            m1 --> m2 --> m3
+        end
+        MAN ~~~ AUTO
     end
 
     vaultC["🗂️ <b>Vault · com as mídias</b><br/>mídia ao lado do assunto, detectada por <b>presença de arquivo</b>"]
@@ -93,18 +104,21 @@ flowchart TB
     classDef fonte fill:#E8ECF8,stroke:#16307E,stroke-width:2px,color:#101425
     classDef vaultBox fill:#FFFDF0,stroke:#C9A227,stroke-width:2px,color:#23262E
     classDef manual fill:#FFF3E0,stroke:#C0392B,stroke-dasharray:5 3,color:#23262E
+    classDef auto fill:#F3EFFA,stroke:#5B3FA8,stroke-dasharray:5 3,color:#23262E
     classDef saida fill:#E9F5EE,stroke:#1E7A4C,stroke-width:2px,color:#23262E
     classDef recon fill:#FBE9E7,stroke:#C0392B,color:#23262E
 
     class edital,livro fonte
     class vaultA,vaultB,vaultC vaultBox
     class n1,n2,n3 manual
+    class m1,m2,m3 auto
     class site,nav saida
     class ret recon
 ```
 
 Fonte em [`docs/fluxo-concurso.mmd`](docs/fluxo-concurso.mmd), que traz também as notas
-de layout. Por que este desenho e não outro está em
+de layout, e export em [`docs/fluxo-concurso.png`](docs/fluxo-concurso.png) para onde o
+Mermaid não renderiza. Por que este desenho e não outro está em
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md#o-fluxo-completo-do-edital-ao-site-no-ar).
 
 ### Destaques
