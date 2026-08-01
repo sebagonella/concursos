@@ -24,6 +24,7 @@ import slugify  # noqa: E402
 import diff_editais as de  # noqa: E402
 import materia_id as mid  # noqa: E402
 import edital_hash as eh  # noqa: E402
+import migrar_meta as mm  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -785,6 +786,93 @@ def test_log_de_validacao_vai_para_a_subpasta_do_concurso():
         _run_validate(b)
         assert list((Path(d) / ".logs" / "SEDES_2026").glob("validacao-*.json"))
         assert not list((Path(d) / ".logs").glob("validacao-*.json"))
+
+
+# --------------------------------------------------------------------------- #
+# migrar_meta — a correção cirúrgica do .meta.json já gerado
+# --------------------------------------------------------------------------- #
+def test_limpar_texto_pdf_tira_rodape_do_meio_do_topico():
+    """O número da página vem numa linha própria antes do form feed e, ao juntar,
+    entra NO MEIO do tópico: 'ambiente Linux (SUSE 34 SLES 15 SP2)'."""
+    bruto = "ambiente Linux (SUSE\n\n                    34\n\fSLES 15 SP2) 2 - Edição"
+    assert "34" not in mm.limpar_texto_pdf(bruto)
+    assert "SUSE" in mm.limpar_texto_pdf(bruto) and "SLES" in mm.limpar_texto_pdf(bruto)
+
+
+def test_topicos_do_edital_para_no_anexo_seguinte():
+    """O último tópico de 'Vendas e Negociação' engolia 'ANEXO IV - CRONOGRAMA',
+    porque o cabeçalho do anexo usa travessão e não dois-pontos."""
+    texto = ("VENDAS E NEGOCIAÇÃO: 1 - Primeiro topico. 2 - Segundo topico.\n"
+             "ANEXO IV - CRONOGRAMA\n outra coisa qualquer\n")
+    t = mm.topicos_do_edital(texto, "Vendas e Negociação")
+    assert len(t) == 2, t
+    assert "ANEXO" not in t[-1], t[-1]
+
+
+def test_estrutura_por_cargo_sai_de_cargos_multi():
+    meta = {"cargos_multi": [
+        {"sigla": "TDAS-A", "titulos": False, "discursiva": "redação"},
+        {"sigla": "EDAS-B", "titulos": True, "discursiva": "estudo de caso"}]}
+    saida, _ = mm.corr_estrutura_por_cargo(meta)
+    assert saida["EDAS-B"]["titulos"]["presente"] is True
+    assert saida["TDAS-A"]["titulos"]["presente"] is False
+
+
+def test_estrutura_por_cargo_nao_grava_quando_nao_diverge():
+    """Se todos os cargos têm a mesma estrutura, o campo agregado basta."""
+    meta = {"cargos_multi": [{"sigla": "A", "titulos": False, "discursiva": "redação"},
+                             {"sigla": "B", "titulos": False, "discursiva": "redação"}]}
+    assert mm.corr_estrutura_por_cargo(meta)[0] is None
+
+
+def test_cargos_ids_do_formato_do_sedes_e_do_bb():
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        (p / "A").mkdir()
+        (p / "B").mkdir()
+        # SEDES: escopo vem de materias_por_cargo
+        meta = {"cargos_multi": [{"sigla": "A"}, {"sigla": "B"}],
+                "materias": [{"nome": "Português", "topicos": ["x"]}],
+                "materias_por_cargo": {"A": [{"nome": "Português"}],
+                                       "B": [{"nome": "Português"}]}}
+        saida, _ = mm.corr_cargos_ids(meta, p)
+        assert saida[0]["cargos_ids"] == ["A", "B"], saida
+
+        # BB: específica vem de cargos_gerados[].especificos; o resto é de todos
+        meta2 = {"cargos_gerados": [{"slug": "A", "especificos": [{"nome": "Vendas"}]},
+                                    {"slug": "B", "especificos": [{"nome": "TI"}]}],
+                 "materias": [{"nome": "Vendas", "topicos": ["x"]},
+                              {"nome": "Português", "topicos": ["y"]}]}
+        saida2, _ = mm.corr_cargos_ids(meta2, p)
+        assert saida2[0]["cargos_ids"] == ["A"], saida2[0]
+        assert saida2[1]["cargos_ids"] == ["A", "B"], saida2[1]
+
+
+def test_comum_significa_mais_de_um_nao_todos():
+    """`fundamentos-suas` vale para 2 dos 3 cargos do SEDES e mora em _COMUM — a
+    Etapa 5 manda gravar ali mesmo. Tratar _COMUM como 'todos' dava falso alarme."""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        for c in ("A", "B", "C"):
+            (p / c).mkdir()
+        (p / "_COMUM" / "03-MAPAS-COMUNS").mkdir(parents=True)
+        (p / "_COMUM" / "03-MAPAS-COMUNS" / "01-suas.md").write_text(
+            "---\nmateria_id: suas\n---\n", encoding="utf-8")
+        meta = {"cargos_multi": [{"sigla": "A"}, {"sigla": "B"}, {"sigla": "C"}],
+                "materias": [{"nome": "SUAS", "materia_id": "suas", "topicos": ["x"]}],
+                "materias_por_cargo": {"A": [{"nome": "SUAS"}], "B": [{"nome": "SUAS"}]}}
+        saida, pend = mm.corr_cargos_ids(meta, p)
+        assert saida[0]["cargos_ids"] == ["A", "B"], saida
+        assert pend == [], pend
+
+
+def test_materia_extraida_sem_mapa_para_conferir_vira_pendencia():
+    """Segunda fonte ausente não pode virar silêncio — é a mesma armadilha do check
+    que 'passava' porque não encontrava nada."""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        (p / "_COMUM" / "01-EDITAL").mkdir(parents=True)
+        assert mm.topicos_do_mapa(p, "Inexistente") == []
 
 
 def _run_standalone():

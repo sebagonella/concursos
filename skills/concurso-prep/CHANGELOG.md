@@ -5,6 +5,52 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.9.0] - 2026-08-01
+
+### Adicionado
+- **`scripts/migrar_meta.py`** — completa o `.meta.json` dos concursos já gerados, sem
+  reexecutar a skill. A alternativa seria rodar tudo de novo, e ela é pior: o ganho é
+  ~90% metadado, mas a reexecução **regeneraria a prosa dos mapas** (11 do SEDES e 3 do
+  BB têm resumo escrito) e custaria até 20 subagents. O que falta é dado, e dado se
+  corrige cirurgicamente.
+
+  Cada campo vem de uma fonte que já existe no próprio meta:
+
+  | campo | de onde |
+  |---|---|
+  | `cargos_validados[]` | `cargos_multi` (SEDES) / `cargos_gerados` (BB) |
+  | `estrutura_prova_por_cargo` | `cargos_multi[].titulos`/`.discursiva` |
+  | `edital_hash` | recalculado do texto, por `edital_hash.py` |
+  | `materias[].cargos_ids` | `materias_por_cargo` / `cargos_gerados[].especificos` |
+  | matérias ausentes | anexo do edital, **conferido** contra os mapas |
+
+  Medido nos dois concursos: SEDES ganha 3 `cargos_validados`, o
+  `estrutura_prova_por_cargo` que corrige o `titulos: false` mentiroso, o hash certo e
+  `cargos_ids` em 5/5; o BB ganha as **3 matérias do AGENTE-COMERCIAL** que não existiam
+  no meta — sem elas, reconciliar aquele cargo o perderia inteiro — e `cargos_ids` em 10/10.
+
+### Corrigido (defeitos do próprio migrador, achados no dry-run contra o vault real)
+- **Rodapé de página entrando no meio do tópico.** O número da página vem em linha
+  própria antes do form feed e, ao juntar as linhas, virava conteúdo: o item 1 de
+  Conhecimentos de Informática saía como `ambiente Linux (SUSE 34 SLES 15 SP2)`.
+- **A seção não terminava no anexo seguinte**: o último tópico de Vendas e Negociação
+  engolia `ANEXO IV - CRONOGRAMA`, porque o cabeçalho do anexo usa travessão e não
+  dois-pontos.
+- **`_COMUM` não quer dizer "todos os cargos"**, e sim "mais de um" — a Etapa 5 manda
+  gravar ali a matéria que vale para 2 de 3. Tratar como "todos" dava falso alarme no
+  `fundamentos-suas` do SEDES, que é só do TDAS.
+- **Conferência ausente virava silêncio**: matéria extraída do edital sem mapa para
+  cruzar passava sem aviso. Agora é pendência — é a mesma armadilha do check que
+  "passava" por não encontrar nada.
+- `--json` era poluído pelo aviso de dry-run e não era JSON válido.
+
+### Notas
+- 7 testes novos; 60 na suíte da skill.
+- A conferência das matérias extraídas **rodou de verdade** nos três casos do BB:
+  14/14, 4/4 e 17/17 tópicos entre edital e mapa.
+- Fora do escopo deste script, e ainda pendentes no BB: os dois `00-INDICE.md` que a
+  Etapa 10.1 gera. São conteúdo, não metadado.
+
 ## [1.8.1] - 2026-08-01
 
 Higiene: os itens pequenos que o diagnóstico levantou e que, somados, eram o que fazia
