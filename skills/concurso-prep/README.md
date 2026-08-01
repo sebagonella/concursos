@@ -281,12 +281,21 @@ Arquivos:
 
 ## 🧪 Validação automática
 
-Ao final, a skill roda `scripts/validate_output.py` que checa:
+**Antes** da Etapa 3, `scripts/validate_parsed.py` valida a saída do parser contra
+`assets/schema-edital.json` e **para o fluxo** se o contrato estiver quebrado — as
+etapas seguintes assumem esse formato.
 
-- [x] Estrutura de pastas existe
+**Ao final**, `scripts/validate_output.py` checa:
+
+- [x] Estrutura de pastas existe, com `00-INDICE.md` por pasta e `03-MAPAS-COMUNS`
+      quando o concurso é multi-cargo
 - [x] Nenhum placeholder `{XXX}` deixado nos `.md`
-- [x] Wikilinks `[[...]]` apontam para arquivos existentes
-- [x] Soma de questões por matéria bate com total da prova
+- [x] Wikilinks `[[...]]` resolvem — na pasta, nas versões irmãs **e no vault**
+      (link para o livro em `40_RECURSOS/` é legítimo, não link quebrado)
+- [x] Soma de questões bate com o total da prova, aceitando **faixa**
+      (`~14 a 16 questões`); mapa **sem** estimativa é problema, não silêncio
+- [x] Toda matéria do edital tem mapa — e todo mapa corresponde a uma matéria
+- [x] Cargo com avaliação de títulos tem `08-TITULOS.md`, e vice-versa
 - [x] Cronograma termina antes da prova
 - [x] PDFs baixados têm header `%PDF-` válido
 - [x] Banner `CONTEÚDO PROVISÓRIO` presente, no modo previsto
@@ -351,13 +360,17 @@ concurso-prep/
 │   └── sinergia-finder.md
 ├── assets/
 │   ├── config.yml              # defaults (inclui modos previsto/reconciliação)
-│   └── templates/              # 13 templates .md.tpl
+│   ├── schema-edital.json      # CONTRATO da Etapa 2 (fonte de verdade)
+│   └── templates/              # 14 templates .md.tpl
 ├── scripts/
 │   ├── extract_edital.py       # PDF/DOCX/MD → texto
 │   ├── fetch_lei.py            # lei/decreto de fonte oficial → MD + PDF (item 9)
 │   ├── fetch_pdf.py            # download robusto (fonte que já serve PDF nativo)
 │   ├── slugify.py              # nomes de pasta UPPERCASE
-│   ├── diff_editais.py         # diff de conteúdo programático (reconciliação)
+│   ├── materia_id.py           # FONTE DE VERDADE da identidade de matéria
+│   ├── edital_hash.py          # FONTE DE VERDADE do edital_hash (texto + PDF)
+│   ├── diff_editais.py         # diff do programa e da estrutura, POR CARGO
+│   ├── validate_parsed.py      # valida a saída da Etapa 2 contra o schema
 │   ├── validate_output.py      # validação final
 │   ├── log_helper.py           # logging
 │   └── tests/test_smoke.py     # suíte standalone (sem pytest)
@@ -370,7 +383,7 @@ concurso-prep/
 
 ## 📜 Changelog
 
-Histórico de versões em [CHANGELOG.md](CHANGELOG.md). Versão atual: **1.5.0** (levantamento de material com piso por matéria e por tópico, e a norma oficial como fonte primária em tópico jurídico).
+Histórico de versões em [CHANGELOG.md](CHANGELOG.md). Versão atual: **1.8.1** — a revisão comportamental de 01/08/2026: contrato único da Etapa 2, identidade de matéria declarada e persistida, reconciliação por cargo, etapa de títulos e um validador que deixou de dar alarme falso.
 
 ---
 

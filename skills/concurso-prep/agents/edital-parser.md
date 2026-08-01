@@ -97,26 +97,41 @@ Compilar lista única de todas as leis/decretos/resoluções citadas no conteúd
 ### Passo 8 — Montar JSON e validar
 
 Estrutura final:
+**O contrato é o `assets/schema-edital.json` da skill `concurso-prep` — leia-o e
+siga-o à risca.** Ele é a fonte de verdade e traz, campo a campo, o motivo de cada
+exigência. Não descreva aqui um formato paralelo: era exatamente isso que existia
+antes (este arquivo documentava três chaves de matéria; o `SKILL.md` documentava uma
+lista plana), e a conversão de um para o outro ficava com o modelo, sem regra escrita.
+Duas execuções da skill sobre o mesmo edital geraram `.meta.json` com schemas
+diferentes entre si e do documentado — e uma delas perdeu o conteúdo programático de
+um cargo inteiro.
+
+Em resumo, o que muda em relação ao formato antigo:
+
 ```json
 {
-  "metadados": {
-    "orgao": "string",
-    "orgao_sigla": "string",
-    "ano": 2026,
-    "banca": "string",
-    "numero_edital": "string",
-    "data_publicacao": "YYYY-MM-DD"
-  },
-  "datas_chave": { ... },
-  "cargos_validados": [ ... ],
-  "estrutura_prova": { ... },
-  "materias_gerais": [ ... ],
-  "materias_especificas_comuns": [ ... ],
-  "materias_especificas_cargo": { "EDAS-Administracao": [...] },
-  "leis_citadas": [ ... ],
-  "anexos": ["referência aos anexos do edital"]
+  "orgao": "…", "orgao_sigla": "SEDES", "ano": 2026, "banca": "…",
+  "datas_chave": { … },
+  "cargos_validados": [ { "nome_completo": "…", "sigla": "AGENTE-SOCIAL", … } ],
+  "estrutura_prova": { … },
+  "estrutura_prova_por_cargo": { … },
+  "materias": [ { "nome": "…", "materia_id": "…", "tipo": "gerais",
+                  "subitem_edital": "…", "topicos": ["literal do edital", …],
+                  "cargos_ids": ["AGENTE-SOCIAL", …], "questoes": null } ],
+  "leis_citadas": [ … ], "warnings": [ … ], "errors": [ … ]
 }
 ```
+
+- **Cabeçalho na raiz**, não dentro de `metadados`: o site lê `orgao`/`banca`/
+  `datas_chave` da raiz e, aninhados, a página do concurso fica sem eles.
+- **Uma lista `materias[]` plana.** O escopo de cada matéria vem de `cargos_ids`;
+  não existe mais lista separada por cargo.
+- **`materia_id` não se inventa**: resolva com `scripts/materia_id.py`, que reusa o
+  id já declarado no `.meta.json` do concurso. Id novo é proposta que exige
+  confirmação humana. Ver o ADR `identidade-da-materia-declarada-e-persistida`.
+- **`questoes: null`** quando o edital não distribui questões por matéria — que é o
+  caso comum. Não invente: a estimativa é trabalho do `materia-mapper`, e lá ela é
+  declarada como estimativa.
 
 Salvar em `output_json_path`.
 
@@ -125,8 +140,11 @@ Salvar em `output_json_path`.
 - Datas em formato ISO (YYYY-MM-DD)
 - Ano da prova >= ano atual
 - Todos os cargos pretendidos foram localizados (ou listados em erro)
-- Soma de questões por matéria está consistente com estrutura_prova
+- **Todo cargo validado tem pelo menos uma matéria** — cargo sem conteúdo
+  programático é o defeito que fez o BB perder o AGENTE-COMERCIAL
 - Pelo menos uma matéria por tipo (gerais, específicas)
+- `python3 scripts/validate_parsed.py <output_json_path>` sai **0**. Não retorne
+  saída que não passe: as etapas seguintes assumem este contrato.
 
 ## Tratamento de erros
 

@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "concurso-prep/schema-edital.json",
+  "title": "Saída da Etapa 2 (edital-parser) — contrato único",
+  "description": "FONTE DE VERDADE do contrato entre a Etapa 2 e todo o resto do fluxo. Antes deste arquivo, o SKILL.md documentava `materias[]` plana e o agents/edital-parser.md documentava três chaves (materias_gerais, materias_especificas_comuns, materias_especificas_cargo); a conversão de um formato para o outro ficava com o modelo, sem regra escrita, e cada execução convertia diferente — foi assim que o .meta.json do SEDES e o do BB saíram com schemas distintos entre si e do documentado, e que o BB perdeu o conteúdo programático de um cargo inteiro. O .meta.json (Etapa 10.4) é este objeto MAIS os campos de geração (modo, data_geracao, edital_hash, pasta, versao).",
+
+  "type": "object",
+  "required": ["orgao", "orgao_sigla", "ano", "banca", "datas_chave", "cargos_validados", "estrutura_prova", "materias"],
+  "properties": {
+
+    "orgao": {
+      "description": "Campos de cabeçalho ficam na RAIZ, não aninhados em `metadados`: o site_builder.py da concurso-publica lê meta.get('orgao'/'banca'/'datas_chave') da raiz, e aninhá-los faz a página do concurso perder órgão, banca e datas.",
+      "type": "string"
+    },
+    "orgao_sigla": {"type": "string", "pattern": "^[A-Za-z0-9/-]+$"},
+    "ano": {"type": "integer"},
+    "banca": {"type": "string"},
+
+    "datas_chave": {
+      "description": "null por completo no modo previsto; no modo oficial, prova_data é obrigatória.",
+      "type": ["object", "null"],
+      "properties": {
+        "publicacao_edital": {"type": ["string", "null"]},
+        "inscricoes_inicio": {"type": ["string", "null"]},
+        "inscricoes_fim": {"type": ["string", "null"]},
+        "prova_data": {"type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "resultado_final": {"type": ["string", "null"]}
+      }
+    },
+
+    "cargos_validados": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["nome_completo", "sigla"],
+        "properties": {
+          "nome_completo": {"type": "string"},
+          "sigla": {
+            "description": "É ESTE campo que nomeia a pasta do cargo — não o texto que o usuário digitou em --cargo. Slugificar o parâmetro fazia o nome da pasta depender de como a pessoa escreveu ('TDAS Agente Social' virava TDAS-AGENTE-SOCIAL, enquanto o vault usa AGENTE-SOCIAL).",
+            "type": "string",
+            "pattern": "^[A-Z0-9-]+$"
+          },
+          "codigo": {"type": ["string", "integer", "null"]},
+          "vagas_ac": {"type": ["integer", "null"]},
+          "vagas_total": {"type": ["integer", "null"]},
+          "salario": {"type": ["number", "null"]},
+          "requisitos": {"type": ["string", "null"]}
+        }
+      }
+    },
+
+    "estrutura_prova": {
+      "type": "object",
+      "required": ["objetiva"],
+      "properties": {
+        "objetiva": {
+          "type": "object",
+          "required": ["total_questoes"],
+          "properties": {
+            "total_questoes": {"type": "integer"},
+            "duracao_horas": {"type": ["number", "null"]}
+          }
+        },
+        "discursiva": {
+          "type": "object",
+          "required": ["presente"],
+          "properties": {"presente": {"type": "boolean"}}
+        },
+        "titulos": {
+          "type": "object",
+          "required": ["presente"],
+          "properties": {"presente": {"type": "boolean"}}
+        }
+      }
+    },
+
+    "estrutura_prova_por_cargo": {
+      "description": "Obrigatório quando a estrutura difere entre cargos. No SEDES, títulos valem exclusivamente para o EDAS; gravar um único `titulos.presente: false` com uma observação em prosa afirma o falso para um dos três cargos, num campo que alimenta o diff estrutural da retificação.",
+      "type": ["object", "null"]
+    },
+
+    "materias": {
+      "description": "LISTA PLANA, com o conteúdo programático INTEGRAL. O escopo de cada matéria vem de `cargos_ids`, não de a matéria estar em uma lista separada — o formato de três chaves fazia matéria de cargo viver num dict à parte, que é de onde o BB perdeu três matérias inteiras.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["nome", "materia_id", "tipo", "subitem_edital", "topicos", "cargos_ids"],
+        "properties": {
+          "nome": {"type": "string"},
+          "materia_id": {
+            "description": "Resolvido por scripts/materia_id.py, que reusa o id já declarado no .meta.json em vez de re-derivar. Ver o ADR identidade-da-materia-declarada-e-persistida.",
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "tipo": {"type": "string", "enum": ["gerais", "especificos_comuns", "especificos_cargo"]},
+          "subitem_edital": {"type": "string"},
+          "topicos": {
+            "description": "Texto LITERAL do edital, um item por tópico. É o que o materia-mapper recebe inline — ele não tem ferramenta de leitura e não consegue abrir arquivo.",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"}
+          },
+          "cargos_ids": {
+            "description": "Slugs de cargo (os mesmos de cargos_validados[].sigla). É por AQUI que a Etapa 5 roteia o mapa: mais de um cargo vai para _COMUM/03-MAPAS-COMUNS, um só fica no cargo. Rotear pelo campo de nome bonito criava pasta com espaço e acento ('EDAS Serviço Social/'), contra a convenção UPPERCASE.",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "pattern": "^[A-Z0-9-]+$"}
+          },
+          "questoes": {
+            "description": "null quando o edital não distribui questões por matéria — que é o caso comum. Nunca inventar aqui: a estimativa é trabalho do materia-mapper e é declarada como estimativa.",
+            "type": ["integer", "null"]
+          },
+          "leis_citadas": {"type": "array", "items": {"type": "object"}}
+        }
+      }
+    },
+
+    "leis_citadas": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": ["string", "object"]}},
+    "errors": {"type": "array", "items": {"type": ["string", "object"]}}
+  }
+}

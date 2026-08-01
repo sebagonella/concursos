@@ -78,6 +78,57 @@ def carregar_topicos(path: Path) -> dict[str, list[str]]:
     return materias
 
 
+CARGO_UNICO = "(cargo único)"
+
+
+def carregar_por_cargo(path: Path) -> dict[str, dict[str, list[str]]]:
+    """Retorna {cargo: {materia: [topicos]}} — a visão que a reconciliação exige.
+
+    O item 8 diz que a reconciliação roda POR CARGO, e não rodava: `carregar_topicos`
+    lê só `materias[]`, e `materias_por_cargo` não era conhecido em lugar nenhum deste
+    script. Num concurso de 3 cargos como o SEDES, remover tópicos da matéria específica
+    de 2 deles resultava em **0 removidos** — a mudança passava em silêncio.
+
+    Três formatos convivem no vault e todos precisam ser lidos:
+      - `materias[].cargos_ids`  -> schema novo, sem ambiguidade
+      - `materias_por_cargo`     -> formato do SEDES; é a visão completa por cargo
+      - `materias[]` sem nada    -> cargo único (ou meta incompleto, que o
+                                    validate_output acusa como mapa órfão)
+    """
+    data = carregar_meta_completo(path)
+    materias = [m for m in (data.get("materias") or []) if isinstance(m, dict)]
+    por_cargo: dict[str, dict[str, list[str]]] = {}
+
+    def por(cargo, m):
+        por_cargo.setdefault(cargo, {})[m.get("nome", "SEM_NOME")] = m.get("topicos") or []
+
+    com_ids = [m for m in materias if m.get("cargos_ids")]
+    for m in com_ids:
+        for c in m["cargos_ids"]:
+            por(c, m)
+
+    legado = data.get("materias_por_cargo") or {}
+    for cargo, lista in legado.items():
+        for m in lista or []:
+            if isinstance(m, dict):
+                por(cargo, m)
+
+    # Matéria de `materias[]` que não apareceu em nenhum cargo não pode sumir do
+    # diff só porque o formato antigo não dizia de quem ela é.
+    if legado:
+        ja_vistas = {n for mats in por_cargo.values() for n in mats}
+        for m in materias:
+            if m.get("cargos_ids") or m.get("nome", "SEM_NOME") in ja_vistas:
+                continue
+            for cargo in por_cargo:
+                por(cargo, m)
+    elif not com_ids:
+        for m in materias:
+            por(CARGO_UNICO, m)
+
+    return por_cargo or {CARGO_UNICO: {}}
+
+
 def similaridade(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
@@ -131,32 +182,84 @@ def carregar_meta_completo(path: Path) -> dict:
             return {}
 
 
+def _get(d, *ks, default=None):
+    for k in ks:
+        if not isinstance(d, dict):
+            return default
+        d = d.get(k, {})
+    return d if d != {} else default
+
+
+def _primeiro(meta: dict, caminhos: list[tuple]):
+    """Primeiro caminho que existir. Os campos de vagas/salario nao moram sempre
+    no mesmo lugar: o schema novo os poe na raiz, e o `.meta.json` do SEDES os tem
+    em `cargo.vagas_imediatas` / `cargo.remuneracao`. Olhando so a raiz, o diff
+    estrutural ficava CEGO justamente para vagas e salario — que sao, junto com as
+    datas, o que retificacao costuma mexer (B.4). Verificado: mudar
+    `cargo.vagas_imediatas` de 133 para 150 no SEDES nao produzia mudanca nenhuma.
+    """
+    for c in caminhos:
+        v = _get(meta, *c)
+        if v is not None:
+            return v
+    return None
+
+
+def _por_cargo_estrutural(meta: dict) -> dict[str, dict]:
+    """{sigla: {vagas/salario}} a partir de `cargos_validados` ou `cargos_multi`."""
+    out = {}
+    for lista in (meta.get("cargos_validados"), meta.get("cargos_multi")):
+        for c in lista or []:
+            if not isinstance(c, dict):
+                continue
+            sigla = c.get("sigla") or c.get("slug")
+            if not sigla:
+                continue
+            out.setdefault(sigla, {
+                "Vagas (AC imediatas)": c.get("vagas_ac") or c.get("vagas_imediatas"),
+                "Vagas totais": c.get("vagas_total"),
+                "Salário": c.get("salario") or c.get("remuneracao"),
+            })
+    return out
+
+
 def diff_estrutural(m1: dict, m2: dict) -> list[dict]:
     """Item 16: compara campos estruturais da prova entre as duas versoes."""
-    def get(d, *ks, default=None):
-        for k in ks:
-            if not isinstance(d, dict):
-                return default
-            d = d.get(k, {})
-        return d if d != {} else default
-
     campos = [
-        ("Total de questões", get(m1, "estrutura_prova", "objetiva", "total_questoes"),
-                              get(m2, "estrutura_prova", "objetiva", "total_questoes")),
-        ("Tem discursiva?", bool(get(m1, "estrutura_prova", "discursiva")),
-                            bool(get(m2, "estrutura_prova", "discursiva"))),
-        ("Vagas (AC imediatas)", get(m1, "vagas_ac"), get(m2, "vagas_ac")),
-        ("Vagas totais", get(m1, "vagas_total"), get(m2, "vagas_total")),
-        ("Salário", get(m1, "salario"), get(m2, "salario")),
-        ("Data da prova", get(m1, "datas_chave", "prova_data"),
-                          get(m2, "datas_chave", "prova_data")),
+        ("Total de questões", ["estrutura_prova", "objetiva", "total_questoes"]),
+        ("Data da prova", ["datas_chave", "prova_data"]),
     ]
+    alias = {
+        "Vagas (AC imediatas)": [("vagas_ac",), ("cargo", "vagas_ac"),
+                                 ("cargo", "vagas_imediatas")],
+        "Vagas totais": [("vagas_total",), ("cargo", "vagas_total")],
+        "Salário": [("salario",), ("cargo", "salario"), ("cargo", "remuneracao")],
+    }
+
     mudancas = []
-    for nome, v1, v2 in campos:
-        if v1 is None and v2 is None:
-            continue
-        if v1 != v2:
+    for nome, caminho in campos:
+        v1, v2 = _get(m1, *caminho), _get(m2, *caminho)
+        if (v1 is not None or v2 is not None) and v1 != v2:
             mudancas.append({"campo": nome, "de": v1, "para": v2})
+
+    d1, d2 = bool(_get(m1, "estrutura_prova", "discursiva")), \
+        bool(_get(m2, "estrutura_prova", "discursiva"))
+    if d1 != d2:
+        mudancas.append({"campo": "Tem discursiva?", "de": d1, "para": d2})
+
+    for nome, caminhos in alias.items():
+        v1, v2 = _primeiro(m1, caminhos), _primeiro(m2, caminhos)
+        if (v1 is not None or v2 is not None) and v1 != v2:
+            mudancas.append({"campo": nome, "de": v1, "para": v2})
+
+    # Multi-cargo: vagas e salario sao POR CARGO, e uma retificacao pode mexer em
+    # um cargo so — o campo agregado nao mostra isso.
+    pc1, pc2 = _por_cargo_estrutural(m1), _por_cargo_estrutural(m2)
+    for sigla in sorted(set(pc1) | set(pc2)):
+        for campo in ("Vagas (AC imediatas)", "Vagas totais", "Salário"):
+            v1, v2 = pc1.get(sigla, {}).get(campo), pc2.get(sigla, {}).get(campo)
+            if (v1 is not None or v2 is not None) and v1 != v2:
+                mudancas.append({"campo": f"{campo} [{sigla}]", "de": v1, "para": v2})
     return mudancas
 
 
@@ -219,16 +322,54 @@ def diff(v1: dict[str, list[str]], v2: dict[str, list[str]]) -> dict:
     }
 
 
+def diff_por_cargo(pc1: dict, pc2: dict, cargo_filtro: str | None = None) -> dict:
+    """Roda o diff uma vez por cargo (item 8) e consolida.
+
+    Cargo que existe num lado e não no outro é reportado — retificação que cria ou
+    extingue cargo é justamente o tipo de mudança que não pode passar batida.
+    """
+    cargos = sorted(set(pc1) | set(pc2))
+    if cargo_filtro:
+        cargos = [c for c in cargos if c == cargo_filtro]
+    por_cargo, totais = {}, {"n_mantidos": 0, "n_removidos": 0, "n_novos": 0,
+                             "n_alterados": 0}
+    for c in cargos:
+        r = diff(pc1.get(c, {}), pc2.get(c, {}))
+        r["so_na_v1"] = c not in pc2
+        r["so_na_v2"] = c not in pc1
+        por_cargo[c] = r
+        for k in totais:
+            totais[k] += r["resumo"][k]
+    return {
+        "por_cargo": por_cargo,
+        "cargos_removidos": sorted(set(pc1) - set(pc2)),
+        "cargos_novos": sorted(set(pc2) - set(pc1)),
+        "resumo": totais,
+    }
+
+
+def titulo_do_caso(meta1: dict, meta2: dict) -> str:
+    """CASO A (previsto -> oficial) ou CASO B (oficial -> retificado).
+
+    O cabeçalho era fixo em "Previsto (V1) vs Oficial (V2)", inclusive numa
+    retificação — o B.5 manda ajustar e ninguém ajustava.
+    """
+    if str(meta1.get("modo", "")).lower() == "previsto":
+        return "Reconciliacao: Previsto (V1) vs Oficial (V2)"
+    return "Reconciliacao: Oficial vigente vs Retificado"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Diff de conteudo programatico V1 vs V2")
     parser.add_argument("--v1", type=Path, required=True, help="meta da versao prevista")
     parser.add_argument("--v2", type=Path, required=True, help="meta da versao oficial")
+    parser.add_argument("--cargo", default=None,
+                        help="restringe o diff a um cargo (default: todos)")
     parser.add_argument("--json", action="store_true", help="Saida em JSON")
     args = parser.parse_args()
 
-    v1 = carregar_topicos(args.v1)
-    v2 = carregar_topicos(args.v2)
-    resultado = diff(v1, v2)
+    resultado = diff_por_cargo(carregar_por_cargo(args.v1),
+                               carregar_por_cargo(args.v2), args.cargo)
     # item 16: diff estrutural
     meta1 = carregar_meta_completo(args.v1)
     meta2 = carregar_meta_completo(args.v2)
@@ -239,7 +380,7 @@ def main():
         return
 
     r = resultado["resumo"]
-    print("=== Reconciliacao: Previsto (V1) vs Oficial (V2) ===\n")
+    print(f"=== {titulo_do_caso(meta1, meta2)} ===\n")
     print(f"🟢 Mantidos:  {r['n_mantidos']}")
     print(f"🔴 Removidos: {r['n_removidos']}")
     print(f"🆕 Novos:     {r['n_novos']}")
@@ -250,22 +391,34 @@ def main():
         for e in resultado["estrutural"]:
             print(f"  {e['campo']}: {e['de']} -> {e['para']}")
         print()
+    for c in resultado["cargos_removidos"]:
+        print(f"⚠️  CARGO REMOVIDO na nova versao: {c}")
+    for c in resultado["cargos_novos"]:
+        print(f"⚠️  CARGO NOVO na nova versao: {c}")
+    if resultado["cargos_removidos"] or resultado["cargos_novos"]:
+        print()
 
-    if resultado["removidos"]:
-        print("--- 🔴 REMOVIDOS (parar de estudar) ---")
-        for x in resultado["removidos"]:
-            print(f"  [{x['materia']}] {x['topico']}")
-        print()
-    if resultado["novos"]:
-        print("--- 🆕 NOVOS (comecar a estudar) ---")
-        for x in resultado["novos"]:
-            print(f"  [{x['materia']}] {x['topico']}")
-        print()
-    if resultado["alterados"]:
-        print("--- 🔀 ALTERADOS (revisar) ---")
-        for x in resultado["alterados"]:
-            print(f"  [{x['de']['materia']}] '{x['de']['topico']}'")
-            print(f"     -> '{x['para']['topico']}' (similaridade {x['score']})")
+    for cargo, res in resultado["por_cargo"].items():
+        rc = res["resumo"]
+        if not (rc["n_removidos"] or rc["n_novos"] or rc["n_alterados"]):
+            print(f"### {cargo}: sem mudancas ({rc['n_mantidos']} topicos mantidos)\n")
+            continue
+        print(f"### {cargo}  "
+              f"🟢{rc['n_mantidos']} 🔴{rc['n_removidos']} "
+              f"🆕{rc['n_novos']} 🔀{rc['n_alterados']}")
+        if res["removidos"]:
+            print("--- 🔴 REMOVIDOS (parar de estudar) ---")
+            for x in res["removidos"]:
+                print(f"  [{x['materia']}] {x['topico']}")
+        if res["novos"]:
+            print("--- 🆕 NOVOS (comecar a estudar) ---")
+            for x in res["novos"]:
+                print(f"  [{x['materia']}] {x['topico']}")
+        if res["alterados"]:
+            print("--- 🔀 ALTERADOS (revisar) ---")
+            for x in res["alterados"]:
+                print(f"  [{x['de']['materia']}] '{x['de']['topico']}'")
+                print(f"     -> '{x['para']['topico']}' (similaridade {x['score']})")
         print()
 
 

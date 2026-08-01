@@ -1,6 +1,6 @@
 ---
 name: concurso-prep
-version: 1.5.0
+version: 1.8.1
 description: Use quando o usuário fornecer um edital de concurso público (PDF/DOCX/MD) e pedir para montar a estrutura de estudos completa, OU quando pedir para começar a estudar para um concurso ainda SEM edital/data (concurso previsto/esperado — usa o edital anterior como proxy), OU quando o edital oficial sair/for retificado e for preciso reconciliar/atualizar o que já foi gerado. Triggers comuns - "preparar concurso", "analisar edital", "montar cronograma de concurso", "estudar para concurso da {órgão}", "concurso previsto sem edital", "começar antes do edital", "edital saiu, atualizar", "edital foi retificado", "reconciliar edital". Gera no vault Obsidian estrutura completa - cronograma adaptativo (ou relativo sem datas no modo previsto), mapas por matéria, materiais de referência (leis baixadas em Markdown E PDF), histórico do órgão, provas anteriores e concursos com sinergia. Suporta multi-cargo (pasta única com subpastas por cargo), modo previsto (--modo previsto) e reconciliação/retificação (--reconciliar).
 ---
 
@@ -52,6 +52,12 @@ Pastas fixas (`_COMUM`, `01-EDITAL`, `02-CRONOGRAMA`, etc.) também em UPPERCASE
 > **Importante**: o nome "bonito" do cargo (com acento e espaços) vai apenas no **título interno** dos arquivos `.md` (no `# Cabeçalho` e no frontmatter), nunca no nome de pasta ou arquivo.
 
 Helper disponível: `scripts/slugify.py "EDAS Administração"` retorna `EDAS-ADMINISTRACAO`.
+
+> **A fonte do nome é `cargos_validados[].sigla`, da Etapa 2 — não o texto digitado em
+> `--cargo`.** Slugificar o parâmetro faz o nome da pasta depender de como a pessoa
+> escreveu: `"TDAS Agente Social"` vira `TDAS-AGENTE-SOCIAL`, enquanto o mesmo cargo no
+> vault é `AGENTE-SOCIAL`. O `--cargo` serve para **localizar** o cargo no edital; quem
+> nomeia a pasta é a sigla que o parser devolveu.
 
 ## Modos de operação (OFICIAL vs PREVISTO)
 
@@ -123,66 +129,38 @@ Se o usuário rodar de novo em modo previsto (ex: trocou o edital proxy por um m
 Delegar para o subagent `edital-parser` via Task tool, passando:
 - caminho do edital extraído
 - lista de cargos pretendidos
+- **o `.meta.json` do concurso, se já existir** (é de lá que saem os `materia_id`
+  já declarados — ver 2.2)
 
-Output esperado (JSON salvo em pasta temporária):
-```json
-{
-  "orgao": "Sedes/DF",
-  "orgao_sigla": "SEDES",
-  "ano": 2026,
-  "banca": "Instituto Quadrix",
-  "datas_chave": {
-    "publicacao_edital": "2026-05-13",
-    "inscricoes_inicio": "2026-06-09",
-    "inscricoes_fim": "2026-07-13",
-    "pagamento_limite": "2026-07-14",
-    "isencao_periodo": ["2026-05-27", "2026-05-29"],
-    "prova_data": "2026-09-06",
-    "resultado_final": "2027-04-02"
-  },
-  "cargos_validados": [
-    {
-      "nome_completo": "Especialista em Desenvolvimento e Assistência Social - Administração",
-      "sigla": "EDAS-Administracao",
-      "codigo": "400",
-      "vagas_ac": 23,
-      "vagas_cr": 70,
-      "salario": 6071.09,
-      "requisitos": "Graduação em Administração Pública ou de Empresas",
-      "subitens_edital": ["20.2.4.1.1", "20.2.4.1.2", "20.2.4.1.3", "20.2.4.2.1"]
-    }
-  ],
-  "estrutura_prova": {
-    "objetiva": {
-      "total_questoes": 60,
-      "conhecimentos_gerais": {"qtd": 20, "peso": 1},
-      "conhecimentos_especificos": {"qtd": 40, "peso": 2},
-      "duracao_horas": 4
-    },
-    "discursiva": {
-      "presente": true,
-      "tipo": "estudo de caso",
-      "linhas_min": 20,
-      "linhas_max": 30,
-      "pontos": 100
-    },
-    "titulos": {"presente": true, "max_pontos": 10}
-  },
-  "materias": [
-    {
-      "nome": "Língua Portuguesa",
-      "tipo": "gerais",
-      "subitem_edital": "20.2.2.1",
-      "topicos": [
-        "Compreensão e interpretação de textos de gêneros variados",
-        "Reconhecimento de tipos e gêneros textuais",
-        "..."
-      ]
-    },
-    ...
-  ]
-}
+**O contrato de saída é `assets/schema-edital.json`, e só ele.** Não descreva aqui um
+formato paralelo: até a 1.5.0, este arquivo documentava uma `materias[]` plana e o
+`agents/edital-parser.md` documentava três chaves (`materias_gerais`,
+`materias_especificas_comuns`, `materias_especificas_cargo`). Dois documentos, dois
+contratos, e a conversão de um para o outro ficava com o modelo — foi assim que o
+`.meta.json` do SEDES e o do BB saíram com schemas diferentes entre si e do
+documentado, e que o BB ficou sem o conteúdo programático de um cargo inteiro.
+
 ```
+2.1 Rodar o edital-parser. Ele grava o JSON no caminho combinado.
+2.2 Resolver a identidade das matérias:
+      python3 scripts/materia_id.py --parsed <saida.json> --meta <pasta-do-concurso>
+    - id `declarado`/`similar`: REUSAR, sempre. É o vínculo com o aprofundamento.
+    - id `novo`: é PROPOSTA. Confirmar com o usuário antes de gravar (o script
+      sai com código 2 justamente para não deixar passar batido).
+    - matéria marcada como `candidato a divisão`: perguntar ao usuário se ela é
+      uma matéria ou várias. Quem decide granularidade é gente, não heurística.
+2.3 Validar o contrato ANTES de seguir:
+      python3 scripts/validate_parsed.py <saida.json>
+    Saída fora do schema PARA o fluxo. Nenhuma etapa seguinte roda com contrato
+    quebrado — todas assumem este formato.
+```
+
+> **Por que a confirmação humana existe.** A granularidade da matéria é juízo, não
+> dado: duas execuções desta skill sobre o MESMO edital do SEDES produziram 5-6
+> matérias em 15/07 e 20 em 01/08. Como o `materia_id` liga mapa, aprofundamento e
+> site, re-derivá-lo deixaria 20 mapas órfãos dos 90 assuntos já aprofundados. A
+> decisão está no ADR `identidade-da-materia-declarada-e-persistida`: a estabilidade
+> não vem de uma regra de derivação melhor, vem de **não re-derivar**.
 
 ### Etapa 3 — Análise da banca (WebSearch direto, sem subagent)
 
@@ -202,8 +180,15 @@ Output esperado (JSON salvo em pasta temporária):
 4.2 Aplicar lógica adaptativa (ver tabela abaixo)
 4.3 Distribuir matérias por fase, ponderando por peso
 4.4 Para multi-cargo: gerar cronograma por cargo, marcando matérias compartilhadas
-4.5 Salvar em {OUTPUT_DIR}/{CARGO_SLUG_UPPER}/02-CRONOGRAMA/ usando cronograma-macro.md.tpl
-    e cronograma-oficial.md.tpl (datas reais)
+4.5 Salvar o cronograma DO CARGO em {OUTPUT_DIR}/{CARGO_SLUG_UPPER}/02-CRONOGRAMA/
+    usando cronograma-macro.md.tpl.
+    O cronograma-oficial.md (datas do concurso: inscricao, prova, resultado) vai em
+    {OUTPUT_DIR}/_COMUM/01-EDITAL/, com cronograma-oficial.md.tpl — ele e do
+    CONCURSO e igual para todos os cargos, entao nao se repete por cargo.
+4.6 (opcional) Detalhe semanal: cronograma-semanal.md.tpl gera
+    {CARGO_SLUG_UPPER}/02-CRONOGRAMA/cronograma-semanal.md, com uma materia foco por
+    semana mais as de manutencao. Gerar quando o usuario pedir esse nivel de detalhe;
+    o macro sozinho ja e um cronograma completo.
 ```
 
 **Modo `previsto`** (sem datas — cronograma relativo):
@@ -240,7 +225,7 @@ Output esperado (JSON salvo em pasta temporária):
 
 ### Etapa 5 — Mapas por matéria (subagents `materia-mapper` em paralelo)
 
-Para cada matéria do edital, despachar um subagent `materia-mapper` em paralelo via múltiplas chamadas Task na mesma resposta. Input para cada um:
+Para cada matéria do edital, despachar um subagent `materia-mapper` em paralelo via múltiplas chamadas Task na mesma resposta. Input para cada um, **tudo inline no prompt**:
 - nome da matéria
 - **`materia_id`** (slug estável da matéria — é o que liga o mapa ao aprofundamento)
 - subitem do edital
@@ -248,13 +233,23 @@ Para cada matéria do edital, despachar um subagent `materia-mapper` em paralelo
 - banca (para perfil de cobrança)
 - cargo (para contexto)
 
-**Onde gravar — a regra do escopo.** Uma matéria pertence a `cargos[]` (quais cargos a
-cobram, da Etapa 2):
+> **Inline, literalmente.** O `materia-mapper` tem `tools: WebSearch, Write` — ele
+> **não lê arquivo**. Passar um caminho não funciona, e o modo de falha observado é
+> ele ir à web reconstruir os tópicos do edital a partir de blog de cursinho. Os
+> tópicos literais vão no texto do prompt, sempre.
 
-| `cargos[]` | Destino |
+**Onde gravar — a regra do escopo.** Uma matéria pertence a **`cargos_ids[]`** (quais
+cargos a cobram, da Etapa 2):
+
+| `cargos_ids[]` | Destino |
 |---|---|
 | mais de um cargo | `{OUTPUT_DIR}/_COMUM/03-MAPAS-COMUNS/{NN}-{materia-slug}.md` |
 | um cargo só | `{OUTPUT_DIR}/{CARGO_SLUG_UPPER}/03-MAPAS-MATERIAS/{NN}-{materia-slug}.md` |
+
+> **`cargos_ids`, não `cargos`.** São dois campos: `cargos` traz o nome legível
+> ("EDAS Serviço Social") e `cargos_ids` traz o slug (`EDAS-SERVICO-SOCIAL`). Rotear
+> pelo primeiro cria pasta com espaço e acento — `EDAS Serviço Social/03-MAPAS-MATERIAS/` —
+> contra a convenção UPPERCASE que o próprio validador checa.
 
 Quando a matéria vale para mais de um cargo mas **não para todos**, gravar em `_COMUM` do
 mesmo jeito e declarar a aplicabilidade no `00-INDICE.md` da pasta (ex.: "⚠️ Só TDAS —
@@ -327,8 +322,40 @@ Se `estrutura_prova.discursiva.presente == true`:
 9.3 Gerar lista de temas prováveis baseada em matérias específicas + atualidades do órgão
 9.4 Sugerir estrutura padrão de resposta
 9.5 Calendarizar treinos (mínimo 6-8 ao longo do cronograma)
-9.6 Salvar em {OUTPUT_DIR}/{CARGO_SLUG_UPPER}/07-DISCURSIVA/
+9.6 Salvar em {OUTPUT_DIR}/{CARGO_SLUG_UPPER}/07-DISCURSIVA/guia-discursiva.md
+    (nome fixo: o SEDES gerou `guia-discursiva.md` e o BB `discursiva.md`, porque a
+    etapa so dizia a pasta)
 ```
+
+### Etapa 9b — Avaliação de títulos (condicional, POR CARGO)
+
+Títulos raramente valem para todos os cargos: no SEDES, o edital os dá
+**exclusivamente ao EDAS**, e o TDAS não tem. Por isso a condição é por cargo, lida de
+`estrutura_prova_por_cargo[{CARGO}].titulos.presente`, com queda para
+`estrutura_prova.titulos.presente` quando não houver divergência entre cargos.
+
+Se verdadeiro, para cada cargo elegível:
+
+```
+9b.1 Extrair do edital o QUADRO DE ATRIBUIÇÃO DE PONTOS: alínea, título aceito,
+     pontuação por item e máximo por alínea (é uma tabela do edital — copiar os
+     valores, nunca estimá-los)
+9b.2 Registrar o total máximo e a regra de teto ("ainda que a soma exceda")
+9b.3 Extrair as regras de entrega: onde enviar, prazo, formato, o que desclassifica
+     um documento (ilegível, alínea errada)
+9b.4 Montar checklist acionável de documentos a reunir, separando titulação
+     acadêmica de experiência profissional — a alínea de experiência costuma ser a
+     de maior peso e a que exige mais tempo de coleta
+9b.5 Salvar em {OUTPUT_DIR}/{CARGO_SLUG_UPPER}/08-TITULOS.md usando titulos.md.tpl
+```
+
+> **Por que isto existe.** O artefato já era publicado pelo site (o `site_collector`
+> reconhece `08-TITULOS` e trata arquivo solto, não só pasta) e já existia no vault —
+> feito à mão. Só o **produtor** faltava: nenhuma etapa gerava. A Etapa 10 passa a
+> checar os dois lados: cargo com títulos e sem arquivo, e arquivo sem títulos no meta.
+
+> **Não inventar pontuação.** O quadro de pontos é dado do edital. Alínea que não
+> ficar clara vira pendência para conferência humana, como manda a regra geral.
 
 ### Etapa 10 — Índices, validação e finalização
 
@@ -341,12 +368,19 @@ Se `estrutura_prova.discursiva.presente == true`:
      - Soma de questões bate com total da prova
      - (modo oficial) Cronograma termina antes da prova
      - (modo previsto) Cronograma é relativo e banner PROVISÓRIO presente
+     - Cargo com títulos tem 08-TITULOS.md (e não há 08-TITULOS.md em cargo que o
+       meta diz não ter títulos — os dois lados denunciam erros diferentes)
      - PDFs baixados são válidos
 10.4 Gravar .meta.json (formato JSON nativo — item 11) contendo, no mínimo:
      - orgao, orgao_sigla, ano, banca, modo, data_geracao
      - datas_chave (prova_data etc.; null no modo previsto)
      - estrutura_prova COMPLETA (objetiva.total_questoes, discursiva, titulos,
-       vagas_ac, vagas_total, salario) — necessária para o DIFF ESTRUTURAL (item 16)
+       vagas_ac, vagas_total, salario) — necessária para o DIFF ESTRUTURAL (item 16).
+       `vagas_ac` e `salario` ficam na RAIZ: é de lá que o site os lê.
+     - estrutura_prova_por_cargo quando a estrutura DIFERIR entre cargos. No SEDES,
+       títulos valem exclusivamente para o EDAS; gravar um único
+       `titulos.presente: false` com uma observação em prosa afirma o falso para um
+       dos três cargos — num campo que alimenta o diff estrutural da retificação
      - materias[] com o CONTEÚDO PROGRAMÁTICO INTEGRAL: cada matéria com
        nome, subitem_edital e a lista `topicos` completa (item 7 — o diff exige
        materias[].topicos íntegros; gravar só hashes quebra a reconciliação)
@@ -374,8 +408,12 @@ R.0.1 Descobrir a pasta-alvo do concurso (item 5: buscar por PREFIXO, não por a
         casem com "{ORGAO}_*" (qualquer ano/sufixo).
       - Para cada candidata, ler .meta.json e casar por orgao (+ cargo, se multi-cargo).
       - Preferir, nesta ordem: *_V2-OFICIAL > *_OFICIAL (sem sufixo) > *_PREVISTO.
-R.0.2 Calcular o hash SHA-256 do texto do edital novo (item 21) e comparar com
-      edital_hash gravado no .meta.json da pasta-alvo.
+R.0.2 Calcular o hash com `python3 scripts/edital_hash.py <edital> --comparar <pasta-alvo>`.
+      NAO calcule o hash de outro jeito: o script e a fonte de verdade e define a
+      canonicalizacao do texto (CRLF, espaco no fim de linha, linhas em branco no
+      fim). Quando o calculo ficava a cargo do modelo, o SEDES gravou o hash dos
+      BYTES do PDF e o BB gravou o do TEXTO — duas convencoes, e no SEDES o
+      "edital identico" nunca era reconhecido.
       - Se IGUAL: avisar "o edital fornecido é idêntico ao já processado; nada a reconciliar"
         e encerrar (a menos que --force-overwrite).
       - Se DIFERENTE: seguir.
@@ -407,7 +445,8 @@ B.1 Determinar o próximo selo de versão da pasta oficial vigente:
     NUNCA sobrescrever a oficial vigente; ela é arquivada como referência.
 B.2 Ler o .meta.json da versão oficial vigente (conteúdo programático + estrutura)
 B.3 Executar as 10 etapas no modo oficial sobre o edital RETIFICADO -> {ORGAO}_{ANO}_V{n}-RETIFICADO
-B.4 diff (vigente vs retificada) reutilizando scripts/diff_editais.py:
+B.4 diff (vigente vs retificada) com scripts/diff_editais.py, que roda POR CARGO
+    (aceita --cargo para restringir a um):
     - inclui o DIFF ESTRUTURAL (item 16): vagas, salário, nº de questões, pesos,
       presença de discursiva, datas — retificações costumam mexer nesses campos
 B.5 Gerar {…}_V{n}-RETIFICADO/00-DIFF-RETIFICACAO.md (mesmo template de diff,
@@ -464,6 +503,7 @@ Ao final (ambos os casos), apresentar sumário: tópicos mantidos/removidos/novo
 │   ├── 02-CRONOGRAMA/
 │   ├── 03-MAPAS-MATERIAS/
 │   ├── 07-DISCURSIVA/               # se aplicável
+│   ├── 08-TITULOS.md                # se o cargo tiver avaliação de títulos
 │   └── 99-Status.md
 └── {CARGO-SLUG-UPPER-2}/            # se multi-cargo, ex: TDAS-ADMINISTRATIVO
     └── ...
@@ -526,12 +566,13 @@ Todos em `assets/templates/`:
 - `cronograma-oficial.md.tpl`
 - `cronograma-relativo.md.tpl` — **(modo previsto)** cronograma sem datas
 - `cronograma-macro.md.tpl`
-- `cronograma-semanal.md.tpl`
+- `cronograma-semanal.md.tpl` — **(opcional, Etapa 4.6)** detalhe semana a semana
 - `analise-banca.md.tpl`
 - `mapa-materia.md.tpl`
 - `historico-concurso.md.tpl`
 - `concursos-similares.md.tpl`
 - `discursiva.md.tpl`
+- `titulos.md.tpl` — **(Etapa 9b)** avaliação de títulos, por cargo elegível
 - `diff-reconciliacao.md.tpl` — **(reconciliação)** relatório previsto vs oficial
 - `indice-pasta.md.tpl`
 - `status.md.tpl`
@@ -540,10 +581,18 @@ Todos em `assets/templates/`:
 
 Em `scripts/`:
 - `extract_edital.py` — extrai texto do PDF via pdftotext
+- `materia_id.py` — **FONTE DE VERDADE da identidade de matéria**: resolve o
+  `materia_id` reusando o que já está declarado no `.meta.json`, em vez de re-derivar.
+  Não reimplemente a convenção em outro script
+- `validate_parsed.py` — valida a saída da Etapa 2 contra `assets/schema-edital.json`;
+  roda ANTES da Etapa 3 e para o fluxo se o contrato estiver quebrado
 - `fetch_lei.py` — **baixa lei de fonte oficial e gera MD + PDF** (item 9)
 - `fetch_pdf.py` — download robusto com retry e validação de header `%PDF` (para fontes que já servem PDF nativo)
 - `slugify.py` — converte cargo/órgão em slug UPPERCASE para nome de pasta
-- `diff_editais.py` — **(reconciliação)** compara conteúdo programático + estrutura da prova entre versões
+- `diff_editais.py` — **(reconciliação)** compara conteúdo programático + estrutura da
+  prova entre versões, **por cargo**. Lê `materias[].cargos_ids` e `materias_por_cargo`
+- `edital_hash.py` — **fonte de verdade do `edital_hash`**: SHA-256 do texto
+  canonicalizado, mais o `edital_pdf_sha256` dos bytes. Não calcule o hash em outro lugar
 - `validate_output.py` — validação pós-geração
 - `log_helper.py` — utilitário de logging (com subpasta por concurso)
 - `tests/test_smoke.py` — suíte de smoke tests (pytest ou standalone)

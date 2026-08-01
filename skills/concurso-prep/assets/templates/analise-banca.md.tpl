@@ -1,4 +1,8 @@
 ---
+data: {{DATA_GERACAO}}
+data_atualizacao: {{DATA_GERACAO}}
+tipo: documentacao
+status: ativo
 tags:
   - concurso/{{ORGAO_SLUG}}/{{ANO}}
   - banca/{{BANCA_SLUG}}

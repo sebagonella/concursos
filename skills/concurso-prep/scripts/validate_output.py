@@ -29,12 +29,20 @@ PLACEHOLDER_RE = re.compile(r"\{[A-Z_][A-Z0-9_]{2,}\}")
 # Em tabela markdown o pipe do wikilink vem escapado (\|); sem tratar isso o
 # alvo capturado fica com a barra no fim e todo link em tabela vira falso positivo.
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:#[^\]|]*)?(?:\\?\|[^\]]*)?\]\]")
-# "Estimativa: 30" ou "Meta: 30 questoes" nos mapas / "questoes_total: N" no meta
 # Casa a ESTIMATIVA DE QUESTOES NA PROVA declarada no mapa da materia.
 # NAO pode casar as metas de estudo do checklist ("- [ ] 20 questoes de treino"):
 # elas somavam milhares e faziam o check acusar divergencia em todo concurso.
+#
+# Aceita FAIXA ("~14 a 16 questoes", "12-14", "8 a 10"), e nao so inteiro unico.
+# O edital normalmente NAO distribui questoes por materia, entao a estimativa
+# honesta e uma faixa — e era assim que os 9 mapas do SEDES escreviam. Como o
+# regex antigo so casava inteiro, nao casava NENHUM deles, o check abortava com
+# INFO e reportava OK: o unico concurso onde a soma "passava" era o unico onde
+# ela nunca foi calculada.
 ESTIMATIVA_RE = re.compile(
-    r"estimativa[^\n:]{0,30}:?\s*\**\s*~?\s*(\d{1,3})\s*quest", re.IGNORECASE)
+    r"estimativa[^\n:]{0,30}:?\s*\**\s*~?\s*(\d{1,3})\s*"
+    r"(?:(?:a|ate|até|[-–—])\s*~?\s*(\d{1,3})\s*)?quest",
+    re.IGNORECASE)
 BANNER_RE = re.compile(r"CONTE[UÚ]DO PROVIS[OÓ]RIO", re.IGNORECASE)
 
 
@@ -90,6 +98,20 @@ def check_structure(root: Path) -> list[str]:
     for path in required:
         if not (root / path).exists():
             issues.append(f"FALTA: {path}")
+
+    cargos = [d for d in root.iterdir()
+              if d.is_dir() and not d.name.startswith((".", "_"))]
+    # Multi-cargo sem 03-MAPAS-COMUNS significa materia comum mapeada uma vez
+    # por cargo — o defeito que a 1.4.0 corrigiu na Etapa 5 e que nada checava.
+    if len(cargos) >= 2 and not (root / "_COMUM" / "03-MAPAS-COMUNS").exists():
+        issues.append("FALTA: _COMUM/03-MAPAS-COMUNS (concurso com "
+                      f"{len(cargos)} cargos deveria ter materias comuns)")
+
+    # Indice por pasta (Etapa 10.1). Duas execucoes da skill divergiram aqui — o
+    # SEDES gerou, o BB nao — e o validador nao exigia de nenhuma.
+    for pasta in sorted(root.glob("*/03-MAPAS-*")) + sorted(root.glob("*/04-MATERIAIS")):
+        if pasta.is_dir() and not (pasta / "00-INDICE.md").exists():
+            issues.append(f"FALTA: {pasta.relative_to(root)}/00-INDICE.md")
     return issues
 
 
@@ -191,10 +213,52 @@ def check_cobertura_mapas(root: Path, meta: dict) -> list[str]:
             issues.append(f"FALTA: matéria {mat['nome']!r} do edital não tem mapa "
                           f"de estudo em nenhum escopo")
 
+    # Mapa órfão não é informativo: é matéria que existe no vault e NÃO existe no
+    # `.meta.json`. Foi assim que o BB ficou com as três matérias do
+    # AGENTE-COMERCIAL fora do conteúdo programático — uma reconciliação perderia
+    # o cargo inteiro, e o único aviso era um INFO que não contava como problema.
     orfaos = [k for k in achados if k not in {m["materia_id"] for m in materias}]
     for o in sorted(orfaos):
-        issues.append(f"INFO: mapa {achados[o].name!r} não corresponde a nenhuma "
-                      f"matéria do .meta.json")
+        issues.append(f"MAPA SEM MATÉRIA: {achados[o].name!r} não corresponde a "
+                      f"nenhuma matéria do .meta.json — o conteúdo programático "
+                      f"dela não está gravado e a reconciliação vai ignorá-la")
+    return issues
+
+
+def titulos_esperados(meta: dict) -> tuple[dict[str, bool], bool]:
+    """(por cargo, default). Títulos podem valer só para PARTE dos cargos."""
+    est = meta.get("estrutura_prova") or {}
+    base = bool((est.get("titulos") or {}).get("presente"))
+    por_cargo = {}
+    for sigla, e in (meta.get("estrutura_prova_por_cargo") or {}).items():
+        por_cargo[sigla] = bool(((e or {}).get("titulos") or {}).get("presente"))
+    return por_cargo, base
+
+
+def check_titulos(root: Path, meta: dict) -> list[str]:
+    """Cargo que tem avaliação de títulos precisa ter o `08-TITULOS.md` — e vice-versa.
+
+    No SEDES, o edital dá títulos EXCLUSIVAMENTE ao EDAS; o `.meta.json` grava um
+    único `titulos.presente: false` com a ressalva em prosa, e o ASSISTENTE-SOCIAL
+    (que é EDAS) tem o arquivo. O campo afirma o falso para um dos três cargos, num
+    campo que alimenta o diff estrutural da retificação. Os dois lados são checados
+    porque cada um denuncia um erro diferente: falta o arquivo, ou o meta está errado.
+    """
+    por_cargo, base = titulos_esperados(meta)
+    issues = []
+    for d in sorted(root.iterdir()):
+        if not d.is_dir() or d.name.startswith((".", "_")):
+            continue
+        tem_arquivo = (d / "08-TITULOS.md").exists()
+        espera = por_cargo.get(d.name, base)
+        if espera and not tem_arquivo:
+            issues.append(f"FALTA: {d.name}/08-TITULOS.md — o edital prevê avaliação "
+                          f"de títulos para este cargo")
+        elif tem_arquivo and not espera:
+            issues.append(f"META INCOERENTE: {d.name} tem 08-TITULOS.md, mas o "
+                          f"`.meta.json` diz que não há títulos para ele. Se os títulos "
+                          f"valem só para parte dos cargos, use "
+                          f"`estrutura_prova_por_cargo`")
     return issues
 
 
@@ -212,8 +276,22 @@ def check_placeholders(root: Path) -> list[str]:
     return issues
 
 
-def check_wikilinks(root: Path) -> list[str]:
-    """Resolve links dentro da raiz E em pastas-irmas (item 13)."""
+def achar_vault_root(inicio: Path) -> Path | None:
+    """Sobe a arvore procurando `.obsidian/` — a raiz do vault."""
+    for p in [inicio, *inicio.parents]:
+        if (p / ".obsidian").is_dir():
+            return p
+    return None
+
+
+def check_wikilinks(root: Path, vault_root: Path | None = None) -> list[str]:
+    """Resolve links dentro da raiz, em pastas-irmas (item 13) E no vault.
+
+    Sem a raiz do vault, todo link para material que mora FORA da pasta do
+    concurso vira falso positivo: no SEDES eram 19, todos apontando para PDFs
+    reais em `40_RECURSOS/LIVROS/`, e o concurso fechava com exit 1 por
+    problema nenhum. Validador que da alarme falso deixa de ser lido.
+    """
     issues = []
     search_roots = [root]
     parent = root.parent
@@ -253,6 +331,12 @@ def check_wikilinks(root: Path) -> list[str]:
                 continue
             if (root / f"{target}.md").exists() or (root / target).exists():
                 continue
+            # Link para fora da pasta do concurso, mas dentro do vault: o
+            # aprofundamento aponta para o livro em 40_RECURSOS/LIVROS/, e isso
+            # e legitimo.
+            if vault_root and ((vault_root / target).exists()
+                               or (vault_root / f"{target}.md").exists()):
+                continue
             issues.append(f"LINK QUEBRADO em {md.relative_to(root)}: [[{target}]]")
     return issues
 
@@ -269,6 +353,25 @@ def check_pdfs(root: Path) -> list[str]:
     return issues
 
 
+def faixa_estimada(texto: str) -> tuple[int, int] | None:
+    """(minimo, maximo) das estimativas declaradas no mapa, ou None se nao ha.
+
+    Estimativa unica vira faixa degenerada (n, n). Assim o check compara o total
+    da prova com um INTERVALO, que e a forma honesta: o edital nao distribui
+    questoes por materia, e forcar um inteiro era o que fazia o mapa fingir uma
+    precisao que ninguem tem.
+    """
+    lo = hi = 0
+    achou = False
+    for m in ESTIMATIVA_RE.finditer(texto):
+        a = int(m.group(1))
+        b = int(m.group(2)) if m.group(2) else a
+        lo += min(a, b)
+        hi += max(a, b)
+        achou = True
+    return (lo, hi) if achou else None
+
+
 def check_soma_questoes(root: Path, meta: dict, tol_pct: float) -> list[str]:
     """Item 2: soma das estimativas dos mapas ~= total da prova."""
     total_prova = None
@@ -282,33 +385,45 @@ def check_soma_questoes(root: Path, meta: dict, tol_pct: float) -> list[str]:
     # (_COMUM) valem para todos, e as especificas so para o cargo dele. Somar os
     # mapas de todos os cargos de uma vez acusa divergencia em todo concurso
     # multi-cargo — a soma tem de ser feita por cargo.
-    por_cargo: dict[str, int] = {}
-    comum = 0
-    achou = False
-    for md in root.rglob("*.md"):
+    por_cargo: dict[str, list[int]] = {}
+    comum = [0, 0]
+    sem_estimativa: list[str] = []
+    for md in sorted(root.rglob("*.md")):
         partes = md.relative_to(root).parts
         if not any("03-MAPAS-MATERIAS" in p.upper() or "03-MAPAS-COMUNS" in p.upper()
                    for p in partes):
             continue
-        n = sum(int(m.group(1)) for m in ESTIMATIVA_RE.finditer(_read(md)))
-        if not n:
+        if re.match(r"^(00-INDICE|99-Status)", md.stem, re.IGNORECASE):
             continue
-        achou = True
+        faixa = faixa_estimada(_read(md))
+        if faixa is None:
+            sem_estimativa.append(str(md.relative_to(root)))
+            continue
         cargo = partes[0]
-        if cargo.upper() == "_COMUM":
-            comum += n
-        else:
-            por_cargo[cargo] = por_cargo.get(cargo, 0) + n
-    if not achou:
-        return ["INFO: nenhuma estimativa de questoes encontrada nos mapas"]
+        alvo = comum if cargo.upper() == "_COMUM" else por_cargo.setdefault(cargo, [0, 0])
+        alvo[0] += faixa[0]
+        alvo[1] += faixa[1]
+
+    issues = []
+    # Mapa sem estimativa nao pode sair como INFO: era assim que "zero mapas com
+    # estimativa" passava como OK — o check nao rodava e ninguem ficava sabendo.
+    if sem_estimativa:
+        issues.append(
+            f"SEM ESTIMATIVA em {len(sem_estimativa)} mapa(s), que ficam de fora "
+            f"da soma: " + ", ".join(sem_estimativa[:5])
+            + ("..." if len(sem_estimativa) > 5 else ""))
+    if not por_cargo and comum == [0, 0]:
+        return issues + ["NENHUM mapa declara estimativa de questoes; a soma nao "
+                         "foi verificada (nao confunda com verificada e correta)"]
 
     tol = total_prova * tol_pct / 100
-    alvos = {c: v + comum for c, v in por_cargo.items()} or {"(cargo unico)": comum}
-    issues = []
-    for cargo, soma in sorted(alvos.items()):
-        if abs(soma - total_prova) > tol:
-            issues.append(f"SOMA DIVERGENTE [{cargo}]: mapas somam {soma}, prova tem "
-                          f"{total_prova} (tolerancia {tol_pct}% = {tol:.0f})")
+    alvos = ({c: [v[0] + comum[0], v[1] + comum[1]] for c, v in por_cargo.items()}
+             or {"(cargo unico)": comum})
+    for cargo, (lo, hi) in sorted(alvos.items()):
+        if total_prova < lo - tol or total_prova > hi + tol:
+            faixa_txt = f"{lo}" if lo == hi else f"{lo}-{hi}"
+            issues.append(f"SOMA DIVERGENTE [{cargo}]: mapas estimam {faixa_txt}, "
+                          f"prova tem {total_prova} (tolerancia {tol_pct}% = {tol:.0f})")
     return issues
 
 
@@ -364,6 +479,10 @@ def main():
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--tolerancia", type=float, default=5.0, help="tolerancia %% da soma de questoes")
     ap.add_argument("--modo", choices=["auto", "oficial", "previsto"], default="auto")
+    ap.add_argument("--vault-root", type=Path, default=None,
+                    help="raiz do vault; sem ela, link para fora da pasta do "
+                         "concurso (ex: 40_RECURSOS/LIVROS/) vira falso positivo. "
+                         "Auto-detectada procurando .obsidian/ na arvore acima.")
     args = ap.parse_args()
 
     if not args.path.is_dir():
@@ -372,13 +491,15 @@ def main():
 
     meta = carregar_meta(args.path)
     modo = detectar_modo(args.path, meta, args.modo)
+    vault_root = args.vault_root or achar_vault_root(args.path.resolve())
 
     results = {
         "estrutura": check_structure(args.path),
         "placeholders": check_placeholders(args.path),
-        "wikilinks": check_wikilinks(args.path),
+        "wikilinks": check_wikilinks(args.path, vault_root),
         "soma_questoes": check_soma_questoes(args.path, meta, args.tolerancia),
         "cobertura_mapas": check_cobertura_mapas(args.path, meta),
+        "titulos": check_titulos(args.path, meta),
         "pdfs": check_pdfs(args.path),
     }
     if meta.get("_erro"):
@@ -408,10 +529,15 @@ def main():
             print()
         print(f"Total: {total_issues} problema(s) real(is) encontrado(s)")
 
+    # Item 15: log por concurso. Gravar na raiz de .logs/ misturava execucoes de
+    # concursos diferentes — no vault real havia 43 `validacao-*.json` soltos, sem
+    # como saber de quem era cada um.
     logs_dir = args.path.parent / ".logs"
     if logs_dir.exists():
+        destino = logs_dir / args.path.name
+        destino.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        (logs_dir / f"validacao-{ts}.json").write_text(
+        (destino / f"validacao-{ts}.json").write_text(
             json.dumps({"modo": modo, "resultados": results}, indent=2, ensure_ascii=False),
             encoding="utf-8")
 
