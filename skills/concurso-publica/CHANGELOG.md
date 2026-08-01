@@ -2,6 +2,27 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.12.0] - 2026-08-01
+
+### Corrigido
+- **"Vagas (AC)" e "Salário" nunca renderizavam na ficha do concurso.** O
+  `site_builder` procurava os dois na RAIZ do `.meta.json`, e num concurso multi-cargo
+  eles vivem em `cargos_validados[]` — o SEDES tem 3 cargos com vagas e salários
+  diferentes, e não existe número de raiz que os represente sem inventar um agregado.
+  A ficha passa a mostrar **por cargo** quando a raiz não tem o valor, e continua
+  mostrando o agregado quando tem (concurso de cargo único).
+- **A allowlist do modelo não deixava o dado chegar.** O `site_collector` filtra o
+  `.meta.json` para um conjunto explícito de campos — o que é bom, o modelo é contrato
+  público — mas `cargos_validados` não estava nele. Produtor e consumidor discordando de
+  novo, e o sintoma era um campo que simplesmente não aparecia.
+- Salário numérico saía cru (`4762.97`). Vira `R$ 4.762,97`.
+
+### Notas
+- 3 testes novos; 134 na suíte.
+- O fixture dos dois testes de ficha é montado pelo **coletor real**, não à mão: montar
+  o modelo campo a campo é inventar o que o gerador produz, e foi assim que dois
+  defeitos ficaram verdes por anos neste repo.
+
 ## [0.11.3] - 2026-07-31
 
 ### Corrigido

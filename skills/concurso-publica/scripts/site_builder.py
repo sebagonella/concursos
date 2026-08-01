@@ -1516,6 +1516,17 @@ def pagina_documento(doc: dict, secao: dict, escopo: dict, concurso: str,
                   doc.get("resumo", ""))
 
 
+def fmt_valor(campo: str, v) -> str:
+    """Salário numérico vira moeda; o resto sai como veio.
+
+    O `.meta.json` guarda `remuneracao: 4762.97`, e imprimir isso cru numa ficha
+    de concurso fica com cara de dado bruto vazado para a tela.
+    """
+    if campo == "salario" and isinstance(v, (int, float)):
+        return "R$ " + f"{v:,.2f}".replace(",", "·").replace(".", ",").replace("·", ".")
+    return str(v)
+
+
 def pagina_capa(modelo: dict, rotas: "Rotas", rota: str) -> str:
     meta = modelo.get("meta", {})
     campos = []
@@ -1530,10 +1541,28 @@ def pagina_capa(modelo: dict, rotas: "Rotas", rota: str) -> str:
                            (f" · faltam {faltam} dias" if faltam > 0 else "")))
         except ValueError:
             campos.append(("Prova", dk["prova_data"]))
-    if meta.get("vagas_ac"):
-        campos.append(("Vagas (AC)", meta["vagas_ac"]))
-    if meta.get("salario"):
-        campos.append(("Salário", meta["salario"]))
+    # Vagas e salário são POR CARGO num concurso multi-cargo, e é assim que o
+    # `.meta.json` os guarda — em `cargos_validados[]`. Lendo só da raiz, os dois
+    # campos NUNCA renderizavam: o SEDES tem 3 cargos com vagas e salários
+    # diferentes, e não existe número de raiz que os represente sem inventar um
+    # agregado. Preferir a raiz quando ela existir (concurso de cargo único),
+    # cair para o detalhe por cargo quando não.
+    for rotulo, campo in (("Vagas (AC)", "vagas_ac"), ("Salário", "salario")):
+        if meta.get(campo):
+            campos.append((rotulo, fmt_valor(campo, meta[campo])))
+            continue
+        por_cargo = []
+        for c in meta.get("cargos_validados") or []:
+            if not isinstance(c, dict):
+                continue
+            v = c.get(campo) or (c.get("vagas_total") if campo == "vagas_ac" else None)
+            # A sigla é o identificador que o site usa na navegação inteira; usar
+            # `nome_legivel` aqui seria errado — ela é para slug de CONCURSO.
+            if c.get("sigla") and v:
+                por_cargo.append((c["sigla"], fmt_valor(campo, v)))
+        if por_cargo:
+            campos.append((rotulo + " por cargo",
+                           " · ".join(f"{s}: {v}" for s, v in por_cargo)))
     ep = meta.get("estrutura_prova") or {}
     if isinstance(ep, dict) and (ep.get("objetiva") or {}).get("total_questoes"):
         campos.append(("Questões", ep["objetiva"]["total_questoes"]))
