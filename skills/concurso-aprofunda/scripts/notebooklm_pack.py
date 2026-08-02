@@ -31,6 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import eh_pasta_aprofundamento  # noqa: E402
+from renomear_aprof import frontmatter_sem_linha_vazia  # noqa: E402
 
 
 def slug(texto: str) -> str:
@@ -259,21 +260,73 @@ def preencher(tpl: str, ctx: dict) -> str:
     out = tpl
     for k, v in ctx.items():
         out = out.replace("{" + k + "}", str(v))
-    return _frontmatter_sem_linha_vazia(out)
+    return frontmatter_sem_linha_vazia(out)
 
 
-def _frontmatter_sem_linha_vazia(txt: str) -> str:
-    """Tira linhas em branco de dentro do frontmatter.
+def gerar_para_pasta(pasta: Path, subdir: Path, *, concurso: str = "", materia: str = "",
+                     leis_dir: Path = None, tpl: str) -> dict:
+    """Gera/atualiza o `_fonte-notebooklm.md` de UMA pasta de aprofundamento.
 
-    O bloco de campos herdados fica vazio no caso comum (pacote sem automação), e um
-    placeholder vazio deixaria uma linha solta no meio do YAML. Só o frontmatter é
-    tocado — o corpo depende das linhas em branco para separar os blocos Markdown.
+    Extraída de `main()` para que quem mexe numa pasta só (ampliar_aprofundamento.py,
+    depois de renomear) não regenere os pacotes de todos os irmãos, espalhando
+    `.bak.md` alheios.
+
+    `subdir` é a pasta do ASSUNTO — a comparação `pasta == subdir` é o que
+    distingue o layout plano legado (sem sufixo no nome do notebook).
+
+    Devolve {"estado": "gerado"|"inalterado"|"pulado", ...}; nunca levanta.
     """
-    m = re.match(r"^(---\s*\n)(.*?)(\n---\s*\n)", txt, re.DOTALL)
-    if not m:
-        return txt
-    limpo = "\n".join(l for l in m.group(2).split("\n") if l.strip())
-    return m.group(1) + limpo + m.group(3) + txt[m.end():]
+    assunto_md = arquivo_principal(pasta)
+    if assunto_md is None:
+        return {"estado": "pulado", "motivo": "sem .md principal", "pasta": str(pasta)}
+    fm = ler_frontmatter(assunto_md)
+    if tem_placeholder(fm.get("_corpo", "")):
+        return {"estado": "pulado", "motivo": "placeholder por preencher",
+                "pasta": f"{subdir.name}/{pasta.name}"}
+
+    assunto = fm.get("title", subdir.name)
+    leis = leis_relacionadas(fm.get("_corpo", ""), leis_dir)
+    base = assunto_md.stem          # nome único do aprofundamento
+    nivel = (fm.get("nivel") or "padrao").strip()
+    # a nota do vault é a âncora dos prompts; o livro NUNCA entra neles
+    nota = assunto_md.name
+    sufixo_nome = "" if pasta == subdir else f" — {fm.get('aprofundamento', pasta.name)}"
+    ctx = {
+        "ASSUNTO": assunto + sufixo_nome,
+        "MATERIA": materia or fm.get("materia", ""),
+        "CONCURSO": concurso or fm.get("concurso", ""),
+        "TAG_ASSUNTO": subdir.name,
+        "SLUG_ASSUNTO": base,
+        "LISTA_FONTES": montar_lista_fontes(assunto_md, leis, fm),
+        "PROMPT_AUDIO": montar_prompt_audio(assunto, materia, nivel, nota),
+        "PROMPT_MINDMAP": montar_prompt_mindmap(assunto, nota),
+        "PROMPT_VIDEO": montar_prompt_video(assunto, nota),
+        "PROMPT_REPORT": montar_prompt_report(assunto, nota),
+        "PERGUNTAS_CHAT": montar_perguntas(assunto),
+    }
+    destino = pasta / "_fonte-notebooklm.md"
+
+    # Campos que o USUÁRIO preenche à mão viajam do pack antigo para o novo.
+    # Sem isso, a regeneração manda o link do notebook para o `.bak.md` e o
+    # botão "Abrir no NotebookLM" desaparece do site sem erro nenhum — é a
+    # única informação do pacote que não dá para regerar.
+    herdado = herdar_campos(destino)
+    ctx["NOTEBOOKLM_URL"] = herdado["url"]
+    ctx["NOTEBOOKLM_STATUS"] = herdado["status"]
+    ctx["NOTEBOOKLM_EXTRA"] = bloco_extras_nb(herdado["extras"])
+
+    novo = preencher(tpl, ctx)
+    bak = None
+    # preservar trabalho do usuário: só sobrescreve com backup, e só se mudou
+    if destino.exists():
+        antigo = destino.read_text(encoding="utf-8")
+        if antigo == novo:
+            return {"estado": "inalterado", "arquivo": str(destino)}
+        bak = destino.with_suffix(".bak.md")
+        shutil.copy2(destino, bak)
+    destino.write_text(novo, encoding="utf-8")
+    return {"estado": "gerado", "arquivo": str(destino),
+            **({"backup": str(bak)} if bak else {})}
 
 
 def main():
@@ -294,57 +347,19 @@ def main():
             continue
         # um pacote POR APROFUNDAMENTO: fontes diferentes = notebooks diferentes
         for pasta in pastas_de_aprofundamento(subdir):
-            assunto_md = arquivo_principal(pasta)
-            if assunto_md is None:
-                continue
-            fm = ler_frontmatter(assunto_md)
-            if tem_placeholder(fm.get("_corpo", "")):
-                pulados.append(f"{subdir.name}/{pasta.name}")
-                continue
-            assunto = fm.get("title", subdir.name)
-            leis = leis_relacionadas(fm.get("_corpo", ""), args.leis_dir)
-
-            base = assunto_md.stem          # nome único do aprofundamento
-            nivel = (fm.get("nivel") or "padrao").strip()
-            # a nota do vault é a âncora dos prompts; o livro NUNCA entra neles
-            nota = assunto_md.name
-            sufixo_nome = "" if pasta == subdir else f" — {fm.get('aprofundamento', pasta.name)}"
-            ctx = {
-                "ASSUNTO": assunto + sufixo_nome,
-                "MATERIA": args.materia or fm.get("materia", ""),
-                "CONCURSO": args.concurso or fm.get("concurso", ""),
-                "TAG_ASSUNTO": subdir.name,
-                "SLUG_ASSUNTO": base,
-                "LISTA_FONTES": montar_lista_fontes(assunto_md, leis, fm),
-                "PROMPT_AUDIO": montar_prompt_audio(assunto, args.materia, nivel, nota),
-                "PROMPT_MINDMAP": montar_prompt_mindmap(assunto, nota),
-                "PROMPT_VIDEO": montar_prompt_video(assunto, nota),
-                "PROMPT_REPORT": montar_prompt_report(assunto, nota),
-                "PERGUNTAS_CHAT": montar_perguntas(assunto),
-            }
-            destino = pasta / "_fonte-notebooklm.md"
-
-            # Campos que o USUÁRIO preenche à mão viajam do pack antigo para o novo.
-            # Sem isso, a regeneração manda o link do notebook para o `.bak.md` e o
-            # botão "Abrir no NotebookLM" desaparece do site sem erro nenhum — é a
-            # única informação do pacote que não dá para regerar.
-            herdado = herdar_campos(destino)
-            ctx["NOTEBOOKLM_URL"] = herdado["url"]
-            ctx["NOTEBOOKLM_STATUS"] = herdado["status"]
-            ctx["NOTEBOOKLM_EXTRA"] = bloco_extras_nb(herdado["extras"])
-
-            novo = preencher(tpl, ctx)
-            # preservar trabalho do usuário: só sobrescreve com backup, e só se mudou
-            if destino.exists():
-                antigo = destino.read_text(encoding="utf-8")
-                if antigo == novo:
-                    inalterados.append(str(destino))
-                    continue
-                bak = destino.with_suffix(".bak.md")
-                shutil.copy2(destino, bak)
-                backups.append(str(bak))
-            destino.write_text(novo, encoding="utf-8")
-            gerados.append(str(destino))
+            r = gerar_para_pasta(pasta, subdir, concurso=args.concurso,
+                                 materia=args.materia, leis_dir=args.leis_dir, tpl=tpl)
+            if r["estado"] == "pulado":
+                # "sem .md principal" não é pendência de preenchimento: a pasta
+                # simplesmente não é um aprofundamento, e antes era ignorada calada
+                if r.get("motivo") != "sem .md principal":
+                    pulados.append(r["pasta"])
+            elif r["estado"] == "inalterado":
+                inalterados.append(r["arquivo"])
+            else:
+                gerados.append(r["arquivo"])
+                if r.get("backup"):
+                    backups.append(r["backup"])
 
     print(json.dumps({
         "gerados": len(gerados),

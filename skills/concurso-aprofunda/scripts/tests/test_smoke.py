@@ -1198,6 +1198,84 @@ def test_migrador_recusa_pasta_com_dois_md_principais():
         assert "mais de um .md principal" in motivos, motivos
 
 
+# ------------------- renomear_aprof (máquina compartilhada) ------------------- #
+def test_migrador_usa_a_mesma_reescrita_de_link_do_modulo():
+    """A regra de layout mora num lugar só.
+
+    Copiar a reescrita de wikilink para o outro consumidor reproduziria o modo de
+    falha do fix_notebooklm_packs.py: uma cópia que deriva do original e um dia
+    acha zero, calada. Identidade de objeto, não igualdade de comportamento —
+    para o teste falhar já na cópia, antes de a cópia divergir.
+    """
+    import migrar_aprofundamentos as migr
+    import renomear_aprof as ren
+    assert migr.reescrever_referencias is ren.reescrever_referencias
+    assert migr.mapa_de_links is ren.mapa_de_links
+    assert migr.planejar_movimentos is ren.planejar_movimentos
+    assert migr.atualizar_frontmatter is ren.atualizar_frontmatter
+    assert migr.PREFIXOS_RENOMEAR is ren.PREFIXOS_RENOMEAR
+
+    import notebooklm_pack as nlp
+    assert nlp.frontmatter_sem_linha_vazia is ren.frontmatter_sem_linha_vazia
+
+
+def test_mapa_de_links_cobre_path_e_stem_nos_tres_finais():
+    """O índice referencia por path a partir de 'assuntos/'; o Obsidian, por stem.
+    E o pipe aparece cru, escapado (tabela) e ausente (link sem alias)."""
+    import renomear_aprof as ren
+    de = Path("/v/CONCURSOS/X/m/assuntos/crase/padrao--a/crase--padrao--a--X.md")
+    mapa = ren.mapa_de_links([(de, "crase--padrao--a+b--X.md")], "padrao--a+b")
+
+    rel_antigo = "assuntos/crase/padrao--a/crase--padrao--a--X"
+    rel_novo = "assuntos/crase/padrao--a+b/crase--padrao--a+b--X"
+    for fim in ("|", "\\|", "]]"):
+        assert mapa[rel_antigo + fim] == rel_novo + fim, f"path com final {fim!r}"
+        assert mapa["[[crase--padrao--a--X" + fim] == "[[crase--padrao--a+b--X" + fim
+
+
+def test_sidecar_do_notebooklm_viaja_com_o_aprofundamento():
+    """`_notebooklm-estado.json` guarda o notebook_id: perdê-lo obriga a recriar o
+    notebook do zero. No layout legado-plano ele caía no `continue` de 'arquivo
+    alheio' e ficava para trás."""
+    import renomear_aprof as ren
+    with tempfile.TemporaryDirectory() as d:
+        origem = Path(d) / "assuntos" / "crase"
+        origem.mkdir(parents=True)
+        md = origem / "crase.md"
+        md.write_text("---\ntitle: x\n---\n", encoding="utf-8")
+        (origem / "_notebooklm-estado.json").write_text("{}", encoding="utf-8")
+        (origem / "anotacao-solta.md").write_text("minha", encoding="utf-8")
+
+        movs = dict(ren.planejar_movimentos(origem, md, "crase--padrao--a--X",
+                                            formato="legado-plano"))
+        nomes = {p.name: novo for p, novo in movs.items()}
+        assert nomes.get("_notebooklm-estado.json") == "_notebooklm-estado.json"
+        assert "anotacao-solta.md" not in nomes, "arquivo alheio não pode viajar"
+
+
+def test_gerar_para_pasta_nao_toca_nos_irmaos():
+    """Regenerar o pack de UMA pasta não pode espalhar .bak.md pelas outras — foi
+    para isso que gerar_para_pasta() saiu de dentro do main()."""
+    import notebooklm_pack as nlp
+    tpl = (ROOT.parent / "assets/templates/fonte-notebooklm.md.tpl").read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as d:
+        assunto = Path(d) / "assuntos" / "crase"
+        fm = ('---\ntitle: "Crase"\nmateria: "Português"\nconcurso: "X_2026"\n'
+              'nivel: padrao\naprofundamento: "{ident}"\n---\n\nResumo real.\n')
+        for ident in ("padrao--a", "padrao--b"):
+            p = assunto / ident
+            p.mkdir(parents=True)
+            (p / f"crase--{ident}--X_2026.md").write_text(fm.format(ident=ident),
+                                                          encoding="utf-8")
+
+        alvo = assunto / "padrao--a"
+        r = nlp.gerar_para_pasta(alvo, assunto, concurso="X_2026", tpl=tpl)
+        assert r["estado"] == "gerado", r
+        assert (alvo / "_fonte-notebooklm.md").exists()
+        assert not (assunto / "padrao--b" / "_fonte-notebooklm.md").exists(), \
+            "gerou o pacote do irmão"
+
+
 def _run_standalone():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     falhas = 0

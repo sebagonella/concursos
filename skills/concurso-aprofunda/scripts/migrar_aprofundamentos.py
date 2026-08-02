@@ -47,10 +47,13 @@ from aprofundamento_id import (  # noqa: E402
     slug, slug_fonte, slug_suspeito, id_aprofundamento, nome_base,
     eh_pasta_aprofundamento, parse_id,
 )
-
-# arquivos que acompanham o aprofundamento e devem migrar junto
-PREFIXOS_RENOMEAR = ("flashcards-", "podcast-", "mapa-mental-", "video-", "report-")
-ACOMPANHAM = ("cards.json", "_fonte-notebooklm.md", "_fonte-notebooklm.bak.md")
+# A máquina de renomear (quais arquivos viajam, como o wikilink é reescrito) mora
+# num lugar só, compartilhada com ampliar_aprofundamento.py — ver renomear_aprof.py.
+from renomear_aprof import (  # noqa: E402  (reexportados: os testes importam daqui)
+    PREFIXOS_RENOMEAR, ACOMPANHAM, ler_frontmatter, atualizar_frontmatter,
+    planejar_movimentos, mapa_de_links, reescrever_referencias,
+    reescrever_wikilinks_flashcards,
+)
 
 MARCAS_DETALHADO = (
     "Desenvolvimento completo",
@@ -58,27 +61,6 @@ MARCAS_DETALHADO = (
     "Questões comentadas",
     "Divergências entre autores",
 )
-
-
-def ler_frontmatter(md: Path) -> dict:
-    try:
-        txt = md.read_text(encoding="utf-8")
-    except Exception:
-        return {"_corpo": ""}
-    m = re.match(r"^---\s*\n(.*?)\n---\s*\n", txt, re.DOTALL)
-    fm = {}
-    if m:
-        for linha in m.group(1).split("\n"):
-            if ":" in linha and not linha.lstrip().startswith("-"):
-                k, _, v = linha.partition(":")
-                v = v.strip()
-                if not v.startswith(('"', "'")):
-                    v = re.split(r"\s+#", v, maxsplit=1)[0].strip()
-                fm[k.strip()] = v.strip('"').strip("'")
-    fm["_corpo"] = txt[m.end():] if m else txt
-    fm["_texto"] = txt
-    fm["_fm_bruto"] = m.group(1) if m else ""
-    return fm
 
 
 def separar_normas(valor: str) -> list[str]:
@@ -142,21 +124,6 @@ def origem_dos_aprofundamentos(assunto_dir: Path):
         info = parse_id(d.name)
         if info and info.get("formato") == "0.3" and (md := _md_principal(d)):
             yield d, md, "pasta-0.3"
-
-
-def atualizar_frontmatter(texto: str, novos: dict) -> str:
-    """Insere/atualiza chaves no frontmatter, preservando o resto."""
-    m = re.match(r"^(---\s*\n)(.*?)(\n---\s*\n)", texto, re.DOTALL)
-    if not m:
-        return texto
-    corpo_fm = m.group(2)
-    for k, v in novos.items():
-        linha = f'{k}: "{v}"' if not str(v).startswith('[') else f"{k}: {v}"
-        if re.search(rf"^{re.escape(k)}:", corpo_fm, re.M):
-            corpo_fm = re.sub(rf"^{re.escape(k)}:.*$", linha, corpo_fm, count=1, flags=re.M)
-        else:
-            corpo_fm += f"\n{linha}"
-    return m.group(1) + corpo_fm + m.group(3) + texto[m.end():]
 
 
 def migrar_assunto(assunto_dir: Path, overrides: dict, aplicar: bool,
@@ -224,23 +191,8 @@ def migrar_assunto(assunto_dir: Path, overrides: dict, aplicar: bool,
             continue
 
         # o que move e como se chama no destino
-        movimentos = []
-        for p in sorted(origem.iterdir()):
-            if p.is_dir():
-                continue
-            nome = p.name
-            if p == md:
-                novo = f"{base_novo}.md"
-            elif nome.startswith(PREFIXOS_RENOMEAR):
-                prefixo = next(x for x in PREFIXOS_RENOMEAR if nome.startswith(x))
-                novo = f"{prefixo}{base_novo}{p.suffix}"
-            elif nome in ACOMPANHAM:
-                novo = nome
-            elif formato == "legado-plano":
-                continue        # arquivo alheio ao aprofundamento: não mexe
-            else:
-                novo = nome
-            movimentos.append((str(p), novo))
+        movimentos = [(str(p), novo)
+                      for p, novo in planejar_movimentos(origem, md, base_novo, formato)]
         item["movimentos"] = [{"de": d, "para": n} for d, n in movimentos]
         item["status"] = "MIGRAR"
 
@@ -257,8 +209,7 @@ def migrar_assunto(assunto_dir: Path, overrides: dict, aplicar: bool,
                 "fontes": ", ".join(fontes),
             })
             # wikilinks de flashcards passam a apontar para o novo nome
-            txt = re.sub(r"\[\[flashcards-[^\]|]*?(\|[^\]]*)?\]\]",
-                         lambda m: f"[[flashcards-{base_novo}{m.group(1) or ''}]]", txt)
+            txt = reescrever_wikilinks_flashcards(txt, base_novo)
             alvo.write_text(txt, encoding="utf-8")
             # limpa as pastas de origem que ficaram vazias (a do id e a 'aprofundamentos')
             if origem != assunto_dir and origem.is_dir() and not any(origem.iterdir()):
@@ -268,35 +219,6 @@ def migrar_assunto(assunto_dir: Path, overrides: dict, aplicar: bool,
                 antiga.rmdir()
         resultados.append(item)
     return resultados
-
-
-def reescrever_referencias(raiz: Path, mapa: dict, aplicar: bool) -> list[dict]:
-    """Atualiza wikilinks que apontam para os paths/nomes antigos.
-
-    Os índices de matéria (00-INDICE-*.md) vivem FORA de assuntos/ e referenciam
-    cada assunto pelo path completo — sem esta etapa, a migração deixa o vault
-    cheio de link quebrado.
-
-    `mapa` leva 'trecho antigo' -> 'trecho novo', do mais longo para o mais curto
-    (para o path completo casar antes do nome solto).
-    """
-    tocados = []
-    chaves = sorted(mapa, key=len, reverse=True)
-    for md in sorted(raiz.rglob("*.md")):
-        try:
-            txt = md.read_text(encoding="utf-8")
-        except Exception:
-            continue
-        novo, trocas = txt, 0
-        for antigo in chaves:
-            if antigo in novo:
-                trocas += novo.count(antigo)
-                novo = novo.replace(antigo, mapa[antigo])
-        if trocas:
-            tocados.append({"arquivo": str(md), "trocas": trocas})
-            if aplicar:
-                md.write_text(novo, encoding="utf-8")
-    return tocados
 
 
 def _concurso_do_path(p: Path) -> str:
@@ -343,22 +265,9 @@ def main():
     for r in todos:
         if r["status"] != "MIGRAR":
             continue
-        aprof_id = r["aprofundamento"]
-        for mov in r.get("movimentos", []):
-            p_antigo = Path(mov["de"])
-            stem_antigo, stem_novo = p_antigo.stem, Path(mov["para"]).stem
-            # path relativo a partir de 'assuntos/', sem extensão (formato do índice)
-            partes = p_antigo.parts
-            if "assuntos" in partes:
-                i = len(partes) - 1 - partes[::-1].index("assuntos")
-                rel_antigo = "/".join(partes[i:])[: -len(p_antigo.suffix)]
-                rel_novo = "/".join(partes[i:i + 2] + (aprof_id, Path(mov["para"]).stem))
-                # o pipe do wikilink aparece cru (|) e escapado (\|, dentro de tabela)
-                for fim in ("|", "\\|", "]]"):
-                    mapa_links[rel_antigo + fim] = rel_novo + fim
-            if stem_antigo != stem_novo:
-                for fim in ("|", "\\|", "]]"):
-                    mapa_links["[[" + stem_antigo + fim] = "[[" + stem_novo + fim
+        mapa_links.update(mapa_de_links(
+            [(mov["de"], mov["para"]) for mov in r.get("movimentos", [])],
+            r["aprofundamento"]))
 
     raiz_links = args.raiz or args.assuntos_dir
     links = reescrever_referencias(raiz_links, mapa_links, aplicar) if mapa_links else []
