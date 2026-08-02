@@ -1561,6 +1561,65 @@ def test_ampliar_em_lote_pega_todos_os_assuntos_com_aquele_id():
         assert (assuntos / "regencia" / "padrao--alfa+beta").is_dir()
 
 
+def test_ampliar_em_lote_grava_a_localizacao_de_cada_assunto():
+    """O ponteiro é POR ASSUNTO. Um `--localizacao` só gravaria a mesma página nos
+    11 assuntos da matéria — que é a página certa de um e errada de dez."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        aprof = _vault_aprof(d)
+        assuntos = aprof.parents[1]
+        outro = assuntos / "regencia" / "padrao--alfa"
+        outro.mkdir(parents=True)
+        (outro / "regencia--padrao--alfa--X_2026.md").write_text(
+            '---\ntitle: "Regência"\nconcurso: "X_2026"\nnivel: padrao\n'
+            'localizacao_livro: "A.pdf — págs. 1–9"\n'
+            'aprofundamento: "padrao--alfa"\nfontes: "Livro A (Alfa)"\n---\nTexto.\n',
+            encoding="utf-8")
+        mapa = _mapa(d, "beta.json", "B.pdf", {
+            "Crase": {"paginas": [100, 120], "confianca": "alta", "metodo": "toc"},
+            "Regência": {"paginas": [300, 340], "confianca": "alta", "metodo": "toc"},
+        })
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "ampliar_aprofundamento.py"),
+             "--assuntos-dir", str(assuntos), "--aprofundamento", "padrao--alfa",
+             "--fonte", "Livro B (Beta)", "--mapa", str(mapa), "--aplicar"],
+            capture_output=True, text=True)
+        assert json.loads(r.stdout)["resumo"].get("AMPLIAR") == 2, r.stdout
+        crase = next((assuntos / "crase" / "padrao--alfa+beta").glob("crase--*.md")).read_text(
+            encoding="utf-8")
+        reg = next((assuntos / "regencia" / "padrao--alfa+beta").glob("regencia--*.md")).read_text(
+            encoding="utf-8")
+        assert 'localizacao_2: "B.pdf — págs. 100–120"' in crase, crase[:500]
+        assert 'localizacao_2: "B.pdf — págs. 300–340"' in reg, reg[:500]
+
+
+def test_ampliar_nao_inventa_pagina_para_assunto_fora_do_mapa():
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        aprof = _vault_aprof(d)
+        mapa = _mapa(d, "beta.json", "B.pdf", {})      # não cobre "Crase"
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "ampliar_aprofundamento.py"),
+             "--aprof-dir", str(aprof), "--fonte", "Livro B (Beta)",
+             "--mapa", str(mapa), "--aplicar"], capture_output=True, text=True)
+        txt = next((aprof.parent / "padrao--alfa+beta").glob("crase--*.md")).read_text(
+            encoding="utf-8")
+        assert "localizacao_2:" not in txt, "gravou página de outro assunto"
+        pend = " ".join(p for i in json.loads(r.stdout)["itens"]
+                        for p in i.get("pendencias", []))
+        assert "sem --localizacao" in pend, pend
+
+
+def test_mapa_e_localizacao_nao_convivem():
+    """Teriam de concordar, e não há como saber qual vale."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        aprof = _vault_aprof(d)
+        mapa = _mapa(d, "beta.json", "B.pdf", {})
+        r = _ampliar(aprof, "--mapa", str(mapa), "--localizacao", "B — p.1")
+        assert r.returncode != 0 and "não os dois" in r.stderr, r.stderr
+
+
 def test_slug_da_fonte_e_sempre_ecoado():
     """slug_suspeito() não acusa slug plausível-e-errado (um PDF com nome corrompido
     deriva `indleycintra`): a defesa é o usuário ver o slug antes de aplicar."""

@@ -61,6 +61,7 @@ from renomear_aprof import (  # noqa: E402
     reescrever_referencias, reescrever_wikilinks_flashcards,
     concurso_do_path, raiz_dos_concursos,
 )
+from build_subject_md import fmt_paginas  # noqa: E402
 import notebooklm_pack as nlp  # noqa: E402
 
 # arquivos que NÃO são copiados numa derivação: apontariam a variante nova para o
@@ -90,6 +91,23 @@ def novos_slugs(atuais: list[str], novos: list[str], posicao: str) -> list[str]:
 def _midias(origem: Path) -> list[str]:
     return sorted(p.name for p in origem.iterdir()
                   if p.is_file() and p.name.startswith(PREFIXOS_MIDIA))
+
+
+def localizacao_do_mapa(assunto_slug: str, mapas: list[dict]) -> list[str]:
+    """Ponteiro de cada fonte nova PARA ESTE ASSUNTO, no formato do frontmatter.
+
+    Casa pelo slug do título, que é como `build_subject_md.py` nomeia a pasta.
+    Assunto ausente do mapa devolve lista curta — e o chamador transforma isso em
+    pendência, em vez de gravar a página de outro assunto.
+    """
+    out = []
+    for m in mapas:
+        alvo = next((loc for titulo, loc in (m.get("localizacoes") or {}).items()
+                     if slug(titulo) == assunto_slug), None)
+        if not alvo or alvo.get("confianca") in (None, "nao_encontrado"):
+            break                      # contíguo: sem a fonte i não há como ter a i+1
+        out.append(f'{m.get("livro", "")} — págs. {fmt_paginas(alvo)}')
+    return out
 
 
 def planejar(aprof_dir: Path, *, fontes: list[str], slugs: list[str],
@@ -189,6 +207,7 @@ def planejar(aprof_dir: Path, *, fontes: list[str], slugs: list[str],
     return {**item, "status": "AMPLIAR" if modo == "ampliar" else "DERIVAR",
             "nivel": info["nivel"], "concurso": conc, "base_novo": base_novo,
             "indice_insercao": idx if escreve_loc else -1,
+            "localizacoes": localizacoes if escreve_loc else [],
             "origem": str(aprof_dir), "destino": str(destino),
             "movimentos": [{"de": str(p), "para": n} for p, n in movimentos],
             "midias": midias,
@@ -196,7 +215,7 @@ def planejar(aprof_dir: Path, *, fontes: list[str], slugs: list[str],
             **({"pendencias": pendencias} if pendencias else {})}
 
 
-def executar(item: dict, *, fontes: list[str], localizacoes: list[str],
+def executar(item: dict, *, fontes: list[str],
              manter_status: bool, materia: str, tpl: str) -> None:
     """Aplica UM item já planejado. Move/copia, corrige frontmatter, regenera o pack."""
     modo = item["modo"].lower()
@@ -249,7 +268,7 @@ def executar(item: dict, *, fontes: list[str], localizacoes: list[str],
     # `localizacoes()` (que para no primeiro) leria como "acabou" — perdendo em
     # silêncio o ponteiro que já existia.
     if item["indice_insercao"] >= 0:
-        for i, loc in enumerate(localizacoes):
+        for i, loc in enumerate(item["localizacoes"]):
             novos_campos[chave_localizacao(item["indice_insercao"] + i)] = loc
     if not manter_status:
         # declarar-se concluído antes da mescla é afirmação falsa que o site publica
@@ -283,7 +302,14 @@ def main():
     ap.add_argument("--fonte-slug", action="append", default=[],
                     help="slug explícito da fonte (repetível, casa em ordem com --fonte)")
     ap.add_argument("--localizacao", action="append", default=[],
-                    help="ponteiro de página da fonte nova (repetível, casa em ordem)")
+                    help="ponteiro de página da fonte nova (repetível, casa em ordem). "
+                         "MESMO valor para todos os alvos — no modo em lote prefira --mapa.")
+    ap.add_argument("--mapa", type=Path, action="append", default=[],
+                    help="mapa-localizacao.json da fonte nova (repetível, casa em ordem "
+                         "com --fonte). No modo em lote é o caminho certo: o ponteiro é "
+                         "POR ASSUNTO, e um --localizacao só gravaria a mesma página em "
+                         "todos. Assunto ausente do mapa fica sem ponteiro e vira "
+                         "pendência — nunca página inventada.")
     ap.add_argument("--posicao", default="fim",
                     help="onde a fonte entra na ordem: fim (padrão) | inicio | <n>")
     ap.add_argument("--modo", choices=("ampliar", "derivar"), default="ampliar")
@@ -311,6 +337,11 @@ def main():
     if args.fonte_slug and len(args.fonte_slug) != len(args.fonte):
         sys.exit(f"erro: --fonte-slug tem {len(args.fonte_slug)} item(ns) e --fonte tem "
                  f"{len(args.fonte)}; devem casar em número e ordem.")
+    if args.mapa and len(args.mapa) != len(args.fonte):
+        sys.exit(f"erro: --mapa foi passado {len(args.mapa)} vez(es) e --fonte tem "
+                 f"{len(args.fonte)}; devem casar em número e ordem.")
+    if args.mapa and args.localizacao:
+        sys.exit("erro: use --mapa OU --localizacao, não os dois — teriam de concordar\n       e não há como saber qual vale.")
     if len(args.localizacao) > len(args.fonte):
         sys.exit(f"erro: --localizacao tem {len(args.localizacao)} item(ns), mais que os "
                  f"{len(args.fonte)} de --fonte.")
@@ -344,7 +375,12 @@ def main():
                          indent=2, ensure_ascii=False))
         sys.exit(1)
 
-    itens = [planejar(a, fontes=args.fonte, slugs=slugs, localizacoes=args.localizacao,
+    mapas = [json.loads(m.read_text(encoding='utf-8')) for m in args.mapa]
+    itens = [planejar(a, fontes=args.fonte, slugs=slugs,
+                      # o ponteiro é POR ASSUNTO: o mapa manda, --localizacao é o
+                      # atalho de uma pasta só
+                      localizacoes=(localizacao_do_mapa(a.parent.name, mapas)
+                                    if mapas else args.localizacao),
                       posicao=args.posicao, modo=args.modo, concurso=args.concurso,
                       permitir_permutacao=args.permitir_permutacao,
                       copiar_midias=args.copiar_midias)
@@ -362,7 +398,7 @@ def main():
     if aplicar:
         tpl = args.template.read_text(encoding="utf-8")
         for i in ok:
-            executar(i, fontes=args.fonte, localizacoes=args.localizacao,
+            executar(i, fontes=args.fonte,
                      manter_status=args.manter_status, materia=args.materia, tpl=tpl)
 
     raiz = args.raiz_links or raiz_dos_concursos(alvos[0]) or alvos[0].parents[2]
