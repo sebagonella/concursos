@@ -6,7 +6,7 @@ topico_id: {TOPICO_ID}
 topico: {TOPICO}
 concurso: "{CONCURSO}"
 tipo: assunto-aprofundado
-localizacao_livro: "{LIVRO} — págs. {PAGINAS}"
+localizacao_livro: "{LIVRO} — págs. {PAGINAS}"{LOCALIZACAO_EXTRA_FM}
 confianca_localizacao: {CONFIANCA}
 prioridade: {PRIORIDADE}
 aprofundamento: "{APROFUNDAMENTO}"
@@ -18,7 +18,7 @@ status: nao-iniciado
 
 # {ASSUNTO}
 
-> 📍 **No livro:** *{LIVRO}*, páginas **{PAGINAS}** ({METODO_LOCALIZACAO}, confiança {CONFIANCA}).
+> 📍 **No livro:** *{LIVRO}*, páginas **{PAGINAS}** ({METODO_LOCALIZACAO}, confiança {CONFIANCA}).{LOCALIZACOES_EXTRA}
 > {AVISO_CONFERIR}
 
 ## 🎯 Por que este assunto cai na prova
@@ -50,7 +50,7 @@ status: nao-iniciado
 
 ## 📝 Para estudar depois
 
-- [ ] Ler as páginas {PAGINAS} do livro
+- [ ] Ler as páginas {PAGINAS} do livro{CHECKLIST_LEITURA_EXTRA}
 - [ ] Revisar os flashcards deste assunto ([[flashcards-{SLUG_ASSUNTO}]])
 - [ ] Resolver questões da banca sobre {ASSUNTO}
 - [ ] (Etapa NotebookLM) Gerar podcast/mapa mental a partir deste .md

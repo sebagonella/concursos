@@ -1578,6 +1578,146 @@ def test_ampliar_recusa_fonte_que_ja_esta_no_aprofundamento():
         assert "já estão neste aprofundamento" in r.stdout
 
 
+# ----------------------- localização multi-fonte ----------------------- #
+def _mapa(d: Path, nome: str, livro: str, locs: dict) -> Path:
+    p = d / nome
+    p.write_text(json.dumps({"livro": livro, "materia": "Português",
+                             "localizacoes": locs}), encoding="utf-8")
+    return p
+
+
+def _build(d: Path, mapas: list, fontes: str, nivel="padrao"):
+    cmd = [sys.executable, str(ROOT / "build_subject_md.py"),
+           "--out-dir", str(d / "assuntos"), "--fontes", fontes,
+           "--nivel", nivel, "--concurso", "X_2026", "--materia", "Português"]
+    for m in mapas:
+        cmd += ["--mapa", str(m)]
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def test_uma_fonte_gera_o_arquivo_de_sempre():
+    """Os 3 slots novos são placeholders de FIM DE LINHA: com uma fonte só têm de
+    render vazio e não deixar linha em branco no YAML nem quebrar o blockquote.
+    122 arquivos do vault estão na forma singular."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        m = _mapa(d, "m1.json", "L.pdf",
+                  {"Crase": {"paginas": [1, 9], "confianca": "alta", "metodo": "toc"}})
+        assert _build(d, [m], "Livro A (Alfa)").returncode == 0
+        txt = next((d / "assuntos" / "crase" / "padrao--alfa").glob("crase--*.md")).read_text(
+            encoding="utf-8")
+        fm = txt.split("---\n")[1]
+        assert "\n\n" not in fm, f"linha em branco no frontmatter:\n{fm}"
+        assert "localizacao_2" not in txt
+        assert 'localizacao_livro: "L.pdf — págs. 1–9"\nconfianca_localizacao:' in txt
+        assert "\n- [ ] Ler as páginas 1–9 do livro\n- [ ] Revisar" in txt
+        # o callout continua com exatamente as duas linhas de sempre
+        assert "confiança alta).\n> \n" in txt or "confiança alta).\n>\n" in txt, \
+            repr(txt[txt.index("> 📍"):][:200])
+        assert not re.search(r"\{[A-Z_]{3,}\}", txt.split("## 🎯")[0]), "placeholder solto"
+
+
+def test_build_subject_aceita_um_mapa_por_fonte():
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        m1 = _mapa(d, "m1.json", "Pestana.pdf",
+                   {"Crase": {"paginas": [78, 142], "confianca": "alta", "metodo": "toc"}})
+        m2 = _mapa(d, "m2.json", "Rosenthal.pdf",
+                   {"Crase": {"paginas": [210, 240], "confianca": "media", "metodo": "densidade"}})
+        r = _build(d, [m1, m2], "A Gramática (Pestana),Gramática (Rosenthal)")
+        assert r.returncode == 0, r.stderr
+        txt = next((d / "assuntos" / "crase" / "padrao--pestana+rosenthal").glob(
+            "crase--*.md")).read_text(encoding="utf-8")
+        assert 'localizacao_livro: "Pestana.pdf — págs. 78–142"' in txt
+        assert 'localizacao_2: "Rosenthal.pdf — págs. 210–240"' in txt, txt[:600]
+        assert "**Também em:** *Rosenthal.pdf* — páginas **210–240**" in txt
+        # um item de checklist por fonte: o progresso do site é contagem de checkbox,
+        # e uma caixa só torna "li a segunda fonte" um estado que não existe
+        assert "- [ ] Ler as páginas 78–142 do livro\n- [ ] Ler as páginas 210–240 de *Rosenthal.pdf*" in txt
+
+
+def test_build_subject_recusa_mapa_e_fontes_desalinhados():
+    """Pareamento posicional só é confiável se os comprimentos casam: um mapa a
+    mais gravaria a página do livro errado."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        locs = {"Crase": {"paginas": [1, 9], "confianca": "alta", "metodo": "toc"}}
+        m1, m2 = _mapa(d, "m1.json", "A.pdf", locs), _mapa(d, "m2.json", "B.pdf", locs)
+        m3 = _mapa(d, "m3.json", "C.pdf", locs)
+        r = _build(d, [m1, m2, m3], "Livro A (Alfa),Livro B (Beta)")
+        assert r.returncode != 0
+        assert "mesma ordem" in r.stderr, r.stderr
+
+
+def test_assunto_nao_localizado_na_segunda_fonte_nao_some():
+    """Omitir seria falso negativo: o leitor não saberia se a fonte não cobre o
+    assunto ou se ninguém procurou."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        m1 = _mapa(d, "m1.json", "A.pdf",
+                   {"Crase": {"paginas": [1, 9], "confianca": "alta", "metodo": "toc"}})
+        m2 = _mapa(d, "m2.json", "B.pdf", {})
+        assert _build(d, [m1, m2], "Livro A (Alfa),Livro B (Beta)").returncode == 0
+        txt = next((d / "assuntos" / "crase" / "padrao--alfa+beta").glob(
+            "crase--*.md")).read_text(encoding="utf-8")
+        assert 'localizacao_2: "B.pdf — não localizado"' in txt, txt[:600]
+        assert "Não localizado em** *B.pdf*" in txt
+
+
+def test_assunto_que_so_existe_no_segundo_livro_entra():
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        m1 = _mapa(d, "m1.json", "A.pdf",
+                   {"Crase": {"paginas": [1, 9], "confianca": "alta", "metodo": "toc"}})
+        m2 = _mapa(d, "m2.json", "B.pdf",
+                   {"Regência": {"paginas": [5, 8], "confianca": "alta", "metodo": "toc"}})
+        assert _build(d, [m1, m2], "Livro A (Alfa),Livro B (Beta)").returncode == 0
+        assert (d / "assuntos" / "regencia" / "padrao--alfa+beta").is_dir()
+
+
+def test_localizacoes_le_a_forma_singular():
+    """Retrocompat passiva: os 122 arquivos de fonte única já são documentos válidos."""
+    assert aid.localizacoes({"localizacao_livro": "L.pdf — págs. 1–9"}) == ["L.pdf — págs. 1–9"]
+    assert aid.localizacoes({}) == []
+    # para no primeiro buraco: localizacao_3 sem a 2 é frontmatter quebrado, e
+    # adivinhar a qual fonte o valor pertence seria fingir precisão
+    assert aid.localizacoes({"localizacao_livro": "A", "localizacao_3": "C"}) == ["A"]
+    assert aid.chave_localizacao(0) == "localizacao_livro"
+    assert aid.chave_localizacao(1) == "localizacao_2"
+
+
+def test_conferir_localizacoes_acusa_fonte_sem_ponteiro():
+    """'3 fontes no id, 2 localizações' é a meia-verdade que a regra manda expor."""
+    fm = {"localizacao_livro": "A — p.1"}
+    avisos = aid.conferir_localizacoes(fm, "padrao--alfa+beta")
+    assert avisos and "beta" in avisos[0], avisos
+    assert aid.conferir_localizacoes({"localizacao_livro": "A"}, "padrao--alfa") == []
+    assert aid.localizacoes_por_fonte(
+        {"localizacao_livro": "A", "localizacao_2": "B"},
+        "padrao--alfa+beta") == [("alfa", "A"), ("beta", "B")]
+
+
+def test_pacote_lista_uma_referencia_por_fonte():
+    """Num combinado, o recorte de UMA fonte não representa o material."""
+    import notebooklm_pack as nlp
+    with tempfile.TemporaryDirectory() as d:
+        md = Path(d) / "crase--padrao--alfa+beta--X.md"
+        md.write_text("x", encoding="utf-8")
+        lista = nlp.montar_lista_fontes(
+            md, [], {"localizacao_livro": "A.pdf — págs. 1–9",
+                     "localizacao_2": "B.pdf — págs. 20–30"})
+        assert lista.count("*(Referência)*") == 2, lista
+        assert "A.pdf" in lista and "B.pdf" in lista
+        assert lista.splitlines()[2].startswith("3."), lista
+
+
+def test_migrador_nao_rebaixa_um_combinado_a_fonte_unica():
+    import migrar_aprofundamentos as migr
+    fontes, tipo = migr.fontes_do_assunto(
+        {"localizacao_livro": "A.pdf — págs. 1–9", "localizacao_2": "B.pdf — págs. 20–30"})
+    assert fontes == ["A.pdf", "B.pdf"] and tipo == "livro", fontes
+
+
 def _run_standalone():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     falhas = 0

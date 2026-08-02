@@ -45,7 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import (  # noqa: E402
     slug, slug_fonte, slug_suspeito, id_aprofundamento, nome_base,
-    eh_pasta_aprofundamento, parse_id,
+    eh_pasta_aprofundamento, parse_id, localizacoes as aid_localizacoes,
 )
 # A máquina de renomear (quais arquivos viajam, como o wikilink é reescrito) mora
 # num lugar só, compartilhada com ampliar_aprofundamento.py — ver renomear_aprof.py.
@@ -76,10 +76,13 @@ def separar_normas(valor: str) -> list[str]:
 
 def fontes_do_assunto(fm: dict) -> tuple[list[str], str]:
     """Devolve (lista de nomes de fonte, tipo) — tipo em {'livro','norma','?'}."""
-    loc = (fm.get("localizacao_livro") or "").strip()
-    if loc:
-        livro = re.split(r"\s+—\s+|\s+-\s+p[áa]gs?\.", loc)[0].strip()
-        return ([livro] if livro else []), "livro"
+    # localizacao_livro + localizacao_2..N: um aprofundamento já combinado não pode
+    # ser rebaixado a fonte única só porque o migrador só olhava a primeira chave
+    locs = aid_localizacoes(fm)
+    if locs:
+        livros = [re.split(r"\s+—\s+|\s+-\s+p[áa]gs?\.", l)[0].strip() for l in locs]
+        livros = [l for l in livros if l]
+        return livros, "livro"
     norma = (fm.get("fonte_norma") or "").strip()
     if norma:
         return separar_normas(norma), "norma"

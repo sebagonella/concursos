@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import (  # noqa: E402
     slug, slug_fonte, slug_suspeito, id_aprofundamento, nome_base,
+    chave_localizacao,
 )
 
 PADRAO_TEMPLATE = Path(__file__).resolve().parents[1] / "assets/templates/assunto.md.tpl"
@@ -52,6 +53,37 @@ def fmt_paginas(loc: dict) -> str:
     return f"{p[0]}–{p[1]}" if p[0] != p[1] else str(p[0])
 
 
+def localizacao_das_extras(assunto: str, extras_mapa: list, marcador: str) -> tuple:
+    """Os três trechos que as fontes 2..N acrescentam ao template.
+
+    Devolve (frontmatter, callout, checklist). Todos os três são placeholders de
+    FIM DE LINHA e vêm com o `\\n` na frente: com uma fonte só eles são strings
+    vazias e o arquivo gerado sai byte a byte igual ao de antes — por construção,
+    sem depender de limpar linha em branco depois.
+
+    Fonte em que o assunto NÃO foi localizado aparece como "não localizado" em vez
+    de sumir: omitir seria o falso negativo que este repo proíbe — o leitor não
+    saberia se a fonte não cobre o assunto ou se ninguém procurou.
+    """
+    fm, callout, checklist = [], [], []
+    for i, m in enumerate(extras_mapa):
+        nome = m.get("livro", "") or f"fonte {i + 2}"
+        loc = (m.get("localizacoes") or {}).get(assunto)
+        if loc and loc.get("confianca") not in (None, "nao_encontrado"):
+            pgs = fmt_paginas(loc)
+            fm.append(f'{chave_localizacao(i + 1)}: "{nome} — págs. {pgs}"')
+            callout.append(f"> {marcador} **Também em:** *{nome}* — páginas **{pgs}** "
+                           f"({loc.get('metodo', '?')}, confiança {loc.get('confianca')}).")
+            checklist.append(f"- [ ] Ler as páginas {pgs} de *{nome}*")
+        else:
+            fm.append(f'{chave_localizacao(i + 1)}: "{nome} — não localizado"')
+            callout.append(f"> ⚠️ **Não localizado em** *{nome}* — confirme à mão "
+                           f"se a fonte cobre este assunto.")
+    def junta(linhas):
+        return ("\n" + "\n".join(linhas)) if linhas else ""
+    return junta(fm), junta(callout), junta(checklist)
+
+
 def preencher_template(tpl: str, ctx: dict) -> str:
     out = tpl
     for k, v in ctx.items():
@@ -61,9 +93,13 @@ def preencher_template(tpl: str, ctx: dict) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mapa", type=Path, default=None,
+    ap.add_argument("--mapa", type=Path, action="append", default=None,
                     help="mapa-localizacao.json do book_index. Dispensável com "
-                         "--proprio, que não tem livro para localizar.")
+                         "--proprio, que não tem livro para localizar. REPETÍVEL: um "
+                         "mapa por fonte, na MESMA ordem de --fontes. O book_index "
+                         "indexa um livro por execução, então N fontes já são N "
+                         "execuções; juntá-los num arquivo só seria um quarto formato "
+                         "e um lugar novo onde 'de qual livro é esta página' se perde.")
     ap.add_argument("--assuntos", type=Path, default=None,
                     help="arquivo com um assunto por linha. Entrada de --proprio, "
                          "que não passa por localização em livro.")
@@ -110,8 +146,10 @@ def main():
         sys.exit("erro: informe --mapa (localização em livro) ou --assuntos "
                  "(lista direta, usada com --proprio).")
 
+    extras_mapa = []
     if args.mapa:
-        mapa = json.loads(args.mapa.read_text(encoding="utf-8"))
+        mapas = [json.loads(m.read_text(encoding="utf-8")) for m in args.mapa]
+        mapa, extras_mapa = mapas[0], mapas[1:]
     else:
         # Sem livro não há localização. O mapa sintético traz confiança
         # "sem_fonte" — e NÃO "nao_encontrado": um material deliberadamente sem
@@ -163,6 +201,12 @@ def main():
             sys.exit(f"erro: --fontes-slug tem {len(fontes_slug)} item(ns) e --fontes tem "
                      f"{len(fontes)}; devem casar em número e ordem.")
         aprof_id = id_aprofundamento(fontes, args.nivel, fontes_slug or None)
+        # mesmo guard de --fontes-slug: pareamento posicional só é confiável se os
+        # comprimentos casam. Um mapa a mais/menos gravaria a página do livro errado.
+        if args.mapa and len(args.mapa) not in (1, len(fontes)):
+            sys.exit(f"erro: --mapa foi passado {len(args.mapa)} vez(es) e --fontes tem "
+                     f"{len(fontes)} fonte(s); use 1 mapa (só a fonte 1 localizada) ou "
+                     f"um por fonte, na mesma ordem.")
 
         # não gravar path ruim no vault: avisa e pede slug explícito
         if not fontes_slug:
@@ -181,7 +225,13 @@ def main():
     gerados, pulados, a_preencher = [], [], []
     ja_existiam, forcados = [], []
 
-    for assunto, loc in mapa.get("localizacoes", {}).items():
+    # a lista de assuntos é a UNIÃO das chaves: um assunto pode estar só no livro 2
+    todos_assuntos = dict(mapa.get("localizacoes", {}))
+    for m in extras_mapa:
+        for a, loc in m.get("localizacoes", {}).items():
+            todos_assuntos.setdefault(a, {"confianca": "nao_encontrado"})
+
+    for assunto, loc in todos_assuntos.items():
         conf = loc.get("confianca", "nao_encontrado")
         if conf == "sem_fonte":
             paginas, metodo, aviso = "", "", ""
@@ -209,6 +259,12 @@ def main():
             base = nome_base(sassunto, aprof_id, args.concurso)
         subdir.mkdir(parents=True, exist_ok=True)
 
+        # o marcador do callout difere entre os templates (📍 no padrão, 📖 no
+        # detalhado); seguir o do template evita duas fontes com ícones diferentes
+        marcador = "📖" if args.nivel == "detalhado" else "📍"
+        loc_fm, loc_callout, loc_check = localizacao_das_extras(
+            assunto, extras_mapa, marcador)
+
         ctx = {
             "ASSUNTO": assunto,
             "MATERIA": materia,
@@ -216,6 +272,10 @@ def main():
             "LIVRO": livro,
             "PAGINAS": paginas,
             "CONFIANCA": conf,
+            # vazios com uma fonte só: o arquivo sai idêntico ao de antes
+            "LOCALIZACAO_EXTRA_FM": loc_fm,
+            "LOCALIZACOES_EXTRA": loc_callout,
+            "CHECKLIST_LEITURA_EXTRA": loc_check,
             "PRIORIDADE": prioridades.get(assunto, args.prioridade_default),
             "METODO_LOCALIZACAO": metodo,
             "AVISO_CONFERIR": aviso,

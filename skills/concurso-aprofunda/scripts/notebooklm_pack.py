@@ -30,7 +30,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from aprofundamento_id import eh_pasta_aprofundamento  # noqa: E402
+from aprofundamento_id import eh_pasta_aprofundamento, localizacoes  # noqa: E402
 from renomear_aprof import frontmatter_sem_linha_vazia  # noqa: E402
 
 
@@ -195,10 +195,11 @@ def montar_perguntas(assunto: str) -> str:
 
 def montar_lista_fontes(assunto_md: Path, leis: list[str], fm: dict) -> str:
     linhas = [f"1. **`{assunto_md.name}`** — o resumo curado deste assunto (fonte principal)."]
-    loc = fm.get("localizacao_livro", "")
-    if loc:
-        linhas.append(f"2. *(Referência)* trecho do livro: {loc} — opcional, suba o recorte "
-                      "dessas páginas se quiser mais profundidade.")
+    # um item por fonte: num aprofundamento combinado o recorte de UMA delas não
+    # representa o material, e listar só a primeira faria o usuário subir metade
+    for loc in localizacoes(fm):
+        linhas.append(f"{len(linhas) + 1}. *(Referência)* trecho do livro: {loc} — opcional, "
+                      "suba o recorte dessas páginas se quiser mais profundidade.")
     n = len(linhas) + 1
     for lei in leis:
         linhas.append(f"{n}. **`{lei}`** — legislação relacionada (já baixada pela concurso-prep).")
