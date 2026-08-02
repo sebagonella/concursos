@@ -49,7 +49,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import (  # noqa: E402
-    eh_pasta_aprofundamento, parse_id, rotulo, FONTE_PROPRIA,
+    eh_pasta_aprofundamento, parse_id, rotulo, localizacoes_por_fonte, FONTE_PROPRIA,
 )
 
 
@@ -391,6 +391,12 @@ def coletar_aprofundamento(subdir: Path, slug_assunto: str,
         "topico": lista_yaml(fm.get("topico")),
         "status": fm.get("status", "?"),
         "paginas_livro": extrair_paginas(fm),
+        # Uma entrada por fonte, na ordem do id. `paginas_livro` continua sendo só a
+        # da fonte 1 (é o que os leitores antigos consomem); esta lista é o texto
+        # inteiro de cada ponteiro, que metade do vault escreve em prosa livre e
+        # nenhuma regex extrai. Casada com o slug da fonte pela posição.
+        "localizacoes": [{"fonte": f, "texto": t}
+                         for f, t in localizacoes_por_fonte(fm, aprof_id)],
         "resumo_md": str(principal),
         "midias": midias,
         "flashcards": flashcards,
