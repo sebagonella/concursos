@@ -185,6 +185,30 @@ def reescrever_referencias(raiz: Path, mapa: dict, aplicar: bool) -> list[dict]:
     return tocados
 
 
+def concurso_do_path(p: Path) -> str:
+    """Sobe o path até achar `.../CONCURSOS/<CONCURSO>/...`.
+
+    Também é conhecimento de layout: o concurso entra no nome-base e não pode ser
+    adivinhado de outro jeito quando o frontmatter não o traz.
+    """
+    for anc in Path(p).parents:
+        if anc.parent.name.upper() == "CONCURSOS":
+            return anc.name
+    return ""
+
+
+def raiz_dos_concursos(p: Path) -> Path | None:
+    """A pasta `CONCURSOS` acima de `p`, se houver.
+
+    É o escopo certo para reescrever wikilink: um `.md` de OUTRO concurso pode
+    referenciar este (reaproveitamento entre concursos é feature da skill).
+    """
+    for anc in Path(p).parents:
+        if anc.name.upper() == "CONCURSOS":
+            return anc
+    return None
+
+
 def reescrever_wikilinks_flashcards(texto: str, base_novo: str) -> str:
     """Aponta `[[flashcards-...]]` do corpo para o nome-base novo.
 

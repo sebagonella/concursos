@@ -1276,6 +1276,308 @@ def test_gerar_para_pasta_nao_toca_nos_irmaos():
             "gerou o pacote do irmão"
 
 
+# --------------------- ampliar_aprofundamento (fontes novas) --------------------- #
+def _vault_aprof(d: Path, *, fontes="Livro A (Alfa)", nivel="padrao",
+                 concurso="X_2026", com_midia=False, com_url=False) -> Path:
+    """Um aprofundamento montado pelos GERADORES REAIS, dentro de .../CONCURSOS/.
+
+    Fixture montada à mão inventa o que o gerador não produz — o antipadrão que já
+    deixou dois defeitos verdes por anos neste repo.
+    """
+    raiz = d / "CONCURSOS" / concurso / "_COMUM" / "03-APROFUNDAMENTO" / "portugues"
+    out = raiz / "assuntos"
+    mapa = d / "m.json"
+    mapa.write_text(json.dumps({
+        "livro": "L.pdf", "materia": "Português",
+        "localizacoes": {"Crase": {"paginas": [1, 9], "confianca": "alta", "metodo": "toc"}},
+    }), encoding="utf-8")
+    r = subprocess.run([sys.executable, str(ROOT / "build_subject_md.py"),
+                        "--mapa", str(mapa), "--out-dir", str(out), "--fontes", fontes,
+                        "--nivel", nivel, "--concurso", concurso,
+                        "--materia", "Português"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    aprof = next(p for p in (out / "crase").iterdir() if p.is_dir())
+    md = next(aprof.glob("crase--*.md"))
+
+    # o arcabouço vem com placeholders; o pacote pula quem não foi preenchido
+    txt = md.read_text(encoding="utf-8")
+    txt = re.sub(r"\{[A-Z_]{3,}\}", "conteúdo real escrito à mão", txt)
+    md.write_text(txt, encoding="utf-8")
+
+    cards = aprof / "cards.json"
+    cards.write_text(json.dumps({
+        "assunto": "Crase", "materia": "Português",
+        "cards": [{"front": "O que é crase?", "back": "Fusão de duas vogais idênticas."}],
+    }), encoding="utf-8")
+    r = subprocess.run([sys.executable, str(ROOT / "flashcards_gen.py"),
+                        "--cards", str(cards), "--out-dir", str(aprof),
+                        "--aprofundamento", aprof.name, "--concurso", concurso],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    subprocess.run([sys.executable, str(ROOT / "notebooklm_pack.py"),
+                    "--assuntos-dir", str(out), "--concurso", concurso,
+                    "--materia", "Português"], capture_output=True, text=True)
+
+    if com_midia:
+        (aprof / f"podcast-{md.stem}.m4a").write_bytes(b"audio")
+    if com_url:
+        pack = aprof / "_fonte-notebooklm.md"
+        p = pack.read_text(encoding="utf-8")
+        p = p.replace('notebooklm_url: ""',
+                      'notebooklm_url: "https://notebook.google.com/notebook/abc-123"')
+        p = p.replace("notebooklm_status: nao-criado",
+                      'notebooklm_status: criado\nnotebooklm_id: "abc-123"')
+        pack.write_text(p, encoding="utf-8")
+        # regera para o pacote passar a declarar a mídia que acabou de existir
+        subprocess.run([sys.executable, str(ROOT / "notebooklm_pack.py"),
+                        "--assuntos-dir", str(out), "--concurso", concurso,
+                        "--materia", "Português"], capture_output=True, text=True)
+    return aprof
+
+
+def _ampliar(aprof: Path, *extra, fonte="Livro B (Beta)"):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "ampliar_aprofundamento.py"),
+         "--aprof-dir", str(aprof), "--fonte", fonte, *extra],
+        capture_output=True, text=True)
+
+
+def test_ampliar_renomeia_pasta_e_todos_os_nomes_base():
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        assunto = aprof.parent
+        r = _ampliar(aprof, "--aplicar")
+        novo = assunto / "padrao--alfa+beta"
+        assert novo.is_dir(), r.stdout
+        assert not aprof.exists(), "o id antigo tem de deixar de existir no modo ampliar"
+        nomes = sorted(p.name for p in novo.iterdir())
+        assert "crase--padrao--alfa+beta--X_2026.md" in nomes, nomes
+        assert "flashcards-crase--padrao--alfa+beta--X_2026.md" in nomes, nomes
+        assert "flashcards-crase--padrao--alfa+beta--X_2026.csv" in nomes, nomes
+        assert not any("alfa--" in n and "+beta" not in n for n in nomes), nomes
+
+
+def test_ampliar_renomeia_midia_para_o_pacote_continuar_achando():
+    """Se a mídia não viaja com o nome novo, `plano.ja_existe()` devolve False e a
+    automação regera podcast/vídeo que já existem — queima de quota."""
+    sys.path.insert(0, str(ROOT.parents[1] / "concurso-notebooklm" / "scripts"))
+    import pacote as pac_mod
+    import plano as plano_mod
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d), com_midia=True, com_url=True)
+        _ampliar(aprof, "--aplicar")
+        novo = aprof.parent / "padrao--alfa+beta"
+        pac = pac_mod.ler(novo / "_fonte-notebooklm.md")
+        assert pac.arquivo_de("podcast") == "podcast-crase--padrao--alfa+beta--X_2026.m4a"
+        assert plano_mod.ja_existe(pac, "podcast"), "a mídia renomeada tem de ser achada"
+
+
+def test_ampliar_mantem_o_md_principal_como_fonte_do_pacote():
+    sys.path.insert(0, str(ROOT.parents[1] / "concurso-notebooklm" / "scripts"))
+    import pacote as pac_mod
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        _ampliar(aprof, "--aplicar")
+        novo = aprof.parent / "padrao--alfa+beta"
+        pac = pac_mod.ler(novo / "_fonte-notebooklm.md")
+        _, faltando = pac_mod.resolver_fontes(pac, None)
+        assert faltando == [], f"o notebook seria criado sem a fonte principal: {faltando}"
+
+
+def test_ampliar_preserva_url_e_id_do_notebook():
+    """A única informação do pacote que não dá para regerar."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d), com_url=True)
+        _ampliar(aprof, "--aplicar")
+        pack = (aprof.parent / "padrao--alfa+beta" / "_fonte-notebooklm.md").read_text(
+            encoding="utf-8")
+        assert "abc-123" in pack, pack[:400]
+        assert "padrao--alfa+beta" in pack, "o nome do notebook tem de acompanhar"
+
+
+def test_ampliar_avisa_da_nota_obsoleta_dentro_do_notebook():
+    """`garantir_fontes()` só ADICIONA fonte: o notebook fica com a nota antiga e a
+    nova, e o modelo passa a gerar mídia sobre material contraditório."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d), com_url=True)
+        antiga = next(aprof.glob("crase--*.md")).name
+        r = _ampliar(aprof, "--aplicar")
+        rel = json.loads(r.stdout)
+        pend = " ".join(p for i in rel["itens"] for p in i.get("pendencias", []))
+        assert antiga in pend and "ADICIONA" in pend, pend
+        pack = (aprof.parent / "padrao--alfa+beta" / "_fonte-notebooklm.md").read_text(
+            encoding="utf-8")
+        assert f'notebooklm_fonte_obsoleta: "{antiga}"' in pack, pack[:600]
+
+
+def test_ampliar_reescreve_wikilink_no_indice_da_materia():
+    """O índice vive FORA de assuntos/ e aponta pelo path completo."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        md = next(aprof.glob("crase--*.md"))
+        rel = f"assuntos/crase/{aprof.name}/{md.stem}"
+        indice = aprof.parents[2] / "00-INDICE-PORTUGUES.md"
+        indice.write_text(f"- [[{rel}|Crase]]\n- [[{md.stem}]]\n", encoding="utf-8")
+        _ampliar(aprof, "--aplicar")
+        txt = indice.read_text(encoding="utf-8")
+        assert "padrao--alfa+beta" in txt, txt
+        assert "padrao--alfa/" not in txt and "--padrao--alfa--" not in txt, txt
+
+
+def test_ampliar_recusa_destino_existente():
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        (aprof.parent / "padrao--alfa+beta").mkdir()
+        r = _ampliar(aprof, "--aplicar")
+        assert r.returncode == 2, r.stdout
+        assert json.loads(r.stdout)["resumo"].get("CONFLITO") == 1
+        assert aprof.exists(), "não pode ter mexido na origem"
+
+
+def test_ampliar_avisa_permutacao_das_mesmas_fontes():
+    """`a+b` e `b+a` seriam dois caminhos para o mesmo conjunto."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        (aprof.parent / "padrao--beta+alfa").mkdir()
+        r = _ampliar(aprof, "--aplicar")
+        assert r.returncode == 2
+        motivos = " ".join(m for i in json.loads(r.stdout)["itens"]
+                           for m in i.get("motivos", []))
+        assert "outra ordem" in motivos, motivos
+        r2 = _ampliar(aprof, "--aplicar", "--permitir-permutacao")
+        assert (aprof.parent / "padrao--alfa+beta").is_dir(), r2.stdout
+
+
+def test_ampliar_dry_run_e_o_padrao():
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        antes = sorted(p.name for p in aprof.iterdir())
+        r = _ampliar(aprof)
+        assert "DRY-RUN" in r.stdout
+        assert sorted(p.name for p in aprof.iterdir()) == antes
+        assert not (aprof.parent / "padrao--alfa+beta").exists()
+
+
+def test_ampliar_falha_alto_quando_nao_acha_nada():
+    """Sair 0 sem achar nada foi o que escondeu a migração que não rodou."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "ampliar_aprofundamento.py"),
+             "--assuntos-dir", str(aprof.parents[1]),
+             "--aprofundamento", "padrao--nao-existe", "--fonte", "X"],
+            capture_output=True, text=True)
+        assert r.returncode == 1, r.stdout
+
+
+def test_ampliar_preserva_o_corpo_do_md():
+    """Ampliar mexe na identidade, não no texto: o resumo é do usuário."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        md = next(aprof.glob("crase--*.md"))
+        corpo_antes = md.read_text(encoding="utf-8").split("\n---\n", 1)[1]
+        _ampliar(aprof, "--aplicar")
+        novo = next((aprof.parent / "padrao--alfa+beta").glob("crase--*.md"))
+        corpo = novo.read_text(encoding="utf-8").split("\n---\n", 1)[1]
+        # só o wikilink dos flashcards muda, porque o par dele foi renomeado
+        assert corpo.replace("alfa+beta", "alfa") == corpo_antes
+
+
+def test_ampliar_registra_a_localizacao_da_fonte_nova():
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        _ampliar(aprof, "--aplicar", "--localizacao", "Beta — pp. 210 a 240")
+        txt = next((aprof.parent / "padrao--alfa+beta").glob("crase--*.md")).read_text(
+            encoding="utf-8")
+        assert 'localizacao_2: "Beta — pp. 210 a 240"' in txt, txt[:500]
+        assert "localizacao_livro:" in txt, "a fonte 1 continua onde estava"
+
+
+def test_fonte_sem_localizacao_vira_pendencia_e_nao_pagina_inventada():
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        r = _ampliar(aprof, "--aplicar")
+        pend = " ".join(p for i in json.loads(r.stdout)["itens"]
+                        for p in i.get("pendencias", []))
+        assert "sem --localizacao" in pend, pend
+        txt = next((aprof.parent / "padrao--alfa+beta").glob("crase--*.md")).read_text(
+            encoding="utf-8")
+        assert "localizacao_2:" not in txt, "não pode inventar ponteiro"
+
+
+def test_ampliar_rebaixa_status_para_revisar():
+    """Declarar-se concluído antes da mescla é afirmação falsa que o site publica."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        md = next(aprof.glob("crase--*.md"))
+        md.write_text(md.read_text(encoding="utf-8").replace(
+            "status: nao-iniciado", "status: concluido"), encoding="utf-8")
+        _ampliar(aprof, "--aplicar")
+        txt = next((aprof.parent / "padrao--alfa+beta").glob("crase--*.md")).read_text(
+            encoding="utf-8")
+        assert 'status: "revisar"' in txt, txt[:400]
+
+
+def test_derivar_mantem_o_antigo_intacto_e_nao_leva_a_url():
+    """O par assimétrico: duas pastas apontando para o mesmo notebook fariam
+    `garantir_fontes` subir a nota da variante para dentro do notebook do original."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d), com_midia=True, com_url=True)
+        md = next(aprof.glob("crase--*.md"))
+        rel = f"assuntos/crase/{aprof.name}/{md.stem}"
+        indice = aprof.parents[2] / "00-INDICE-PORTUGUES.md"
+        indice.write_text(f"- [[{rel}|Crase]]\n", encoding="utf-8")
+
+        _ampliar(aprof, "--modo", "derivar", "--aplicar")
+        novo = aprof.parent / "padrao--alfa+beta"
+        assert aprof.is_dir() and novo.is_dir(), "os dois têm de conviver"
+        assert "abc-123" in (aprof / "_fonte-notebooklm.md").read_text(encoding="utf-8")
+        assert "abc-123" not in (novo / "_fonte-notebooklm.md").read_text(encoding="utf-8")
+        assert not (novo / "_notebooklm-estado.json").exists()
+        assert not list(novo.glob("podcast-*")), "mídia não é copiada por padrão"
+        # o wikilink de fora ainda resolve para o original: não se mexe nele
+        assert rel in indice.read_text(encoding="utf-8")
+        assert 'derivado_de: "padrao--alfa"' in next(novo.glob("crase--*.md")).read_text(
+            encoding="utf-8")
+
+
+def test_ampliar_em_lote_pega_todos_os_assuntos_com_aquele_id():
+    """O caso real é a matéria inteira recebendo a mesma segunda fonte."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        assuntos = aprof.parents[1]
+        outro = assuntos / "regencia" / "padrao--alfa"
+        outro.mkdir(parents=True)
+        (outro / "regencia--padrao--alfa--X_2026.md").write_text(
+            '---\ntitle: "Regência"\nconcurso: "X_2026"\nnivel: padrao\n'
+            'aprofundamento: "padrao--alfa"\nfontes: "Livro A (Alfa)"\n---\nTexto.\n',
+            encoding="utf-8")
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "ampliar_aprofundamento.py"),
+             "--assuntos-dir", str(assuntos), "--aprofundamento", "padrao--alfa",
+             "--fonte", "Livro B (Beta)", "--aplicar"], capture_output=True, text=True)
+        assert json.loads(r.stdout)["resumo"].get("AMPLIAR") == 2, r.stdout
+        assert (assuntos / "crase" / "padrao--alfa+beta").is_dir()
+        assert (assuntos / "regencia" / "padrao--alfa+beta").is_dir()
+
+
+def test_slug_da_fonte_e_sempre_ecoado():
+    """slug_suspeito() não acusa slug plausível-e-errado (um PDF com nome corrompido
+    deriva `indleycintra`): a defesa é o usuário ver o slug antes de aplicar."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        r = _ampliar(aprof)
+        assert "'beta'" in " ".join(json.loads(r.stdout)["slugs_derivados"]), r.stdout
+
+
+def test_ampliar_recusa_fonte_que_ja_esta_no_aprofundamento():
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        r = _ampliar(aprof, "--aplicar", fonte="Livro A (Alfa)")
+        assert r.returncode == 2
+        assert "já estão neste aprofundamento" in r.stdout
+
+
 def _run_standalone():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     falhas = 0

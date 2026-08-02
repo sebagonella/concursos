@@ -52,7 +52,7 @@ from aprofundamento_id import (  # noqa: E402
 from renomear_aprof import (  # noqa: E402  (reexportados: os testes importam daqui)
     PREFIXOS_RENOMEAR, ACOMPANHAM, ler_frontmatter, atualizar_frontmatter,
     planejar_movimentos, mapa_de_links, reescrever_referencias,
-    reescrever_wikilinks_flashcards,
+    reescrever_wikilinks_flashcards, concurso_do_path as _concurso_do_path,
 )
 
 MARCAS_DETALHADO = (
@@ -219,14 +219,6 @@ def migrar_assunto(assunto_dir: Path, overrides: dict, aplicar: bool,
                 antiga.rmdir()
         resultados.append(item)
     return resultados
-
-
-def _concurso_do_path(p: Path) -> str:
-    """Sobe o path até achar .../CONCURSOS/<CONCURSO>/..."""
-    for anc in p.parents:
-        if anc.parent.name.upper() == "CONCURSOS":
-            return anc.name
-    return ""
 
 
 def main():
