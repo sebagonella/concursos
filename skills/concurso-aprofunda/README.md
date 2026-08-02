@@ -123,9 +123,11 @@ Google e quebra sem aviso. Sem a biblioteca, o pacote gerado aqui continua compl
 O histórico de versões vive no [CHANGELOG.md](CHANGELOG.md) — antes havia um roadmap
 aqui que repetia e contradizia o changelog.
 
-Versão atual: **0.7.2** (correção de documentação: o `SKILL.md` ainda afirmava que a
-automação do NotebookLM não existia no repo, e descrevia `herdar_campos()` pela regra
-que a 0.7.1 já havia substituído). Na 0.7.1: todo prompt do NotebookLM ancora na **nota
+Versão atual: **0.8.0** (ampliar um aprofundamento já escrito com uma fonte nova —
+`padrao--pestana` vira `padrao--pestana+rosenthal`, levando junto mídia, flashcards,
+wikilinks e o notebook já criado; e localização por fonte, com `localizacao_2:` para a
+segunda). Na 0.7.2: correção de documentação — o `SKILL.md` ainda afirmava que a
+automação do NotebookLM não existia no repo. Na 0.7.1: todo prompt do NotebookLM ancora na **nota
 do vault**, nunca no livro — que é fonte opcional no notebook; o pacote declara o nome
 do notebook e o de cada arquivo de saída como contrato; e o migrador de pacotes voltou
 a enxergar o layout atual, que ele não via desde a 0.5.0.

@@ -2,6 +2,22 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.13.0] - 2026-08-02
+
+### Adicionado
+- **A ficha do aprofundamento mostra onde cada fonte foi localizada.** Num
+  aprofundamento combinado só aparecia o ponteiro da fonte 1, o que faria o leitor
+  procurar no livro errado as outras. O modelo ganha `localizacoes: [{fonte, texto}]`,
+  lido de `localizacao_livro` + `localizacao_2..N` que a `concurso-aprofunda` grava.
+- O texto do ponteiro vai **inteiro**, não só as páginas extraídas: 61 dos 122 valores
+  do vault são prosa livre ("slides 12 a 21") que a regex de página não casa.
+  `paginas_livro` continua existindo para quem já o consome.
+
+### Notas
+- Com fonte única nada muda — continua "No livro — págs. X", travado por teste.
+- Cópia de `aprofundamento_id.py` sincronizada (ganhou as funções de localização).
+- Testes: 134 -> 136.
+
 ## [0.12.0] - 2026-08-01
 
 ### Corrigido

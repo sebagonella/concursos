@@ -1,6 +1,6 @@
 ---
 name: concurso-aprofunda
-version: 0.7.2
+version: 0.8.0
 description: Use quando o usuário já tem uma preparação de concurso montada no vault (pela skill concurso-prep) e quer APROFUNDAR uma matéria a partir de um material denso — tipicamente um livro de referência (PDF/EPUB) que está no vault. A skill localiza no livro cada assunto já mapeado daquela matéria (via sumário ou busca por densidade de termos), gera um arquivo .md por assunto no vault com resumo completo próprio + ponteiros de página + trechos-âncora curtos citados (Modelo 2, sem copiar a obra), e produz flashcards nativos (Obsidian + Anki). Prepara também o insumo para a Etapa NotebookLM (podcast, mapa mental), tratada separadamente. Suporta DOIS NÍVEIS de profundidade (padrao = resumo de revisão; detalhado = tratamento exaustivo com exemplos resolvidos e questões comentadas) e VÁRIOS APROFUNDAMENTOS por assunto (fontes diferentes convivem lado a lado). Triggers - "aprofundar português com o livro X", "pegar os assuntos do livro", "mapear o livro de referência", "gerar flashcards do assunto", "extrair assuntos do material para o vault", "aprofundar mais/mais detalhado esse assunto", "aprofundar com outro livro/outra fonte", "versão detalhada do assunto".
 ---
 
@@ -51,6 +51,12 @@ Duas decisões que valem registrar:
 - **A fonte aparece mesmo quando há só uma.** Omiti-la obrigaria a **renomear** o
   aprofundamento existente quando surgisse uma segunda fonte, e renomear quebra
   wikilink e progresso do usuário.
+- **A ordem das fontes é significativa e nunca canonicalizada.** `padrao--a+b` e
+  `padrao--b+a` são pastas diferentes; ordenar alfabeticamente renomearia material
+  que ninguém pediu para mexer (4 pastas do vault já não estão em ordem). A ordem
+  espelha a cronologia: a fonte 1 é de onde o texto foi escrito, as seguintes
+  completam. Por isso `ampliar_aprofundamento.py` acrescenta **no fim** por padrão,
+  e trata conjunto igual em outra ordem como pendência.
 
 Exemplos reais:
 
@@ -82,6 +88,67 @@ sincronizada; há teste que falha se divergirem.
 
 O nível escolhe o template (`assunto.md.tpl` ou `assunto-detalhado.md.tpl`) e vai
 para o frontmatter, que a skill `concurso-publica` usa para montar o seletor no site.
+
+### Onde cada fonte foi localizada
+
+Num aprofundamento combinado, a fonte 1 fica em `localizacao_livro:` e as demais em
+`localizacao_2:`, `localizacao_3:`, ... Chaves **numeradas** e não uma só com
+separador porque os ponteiros reais contêm `;` dentro deles
+(`"pp. 5 a 7 (arts. 1º a 4º); art. 7º VI na p. 1"`), e chave única seria ambígua.
+A fonte 1 continua onde sempre esteve, para os arquivos de fonte única já existentes
+seguirem válidos sem tocar em nada.
+
+Para gerar já com N fontes, passe **um `--mapa` por fonte**, na mesma ordem de
+`--fontes` (o `book_index.py` indexa um livro por execução, então N fontes já são N
+execuções). Assunto que não for localizado numa das fontes é gravado como **"não
+localizado"** — some seria falso negativo: o leitor não saberia se a fonte não cobre
+o assunto ou se ninguém procurou.
+
+### Ampliar um aprofundamento existente
+
+Um aprofundamento já escrito pode receber uma fonte nova. Como a identidade **é** o
+conjunto de fontes e o id **é** o path, isso é necessariamente uma renomeação —
+`padrao--pestana` vira `padrao--pestana+rosenthal`. O script cuida de tudo que a
+renomeação quebra: nome-base dos arquivos, mídia já baixada, wikilinks dos índices,
+o `notebooklm_url` já colado e o pacote inteiro.
+
+```bash
+# a matéria inteira, todos os assuntos que tenham aquele id (dry-run é o padrão)
+python scripts/ampliar_aprofundamento.py \
+    --assuntos-dir <.../lingua-portuguesa/assuntos> \
+    --aprofundamento padrao--pestana \
+    --fonte "Gramática para Concursos (Rosenthal)" \
+    --localizacao "Rosenthal — págs. 210 a 240"
+
+# conferido o relatório, aplicar
+... --aplicar
+```
+
+**Ampliar ou criar variante?**
+
+> **Amplie** (`--modo ampliar`, o padrão) quando a fonte nova responde às **mesmas
+> perguntas do edital** com evidência melhor ou mais completa — ela confirma,
+> completa ou corrige o texto que já existe. O produto final é **um** material.
+>
+> **Crie variante** (execução nova, id próprio) quando a fonte nova responde a
+> **perguntas diferentes**, ou quando a divergência entre as fontes **é o objeto de
+> estudo**.
+>
+> **Derive** (`--modo derivar`) quando não souber: nasce a variante já semeada com o
+> texto atual, as duas convivem, e apagar a que sobrar é barato. Mover é irreversível
+> sem git; copiar não é.
+
+Três desempates práticos: mesmo `topico_id` nas duas fontes → **ampliar**. A mídia já
+gerada continua válida para o conteúdo mesclado → **ampliar**; vai mudar tanto que
+precisa refazer → **derivar**. Um `padrao` que ganharia +800 palavras → **não amplie**:
+crie `detalhado--{f1}+{f2}` e preserve o `padrao--{f1}` como revisão rápida — nível e
+fonte são eixos independentes.
+
+> ⚠️ **A nota antiga continua dentro do notebook já criado.** `garantir_fontes()` da
+> `concurso-notebooklm` sobe fonte pelo nome e **só adiciona**, nunca remove. Depois de
+> ampliar, apague a nota antiga no NotebookLM antes de gerar mídia de novo, ou o modelo
+> verá duas versões do mesmo assunto. O script nomeia o arquivo na pendência e grava
+> `notebooklm_fonte_obsoleta` no pacote.
 
 ### Migrar material antigo
 
@@ -127,8 +194,12 @@ publica como página com prompts copiáveis. A geração da mídia acontece fora
 | `ocr` | não | `auto` | `auto` (OCR só se o PDF for imagem), `forcar`, `nunca` |
 | `so-encontrados` | não | false | Não gerar arcabouço para assuntos não localizados no livro |
 | `flashcards` | não | true | Gerar flashcards nativos por assunto |
+| `fonte-adicional` | não | — | **Ampliar um aprofundamento já escrito** com uma fonte nova. Renomeia `{nivel}--{a}` para `{nivel}--{a}+{b}` e leva junto mídia, flashcards, wikilinks e o `notebooklm_url`. Ver *Ampliar um aprofundamento existente* |
+| `modo` | não | `ampliar` | Com `fonte-adicional`: **`ampliar`** move (o id antigo deixa de existir) · **`derivar`** copia (os dois convivem, o novo nasce semeado) |
+| `posicao` | não | `fim` | Onde a fonte nova entra na ordem do id. `fim` mantém o prefixo estável e espelha a cronologia; a ordem nunca é canonicalizada |
+| `localizacao` | não | — | Ponteiro de página da fonte nova (`localizacao_2:`). Sem ele a fonte entra sem localização e vira pendência explícita — nunca página inventada |
 
-## Fluxo (8 etapas)
+## Fluxo (9 etapas)
 
 > **Com `topico` o fluxo estreita**: em vez de montar `assuntos.json` da matéria
 > inteira na etapa 1, roda-se
@@ -265,6 +336,41 @@ publica como página com prompts copiáveis. A geração da mídia acontece fora
    > página": material sem fonte não é licença para chutar, é obrigação de
    > escrever só o que se sustenta.
 
+5b. MESCLAR, quando o aprofundamento foi AMPLIADO  [tarefa do AGENTE]
+   Só se aplica depois de `ampliar_aprofundamento.py`. Ampliar NÃO é reescrever do
+   zero: o texto existente é a SEMENTE e se edita cirurgicamente. A contribuição da
+   fonte nova cai em quatro baldes:
+
+   - CONFIRMA  -> não escreve nada. No máximo acrescenta a segunda referência de
+     página em `⚓ Trechos-âncora`.
+   - COMPLETA  -> acrescenta o que faltava, no mesmo tom e nível de detalhe do que
+     já está escrito. O que a fonte nova não acrescenta não vira texto novo:
+     ampliar não é inflar.
+   - CORRIGE   -> substitui o trecho errado E REGISTRA a correção no resumo final.
+     O usuário pode ter estudado o texto errado; sumir com o erro em silêncio é
+     pior que o erro.
+   - DIVERGE   -> NÃO escolhe lado no corpo. Vai para `## 🔀 Divergências entre
+     autores` ({DIVERGENCIAS} do template detalhado), nomeando cada fonte e o que a
+     banca costuma adotar. No nível `padrao`, que não tem esse slot, vira uma linha
+     em `⚠️ Pegadinhas` marcada como divergência de fonte — ou é o gatilho para
+     subir para `detalhado`.
+
+   Cada citação em `⚓ Trechos-âncora` passa a carregar FONTE e PÁGINA:
+   `> "trecho curto" (Pestana, p. 412)`. Sem isso o leitor não sabe qual livro abrir.
+
+   > Direitos autorais (Modelo 2) continuam valendo INTEGRALMENTE: da fonte nova
+   > entram só localização e trechos curtos citados. Mais profundidade é mais
+   > análise própria, NUNCA mais transcrição.
+
+   FLASHCARDS: ACRESCENTAR, NUNCA REGENERAR. O plugin Spaced Repetition ancora o
+   histórico de revisão no TEXTO DA FRENTE do cartão. Leia o `cards.json` que veio
+   junto na pasta, PRESERVE os fronts existentes literalmente e acrescente os novos;
+   só então rode o `flashcards_gen.py` (etapa 6) com o `--aprofundamento` NOVO.
+   Reescrever a frente de um card zera o histórico do usuário — é perda de trabalho
+   mesmo sem apagar arquivo nenhum.
+
+   Ao fim, `status: revisar` até o usuário conferir (o script já rebaixa).
+
 6. Gerar flashcards nativos por assunto  [se flashcards=true]
    - O Claude produz cards.json (front/back/tag) a partir do conteúdo redigido
    - scripts/flashcards_gen.py --cards cards.json --out-dir <pasta-do-aprofundamento>
@@ -368,6 +474,8 @@ Em `scripts/`:
 - `book_coverage.py` — relatório de cobertura: o que no livro está fora do edital (pulável)
 - `build_subject_md.py` — **(Subsistema B)** gera o arcabouço .md por assunto
 - `flashcards_gen.py` — geração nativa de flashcards (Obsidian + Anki). Passe `--aprofundamento`/`--nome-base` para o nome do arquivo casar com o wikilink do `.md`
+- `ampliar_aprofundamento.py` — **acrescenta fonte(s) a um aprofundamento existente** (modos `ampliar`/`derivar`), renomeando pasta, arquivos, mídia e wikilinks e preservando o notebook já criado (dry-run por padrão)
+- `renomear_aprof.py` — máquina de renomeação compartilhada pelo migrador e pelo ampliador: quais arquivos viajam e como o wikilink é reescrito. **Não reimplemente**: há teste que trava a identidade das funções
 - `migrar_aprofundamentos.py` — move material antigo para o padrão de pastas atual e reescreve os wikilinks (dry-run por padrão)
 - `tests/test_smoke.py` — smoke tests
 
