@@ -113,16 +113,36 @@ renomeação quebra: nome-base dos arquivos, mídia já baixada, wikilinks dos �
 o `notebooklm_url` já colado e o pacote inteiro.
 
 ```bash
-# a matéria inteira, todos os assuntos que tenham aquele id (dry-run é o padrão)
+# 1. indexar a fonte nova (uma execução por livro — o book_index indexa um por vez)
+python scripts/book_index.py --livro <rosenthal.pdf> \
+    --assuntos assuntos.json --out mapa-rosenthal.json
+
+# 2. a matéria INTEIRA, todos os assuntos que tenham aquele id (dry-run é o padrão).
+#    Em lote, o ponteiro vem do --mapa: ele resolve a página POR ASSUNTO.
 python scripts/ampliar_aprofundamento.py \
     --assuntos-dir <.../lingua-portuguesa/assuntos> \
     --aprofundamento padrao--pestana \
     --fonte "Gramática para Concursos (Rosenthal)" \
-    --localizacao "Rosenthal — págs. 210 a 240"
+    --mapa mapa-rosenthal.json
 
-# conferido o relatório, aplicar
+# 3. conferido o relatório (slugs derivados, movimentos, pendências), aplicar
 ... --aplicar
+
+# UMA pasta só: aí --localizacao é o atalho, porque o ponteiro é um só
+python scripts/ampliar_aprofundamento.py \
+    --aprof-dir <.../assuntos/crase/padrao--pestana> \
+    --fonte "Gramática para Concursos (Rosenthal)" \
+    --localizacao "Rosenthal, Gramática para Concursos — págs. 413–432" --aplicar
 ```
+
+Flags de segurança e de exceção: `--modo derivar` (copia em vez de mover) · `--posicao
+inicio|<n>` (a fonte nova não entra no fim) · `--fonte-slug` (a derivação do slug não acerta)
+· `--permitir-permutacao` (já existe o mesmo conjunto em outra ordem) · `--copiar-midias`
+(numa derivação, levar a mídia junto) · `--manter-status` (não rebaixar para `revisar`) ·
+`--raiz-links` (escopo da reescrita de wikilink; o padrão é a pasta `CONCURSOS`).
+
+**Exit codes:** `0` tudo certo · `1` erro de uso ou **nenhum alvo encontrado** · `2` há
+pendência ou conflito para conferir (o dry-run também sai 2 quando encontra pendência).
 
 **Ampliar ou criar variante?**
 
@@ -191,13 +211,14 @@ publica como página com prompts copiáveis. A geração da mídia acontece fora
 | `nivel` | não | `padrao` | **`padrao`** = resumo de revisão (~350-500 palavras) · **`detalhado`** = tratamento exaustivo (~1200-2500 palavras, com desenvolvimento completo, quadro de casos, exemplos resolvidos, questões comentadas e divergências entre autores) |
 | `fontes` | não | nome do livro | Nome(s) da(s) fonte(s), separados por vírgula. Define a identidade do aprofundamento junto com o nível. **Várias fontes numa mesma execução geram UM aprofundamento combinado**; execuções separadas geram aprofundamentos distintos do mesmo assunto. Ignorado com `proprio` |
 | `fontes-slug` | não | derivado | Slugs das fontes, na mesma ordem de `fontes`. Sobrepõe a derivação automática (sobrenome do autor / identificador da norma). Use quando o nome da fonte não permite deduzir — obra com dois autores, arquivo sem autor no nome, documento sem número de norma |
+| `mapa` | não | — | **Onde cada fonte foi localizada**, um `mapa-localizacao.json` por fonte, na MESMA ordem de `fontes`. Vale nas duas operações: gerando do zero (`build_subject_md.py --mapa`, repetível) e ampliando (`ampliar_aprofundamento.py --mapa`). **No modo em lote é o único caminho correto**, porque o ponteiro de página é POR ASSUNTO — ver `localizacao` |
 | `ocr` | não | `auto` | `auto` (OCR só se o PDF for imagem), `forcar`, `nunca` |
 | `so-encontrados` | não | false | Não gerar arcabouço para assuntos não localizados no livro |
 | `flashcards` | não | true | Gerar flashcards nativos por assunto |
 | `fonte-adicional` | não | — | **Ampliar um aprofundamento já escrito** com uma fonte nova. Renomeia `{nivel}--{a}` para `{nivel}--{a}+{b}` e leva junto mídia, flashcards, wikilinks e o `notebooklm_url`. Ver *Ampliar um aprofundamento existente* |
 | `modo` | não | `ampliar` | Com `fonte-adicional`: **`ampliar`** move (o id antigo deixa de existir) · **`derivar`** copia (os dois convivem, o novo nasce semeado) |
 | `posicao` | não | `fim` | Onde a fonte nova entra na ordem do id. `fim` mantém o prefixo estável e espelha a cronologia; a ordem nunca é canonicalizada |
-| `localizacao` | não | — | Ponteiro de página da fonte nova (`localizacao_2:`). Sem ele a fonte entra sem localização e vira pendência explícita — nunca página inventada |
+| `localizacao` | não | — | Ponteiro de página da fonte nova (`localizacao_2:`), como texto. É o **atalho para UMA pasta só**: aplica o mesmo valor a todos os alvos, então **não use em lote** — num lote de 11 assuntos gravaria a página certa de um e errada de dez. Para lote, use `mapa`. Sem nenhum dos dois, a fonte entra sem localização e vira pendência explícita — nunca página inventada. `mapa` e `localizacao` juntos são erro de uso |
 
 ## Fluxo (9 etapas)
 

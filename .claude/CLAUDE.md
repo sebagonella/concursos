@@ -80,7 +80,23 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
 - **Cores so via variaveis de tema** no CSS (nada de hex fixo para cor de texto);
   toda variavel precisa existir nos dois temas — ha teste que barra isso.
 - **Deploy e sincronizacao**: bind mount + rsync, sem rebuild nem restart. Nao
-  introduzir passos de build no deploy.
+  introduzir passos de build no deploy. **Defeito conhecido:** o `deploy.sh` constroi
+  so o concurso de `--concurso-dir` mas envia o `out/site/` inteiro com `--delete`, e
+  esse diretorio acumula — concurso construido numa sessao anterior e republicado com
+  o conteudo daquela data, **sem aviso**. Rode o deploy uma vez por concurso presente
+  em `out/site/`, ou apague o diretorio antes. Ver `deploy/README.md`.
+- **Acrescentar fonte a um aprofundamento e renomear**: o id *e* o conjunto de fontes e
+  o id *e* o path, entao `padrao--pestana` vira `padrao--pestana+rosenthal`. Quem faz e
+  `ampliar_aprofundamento.py` (modos `ampliar`/`derivar`), que move primeiro e regenera
+  o pacote depois — invertido, o `notebooklm_url` some em silencio. A ordem das fontes
+  nunca e canonicalizada; fonte nova entra no fim.
+- **Localizacao e por fonte, em chaves numeradas**: fonte 1 em `localizacao_livro`, as
+  demais em `localizacao_2`, `localizacao_3`. Chave unica com `;` nao serve — os
+  ponteiros reais contem `;` dentro deles. E metade dos valores do vault e prosa livre:
+  quem quiser pagina tenta extrair e **degrada**, nunca exige o formato.
+- **No modo em lote, o ponteiro vem do `--mapa`, nunca do `--localizacao`**: o mapa
+  resolve a pagina POR ASSUNTO; um `--localizacao` unico gravaria a pagina certa de um
+  assunto e errada de todos os outros.
 - **Preservar trabalho do usuario**: re-execucoes nao apagam resumos, flashcards
   ou progresso; scripts que sobrescrevem artefatos fazem backup.
 

@@ -82,6 +82,22 @@ python scripts/book_index.py --livro livro.pdf --assuntos assuntos.json --out ma
 python scripts/build_subject_md.py --mapa mapa.json --out-dir assuntos/ \
   --concurso SEDES_2026 --fontes "A Gramática para Concursos (Pestana)" --nivel padrao
 
+# COM DUAS FONTES desde o início: um --mapa POR FONTE, na mesma ordem de --fontes.
+# O book_index indexa um livro por execução, então N fontes já são N execuções.
+python scripts/build_subject_md.py \
+  --mapa mapa-pestana.json --mapa mapa-rosenthal.json --out-dir assuntos/ \
+  --concurso SEDES_2026 --nivel detalhado \
+  --fontes "A Gramática para Concursos (Pestana),Gramática para Concursos (Rosenthal)"
+# -> pasta detalhado--pestana+rosenthal, com localizacao_livro E localizacao_2
+
+# ACRESCENTAR uma fonte a um aprofundamento JÁ ESCRITO (renomeia; dry-run é o padrão).
+# Em lote, o ponteiro de página vem do --mapa, que o resolve POR ASSUNTO — um
+# --localizacao gravaria a mesma página nos 11 assuntos da matéria.
+python scripts/ampliar_aprofundamento.py \
+  --assuntos-dir assuntos/ --aprofundamento padrao--pestana \
+  --fonte "Gramática para Concursos (Rosenthal)" --mapa mapa-rosenthal.json
+# --modo derivar mantém o antigo e cria a variante ao lado; --aplicar executa
+
 # Flashcards — a --out-dir é a pasta do APROFUNDAMENTO, não a do assunto, e o
 # nome-base precisa casar com o do .md, senão o wikilink do Obsidian não resolve
 python scripts/flashcards_gen.py --cards cards.json \
@@ -95,6 +111,10 @@ python scripts/reuse_finder.py --help
 
 # Migrar aprofundamentos de uma convenção de pasta anterior
 python scripts/migrar_aprofundamentos.py --help
+
+# Ampliar/derivar: todas as flags de exceção (--posicao, --fonte-slug,
+# --permitir-permutacao, --copiar-midias, --manter-status, --raiz-links)
+python scripts/ampliar_aprofundamento.py --help
 ```
 
 Todos os scripts têm `--help`. O `aprofundamento_id.py` não é executável: é o módulo

@@ -28,6 +28,11 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   ninguém "consertar" copiando de volta.
 - `notebooklm_pack.gerar_para_pasta()`, extraída do laço de `main()`: regenerar o
   pacote de uma pasta não pode espalhar `.bak.md` pelos irmãos.
+- **`--mapa` também no ampliador**, repetível, um por fonte nova. É o caminho correto no
+  **modo em lote**: o ponteiro de página é POR ASSUNTO, e o `--localizacao` aplica o mesmo
+  valor a todos os alvos — numa matéria de 11 assuntos gravaria a página certa de um e
+  errada de dez. Descoberto rodando contra o vault real, não em revisão de código. Passar
+  os dois juntos é erro de uso: teriam de concordar e não há como saber qual vale.
 
 ### Corrigido
 - **`_notebooklm-estado.json` ficava para trás** no layout legado-plano: caía no
