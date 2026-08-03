@@ -2,7 +2,7 @@
 # deploy.sh - Publica o site de estudo no servidor (concursos.casa:8099).
 #
 # Roda na SUA máquina (onde está o vault). Faz:
-#   1. gera o site a partir da pasta do concurso no vault
+#   1. reconstrói TODOS os concursos presentes no build, a partir do vault
 #   2. sincroniza os arquivos para o servidor via rsync sobre SSH
 #   3. (opcional) sobe/reinicia o container, se ainda não estiver rodando
 #
@@ -10,13 +10,20 @@
 # NÃO há rebuild de imagem nem restart a cada atualização. O nginx passa a
 # servir o conteúdo novo imediatamente.
 #
+# Por que reconstrói todos: o envio é `rsync --delete` do build INTEIRO, mas o
+# `--concurso-dir` nomeia um só. Construir apenas ele republicava os demais com
+# o conteúdo da sessão em que foram gerados — sem erro nenhum na saída. Cada
+# concurso do build guarda no seu `.concurso.json` a pasta de origem no vault,
+# que é o que torna a reconstrução possível.
+#
 # Uso:
 #   ./deploy.sh --concurso-dir "~/vault/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026"
 #   ./deploy.sh --concurso-dir <...> --dry-run      # mostra o que mudaria
 #   ./deploy.sh --concurso-dir <...> --so-build     # gera local, não envia
+#   ./deploy.sh --concurso-dir <...> --so-este      # constrói SÓ este (avisa)
 #   ./deploy.sh --setup                             # 1ª vez: sobe o container
 #
-# Configuração: edite as variáveis abaixo ou defina via ambiente/deploy.env
+# Configuração: precedência ambiente > deploy.env > padrões deste arquivo.
 
 set -euo pipefail
 
@@ -24,7 +31,35 @@ AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$AQUI/.." && pwd)"
 SKILL_DIR="$REPO_ROOT/skills/concurso-publica"
 
-# --- Configuração (sobrescreva em deploy.env ou por variável de ambiente) ---
+# --- Configuração ------------------------------------------------------------
+# Precedência: ambiente > deploy.env > padrões abaixo.
+#
+# O `deploy.env` era lido com `source` DEPOIS dos padrões, então
+# `CONCURSOS_HOST=x ./deploy.sh` era silenciosamente ignorado sempre que a mesma
+# chave estivesse no arquivo — o contrário do que o cabeçalho promete, e sem
+# nenhum sinal de que a variável fora descartada. Lendo CHAVE=VALOR e definindo
+# só o que ainda não veio do ambiente, a promessa passa a valer; de quebra, o
+# arquivo de configuração deixa de poder executar shell.
+if [[ -f "${DEPLOY_ENV:-$AQUI/deploy.env}" ]]; then
+  while IFS= read -r linha || [[ -n "$linha" ]]; do
+    linha="${linha%%#*}"
+    linha="${linha#"${linha%%[![:space:]]*}"}"
+    [[ "$linha" == *=* ]] || continue
+    chave="${linha%%=*}"
+    chave="${chave%"${chave##*[![:space:]]}"}"
+    [[ "$chave" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    if [[ -z "${!chave-}" ]]; then
+      valor="${linha#*=}"
+      valor="${valor#"${valor%%[![:space:]]*}"}"
+      valor="${valor%"${valor##*[![:space:]]}"}"
+      if [[ ${#valor} -ge 2 && ( "$valor" == \"*\" || "$valor" == \'*\' ) ]]; then
+        valor="${valor:1:${#valor}-2}"
+      fi
+      printf -v "$chave" '%s' "$valor"
+    fi
+  done < "${DEPLOY_ENV:-$AQUI/deploy.env}"
+fi
+
 # CONCURSOS_* são os nomes atuais; BEELINK_* continuam aceitos por compatibilidade
 # com instalações antigas (o servidor mudou de beelink.casa para concursos.casa).
 CONCURSOS_HOST="${CONCURSOS_HOST:-${BEELINK_HOST:-concursos.casa}}"
@@ -33,11 +68,10 @@ CONCURSOS_DIR="${CONCURSOS_DIR:-${BEELINK_DIR:-/opt/concursos}}"   # onde vive o
 CONCURSOS_PORTA="${CONCURSOS_PORTA:-8099}"                          # porta publicada no host
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/out/site}"        # saída local do gerador
 
-[[ -f "$AQUI/deploy.env" ]] && source "$AQUI/deploy.env"
-
 CONCURSO_DIR=""
 DRY_RUN=0
 SO_BUILD=0
+SO_ESTE=0
 SETUP=0
 
 while [[ $# -gt 0 ]]; do
@@ -45,8 +79,11 @@ while [[ $# -gt 0 ]]; do
     --concurso-dir) CONCURSO_DIR="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --so-build) SO_BUILD=1; shift ;;
+    --so-este) SO_ESTE=1; shift ;;
     --setup) SETUP=1; shift ;;
-    --help|-h) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    # o bloco de ajuda é o cabeçalho até a primeira linha que não é comentário,
+    # para não quebrar toda vez que o cabeçalho crescer
+    --help|-h) awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "Opção desconhecida: $1"; exit 1 ;;
   esac
 done
@@ -146,14 +183,17 @@ if [[ ! -d "$CONCURSO_DIR" ]]; then
   exit 1
 fi
 
+# path absoluto: a origem vai gravada no manifesto e será relida noutro momento,
+# possivelmente de outro diretório de trabalho
+CONCURSO_DIR="$(cd "$CONCURSO_DIR" && pwd)"
 CONCURSO_NOME="$(basename "$CONCURSO_DIR")"
+CONCURSOS_PAI="$(dirname "$CONCURSO_DIR")"
 echo "📚 Concurso: $CONCURSO_NOME"
 
 if ! command -v python3 &> /dev/null; then
   echo "❌ python3 não encontrado."; exit 1
 fi
 
-echo "🏗️  Gerando o site..."
 mkdir -p "$BUILD_DIR"
 
 if [[ ! -f "$SKILL_DIR/scripts/site_builder.py" ]]; then
@@ -162,14 +202,121 @@ if [[ ! -f "$SKILL_DIR/scripts/site_builder.py" ]]; then
   exit 1
 fi
 
-python3 "$SKILL_DIR/scripts/site_builder.py" \
-  --concurso-dir "$CONCURSO_DIR" --out "$BUILD_DIR"
+# ---------------------------------------------------------------------------
+# Plano de builds
+#
+# O envio é `rsync --delete` do BUILD INTEIRO, então tudo que está em
+# $BUILD_DIR vai para o servidor — inclusive concurso construído semanas atrás.
+# Aqui se descobre o que existe no build e de onde cada um veio, para
+# reconstruir todos antes de enviar.
+# ---------------------------------------------------------------------------
+NOMES=("$CONCURSO_NOME")          # o alvo primeiro: falha rápido no que se veio fazer
+ORIGENS=("$CONCURSO_DIR")
+DEDUZIDAS=("")
+DATAS=("")                         # data do build anterior, para o aviso do --so-este
+ORFAOS=()                          # "nome<TAB>data do build" — republicados como estão
+
+while IFS=$'\t' read -r m_nome m_origem m_data; do
+  [[ -n "$m_nome" ]] || continue
+  [[ "$m_nome" == "$CONCURSO_NOME" ]] && continue
+
+  origem="$m_origem"
+  deduzida=""
+  if [[ -z "$origem" || ! -d "$origem" ]]; then
+    # Manifesto antigo (gerado antes de o campo existir) ou pasta que mudou de
+    # lugar. Os concursos moram todos lado a lado, então a irmã é um palpite
+    # bom — mas palpite ECOADO, nunca silencioso: é a mesma razão pela qual o
+    # repo ecoa slug derivado sempre, e não só quando parece suspeito.
+    if [[ -d "$CONCURSOS_PAI/$m_nome" ]]; then
+      origem="$CONCURSOS_PAI/$m_nome"
+      deduzida="sim"
+    else
+      origem=""
+    fi
+  fi
+
+  if [[ -n "$origem" ]]; then
+    NOMES+=("$m_nome"); ORIGENS+=("$origem"); DEDUZIDAS+=("$deduzida")
+    DATAS+=("${m_data:-?}")
+  else
+    ORFAOS+=("$m_nome"$'\t'"${m_data:-?}")
+  fi
+done < <(python3 - "$BUILD_DIR" <<'PY'
+import json, sys
+from pathlib import Path
+
+for man in sorted(Path(sys.argv[1]).glob("*/.concurso.json")):
+    try:
+        d = json.loads(man.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        continue
+    print("\t".join(str(d.get(c) or "") for c in ("concurso", "origem", "gerado_em")))
+PY
+)
+
+# O aviso dos órfãos é montado uma vez e impresso DUAS: aqui e no bloco final.
+# Órfão não bloqueia o deploy (é republicado como está), e aviso que aparece só
+# no meio de uma saída longa é aviso que não se lê.
+AVISO_ORFAOS=""
+if [[ ${#ORFAOS[@]} -gt 0 ]]; then
+  AVISO_ORFAOS="⚠️  ${#ORFAOS[@]} concurso(s) do build não puderam ser reconstruídos e vão"$'\n'
+  AVISO_ORFAOS+="   para o servidor COMO ESTÃO — a pasta de origem no vault não foi encontrada:"$'\n'
+  for o in "${ORFAOS[@]}"; do
+    IFS=$'\t' read -r o_nome o_data <<< "$o"
+    AVISO_ORFAOS+="     • $o_nome — build de $o_data"$'\n'
+  done
+  AVISO_ORFAOS+="   Procurei em $CONCURSOS_PAI/<nome>. Se a pasta foi renomeada, publique-a"$'\n'
+  AVISO_ORFAOS+="   com --concurso-dir para o build voltar a acompanhar o vault."
+  echo ""
+  echo "$AVISO_ORFAOS"
+fi
+
+if [[ $SO_ESTE -eq 1 && ${#NOMES[@]} -gt 1 ]]; then
+  echo ""
+  echo "⚠️  --so-este: construindo apenas $CONCURSO_NOME. Os demais serão enviados"
+  echo "   com o conteúdo que já está no build:"
+  for i in "${!NOMES[@]}"; do
+    [[ $i -eq 0 ]] && continue
+    echo "     • ${NOMES[$i]} — build de ${DATAS[$i]}"
+  done
+  NOMES=("${NOMES[0]}"); ORIGENS=("${ORIGENS[0]}"); DEDUZIDAS=("${DEDUZIDAS[0]}")
+fi
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
+echo ""
+if [[ ${#NOMES[@]} -gt 1 ]]; then
+  echo "🏗️  Gerando o site — ${#NOMES[@]} concursos no build:"
+else
+  echo "🏗️  Gerando o site..."
+fi
+
+for i in "${!NOMES[@]}"; do
+  nome="${NOMES[$i]}"
+  origem="${ORIGENS[$i]}"
+  rotulo="   [$((i + 1))/${#NOMES[@]}] $nome"
+  [[ -n "${DEDUZIDAS[$i]}" ]] && rotulo+=" (origem deduzida da pasta irmã: $origem)"
+  echo "$rotulo"
+
+  # stdout capturado (é o JSON do gerador); stderr segue para o terminal, porque
+  # é por ali que saem os avisos de rótulo fora do template — que não podem se
+  # perder em silêncio
+  if ! saida="$(python3 "$SKILL_DIR/scripts/site_builder.py" \
+        --concurso-dir "$origem" --out "$BUILD_DIR")"; then
+    echo "❌ Falhou ao construir $nome (origem: $origem)." >&2
+    exit 1
+  fi
+  paginas="$(printf '%s' "$saida" | grep -o '"paginas": *[0-9]*' | grep -o '[0-9]*' || true)"
+  echo "         ✓ ${paginas:-?} páginas"
+done
 
 TAM="$(du -sh "$BUILD_DIR" 2>/dev/null | cut -f1)"
 echo "   ✓ site em $BUILD_DIR ($TAM)"
 
 if [[ $SO_BUILD -eq 1 ]]; then
   echo "✅ Build local concluído (--so-build: nada foi enviado)."
+  [[ -n "$AVISO_ORFAOS" ]] && { echo ""; echo "$AVISO_ORFAOS"; }
   exit 0
 fi
 
@@ -198,6 +345,7 @@ rsync "${RSYNC_OPTS[@]}" "$BUILD_DIR/" "$alvo:$CONCURSOS_DIR/site/"
 if [[ $DRY_RUN -eq 1 ]]; then
   echo ""
   echo "✅ Dry-run concluído — nada foi alterado no servidor."
+  [[ -n "$AVISO_ORFAOS" ]] && { echo ""; echo "$AVISO_ORFAOS"; }
   exit 0
 fi
 
@@ -210,5 +358,13 @@ else
 fi
 
 echo ""
-echo "✅ Deploy concluído."
+echo "✅ Deploy concluído — ${#NOMES[@]} concurso(s) reconstruído(s) e publicado(s):"
+for nome in "${NOMES[@]}"; do
+  echo "     • $nome"
+done
 echo "   http://$CONCURSOS_HOST:$CONCURSOS_PORTA/"
+
+# repetido de propósito: no meio de uma saída longa, o aviso do começo já rolou
+# para fora da tela quando o deploy termina
+[[ -n "$AVISO_ORFAOS" ]] && { echo ""; echo "$AVISO_ORFAOS"; }
+exit 0

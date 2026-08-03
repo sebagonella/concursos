@@ -26,7 +26,9 @@ jobs:
 
       - name: Validar sintaxe dos scripts shell
         run: |
-          for f in scripts/*.sh; do bash -n "$f"; done
+          # inclui scripts/tests/*.sh: as suítes de shell ficaram de fora quando
+          # existia só a do install, e uma suíte que não compila passaria batido
+          for f in scripts/*.sh scripts/tests/*.sh; do bash -n "$f"; done
 
       - name: Higiene do pacote (sem caches nem nomes estranhos)
         run: |

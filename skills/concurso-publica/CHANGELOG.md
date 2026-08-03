@@ -2,6 +2,28 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.14.0] - 2026-08-03
+
+### Adicionado
+- **O manifesto de cada concurso guarda a pasta de origem no vault** (`origem` em
+  `out/site/{slug}/.concurso.json`). É a peça que faltava para o `deploy.sh`
+  reconstruir tudo que está no build antes de enviar: o envio é `rsync --delete` do
+  diretório inteiro, mas o `--concurso-dir` nomeia um concurso só, e sem saber de onde
+  os demais vieram não havia como atualizá-los. Foi assim que o `BB_2027_PREVISTO` foi
+  republicado com um build de véspera enquanto se publicava o `SEDES_2026` — sem erro
+  nenhum na saída.
+
+### Alterado
+- Os helpers de fixture da suíte saíram do `test_smoke.py` para
+  `scripts/tests/fixture_concurso.py`. Ganharam um segundo consumidor — a suíte do
+  `deploy.sh`, na raiz do repo — e um fixture por consumidor é como dois defeitos já
+  ficaram verdes por meses neste repositório.
+
+### Notas
+- Campo aditivo: manifesto antigo continua válido, e o `deploy.sh` deduz a origem pela
+  pasta irmã quando ele não a tem, ecoando o palpite.
+- Testes: 136 -> 137 (mais 22 na suíte nova do deploy).
+
 ## [0.13.0] - 2026-08-02
 
 ### Adicionado
