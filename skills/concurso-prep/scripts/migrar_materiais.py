@@ -338,9 +338,43 @@ def relatorio(concurso: str, por_escopo: dict, casados: list, pendentes: list,
     return "\n".join(linhas)
 
 
+def aplicar_enriquecimento(por_escopo: dict, enriquecido: list) -> tuple[int, list]:
+    """Funde o metadado pesquisado nas entradas, casando pela ÂNCORA.
+
+    Casa por âncora e não por título: a âncora é a identidade, e o texto do
+    título é justamente o que a pesquisa pode ter corrigido. Campo vazio no
+    enriquecimento **não apaga** o que já existia — pesquisa que não achou não é
+    o mesmo que dado inexistente.
+    """
+    por_ancora = {e["ancora"]: e for entradas in por_escopo.values() for e in entradas}
+    aplicados, ignorados = 0, []
+    for reg in enriquecido:
+        alvo = por_ancora.get(reg.get("ancora", ""))
+        if not alvo:
+            ignorados.append(reg.get("ancora") or reg.get("titulo") or "?")
+            continue
+        for campo in ("autor", "editora", "isbn", "onde_obter", "cobre"):
+            valor = (reg.get(campo) or "").strip()
+            if valor:
+                alvo[campo] = valor
+        # o id foi proposto a partir do que se sabia ANTES da pesquisa; achar o
+        # autor não renomeia a âncora, porque o mapa já pode estar apontando
+        # para ela — a lição do `aprofundamento_id.py` sobre renomear vale aqui
+        if alvo.get("autor"):
+            alvo["pendencia"] = (reg.get("pendencia") or "").strip()
+        elif reg.get("pendencia"):
+            alvo["pendencia"] = reg["pendencia"].strip()
+        aplicados += 1
+    return aplicados, ignorados
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Migra o material para o catálogo canônico")
     ap.add_argument("--concurso-dir", type=Path, required=True)
+    ap.add_argument("--listar-obras", action="store_true",
+                    help="emite as obras consolidadas em JSON, para pesquisa")
+    ap.add_argument("--enriquecimento", type=Path,
+                    help="JSON com o metadado pesquisado, casado por âncora")
     ap.add_argument("--aplicar", action="store_true",
                     help="escreve de verdade (padrão: dry-run)")
     ap.add_argument("--sem-reescrever-mapas", action="store_true",
@@ -359,6 +393,26 @@ def main() -> int:
         return 1
 
     por_escopo, sem_autor, _ = consolidar(itens, catalogos)
+
+    if a.enriquecimento:
+        dados = json.loads(a.enriquecimento.read_text(encoding="utf-8"))
+        aplicados, ignorados = aplicar_enriquecimento(
+            por_escopo, dados if isinstance(dados, list) else dados.get("obras", []))
+        print(f"# Enriquecimento: {aplicados} obra(s) atualizadas", file=sys.stderr)
+        if ignorados:
+            print(f"# AVISO: {len(ignorados)} âncora(s) do enriquecimento não existem "
+                  f"no catálogo: {', '.join(ignorados[:8])}", file=sys.stderr)
+
+    if a.listar_obras:
+        print(json.dumps({
+            "concurso": a.concurso_dir.name,
+            "obras": [{"escopo": escopo, **{k: v for k, v in e.items()
+                                            if not k.startswith("_")}}
+                      for escopo, entradas in sorted(por_escopo.items())
+                      for e in entradas],
+        }, indent=2, ensure_ascii=False))
+        return 0
+
     casados, pendentes = planejar_reescrita(itens, por_escopo)
 
     if a.json:

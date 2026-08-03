@@ -91,6 +91,53 @@ def _montar(base: Path, com_catalogo=True, mapa=MAPA) -> Path:
     return conc
 
 
+def test_enriquecimento_casa_por_ancora_e_nao_apaga():
+    """A pesquisa preenche o que falta; o que ela não achou NÃO apaga o que havia.
+
+    Campo vazio no enriquecimento significa "não encontrei", que é diferente de
+    "não existe". Deixar o vazio sobrescrever transformaria uma pesquisa
+    incompleta em perda de dado já apurado.
+    """
+    por_escopo = {"_COMUM": [
+        {"titulo": "A Gramática para Concursos", "autor": "Fernando Pestana",
+         "editora": "Método", "isbn": "", "cobre": "", "onde_obter": "",
+         "pendencia": "", "ancora": "mat-pestana-gramatica"},
+        {"titulo": "Matemática básica", "autor": "", "editora": "", "isbn": "",
+         "cobre": "", "onde_obter": "", "pendencia": "autoria não identificada",
+         "ancora": "mat-matematica-basica"},
+    ]}
+    aplicados, ignorados = mig.aplicar_enriquecimento(por_escopo, [
+        {"ancora": "mat-pestana-gramatica", "autor": "", "editora": "",
+         "isbn": "978-85-309-8888-8", "pendencia": ""},
+        {"ancora": "mat-matematica-basica", "autor": "Fulano de Tal",
+         "editora": "Editora Y", "pendencia": ""},
+        {"ancora": "mat-que-nao-existe", "autor": "Ninguém"},
+    ])
+    a, b = por_escopo["_COMUM"]
+    checar("enriquece_isbn", a["isbn"] == "978-85-309-8888-8", a["isbn"])
+    checar("nao_apaga_autor_existente", a["autor"] == "Fernando Pestana", a["autor"])
+    checar("nao_apaga_editora_existente", a["editora"] == "Método", a["editora"])
+    checar("preenche_o_que_faltava", b["autor"] == "Fulano de Tal", b["autor"])
+    checar("achou_autor_limpa_pendencia", b["pendencia"] == "", b["pendencia"])
+    checar("aplicados_conta_so_os_casados", aplicados == 2, str(aplicados))
+    checar("ancora_desconhecida_e_reportada",
+           ignorados == ["mat-que-nao-existe"], str(ignorados))
+
+
+def test_enriquecimento_nao_renomeia_a_ancora():
+    """Achar o autor depois NÃO muda o id: o mapa já pode estar apontando para
+    ele, e renomear é a operação que quebra vínculo — a lição do
+    `aprofundamento_id.py` vale igual aqui."""
+    por_escopo = {"_COMUM": [
+        {"titulo": "Obra X", "autor": "", "editora": "", "isbn": "", "cobre": "",
+         "onde_obter": "", "pendencia": "sem autoria", "ancora": "mat-obra-x"},
+    ]}
+    mig.aplicar_enriquecimento(por_escopo, [
+        {"ancora": "mat-obra-x", "autor": "Sobrenome Achado"}])
+    checar("ancora_estavel", por_escopo["_COMUM"][0]["ancora"] == "mat-obra-x",
+           por_escopo["_COMUM"][0]["ancora"])
+
+
 def test_bloco_de_nivel_2_e_lido():
     """O mapa de Português do SEDES põe os 11 itens num bloco `##` no fim."""
     faixas = mig.blocos_de_material(MAPA_H2)
