@@ -126,6 +126,36 @@ def _montar_multicargo(base: Path) -> Path:
     return conc
 
 
+def test_enriquecimento_limpa_pendencia_resolvida_mas_nao_apaga_dado():
+    """`pendencia` é o único campo em que vazio SIGNIFICA algo: a pesquisa
+    dizendo "fechei, não há mais ressalva". Nos outros, vazio quer dizer "não
+    encontrei". A distinção é chave AUSENTE vs. chave presente com valor vazio —
+    e sem ela o catálogo guardava ressalva de dúvida já resolvida."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = Path(d) / "TESTE_2026"
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.parent.mkdir(parents=True)
+        cat.write_text("# C\n\n### Obra\n\n- **Autor:** Fulano\n"
+                       "- **Editora:** Cortez\n"
+                       "- **⚠️ Pendência:** edição em confirmação\n\n^mat-x\n",
+                       encoding="utf-8")
+        mig.enriquecer_catalogos(conc, [
+            {"ancora": "mat-x", "editora": "Cortez · 8ª ed., 2018",
+             "autor": "", "pendencia": ""}])
+        e = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))[0]
+        checar("pendencia_resolvida_e_limpa", e["pendencia"] == "", repr(e["pendencia"]))
+        checar("editora_atualizada", "8ª ed." in e["editora"], e["editora"])
+        checar("autor_vazio_nao_apaga", e["autor"] == "Fulano", e["autor"])
+
+        # chave ausente: a pendência FICA
+        cat.write_text("# C\n\n### Obra\n\n- **Autor:** Fulano\n"
+                       "- **⚠️ Pendência:** segue em aberto\n\n^mat-y\n", encoding="utf-8")
+        mig.enriquecer_catalogos(conc, [{"ancora": "mat-y", "isbn": "123"}])
+        e = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))[0]
+        checar("pendencia_nao_mencionada_permanece",
+               e["pendencia"] == "segue em aberto", repr(e["pendencia"]))
+
+
 def test_materia_sem_material_e_declarada_no_catalogo():
     """Matéria com mapa e nenhuma obra é lacuna de PREPARAÇÃO, e precisa estar
     escrita — no vault e, por consequência, no site. Lacuna que só existe na

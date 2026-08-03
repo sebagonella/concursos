@@ -914,6 +914,28 @@ def test_tipo_do_material_nao_chuta_rotulo_desconhecido():
     assert icone, "item sem tipo ficou sem marcador — some da lista"
 
 
+def test_backup_nao_vira_anexo_publicado():
+    """Os scripts que reescrevem material deixam `.md.bak` ao lado do arquivo.
+
+    A varredura recursiva os transformava em anexo: os backups apareciam no site
+    como arquivo para baixar — e, por existir um "anexo", a seção deixava de
+    colapsar num documento só e ganhava uma página de índice a mais, escondendo
+    o conteúdo do catálogo um clique adiante.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mat = base / "_COMUM" / "04-MATERIAIS"
+        (mat / "livros-recomendados.md.bak").write_text("# backup\n", encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        assert not list(out.rglob("*.bak")), \
+            f"backup publicado: {[p.name for p in out.rglob('*.bak')]}"
+        m = sc.coletar_concurso(base)
+        anexos = [a["arquivo"] for e in _escopos(m) for s in e["secoes"]
+                  for a in s["anexos"]]
+        assert not [a for a in anexos if a.endswith(".bak")], anexos
+
+
 def test_block_id_do_obsidian_vira_ancora_invisivel():
     """`^mat-pestana-gramatica` é METADADO, não conteúdo.
 

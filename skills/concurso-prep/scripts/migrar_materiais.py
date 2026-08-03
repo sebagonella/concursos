@@ -427,6 +427,66 @@ def _render_catalogo(escopo: str, entradas: list) -> str:
 MARCA_COBERTURA = "## ⚠️ Matérias sem material no catálogo"
 
 
+def enriquecer_catalogos(concurso_dir: Path, registros: list) -> dict:
+    """Aplica metadado pesquisado nos catálogos que JÁ existem, casando por âncora.
+
+    Não passa pela consolidação de propósito: reconstruir o catálogo depois que a
+    pesquisa corrigiu uma autoria CRIA duplicata em vez de resolvê-la (medido:
+    +23 entradas). O catálogo existente é a autoridade; aqui só se preenche.
+
+    `titulo` só é trocado quando a pesquisa manda explicitamente — é o caso de
+    obra que estava com o título errado no vault. A ÂNCORA nunca muda junto: ela
+    é a identidade, e o mapa pode já estar apontando para ela.
+    """
+    por_ancora = {r["ancora"]: r for r in registros if r.get("ancora")}
+    tocados, aplicados, ignorados = {}, 0, set(por_ancora)
+    for cat in sorted(concurso_dir.glob("*/04-MATERIAIS/livros-recomendados.md")):
+        texto = cat.read_text(encoding="utf-8")
+        entradas = mid.parsear_catalogo(texto)
+        mudou = False
+        linhas = texto.splitlines()
+        for e in entradas:
+            reg = por_ancora.get(e["ancora"])
+            if not reg:
+                continue
+            ignorados.discard(e["ancora"])
+            novo = dict(e)
+            for campo in ("titulo", *mid.CAMPOS):
+                valor = (reg.get(campo) or "").strip()
+                if valor:
+                    novo[campo] = valor
+            # `pendencia` é o único campo em que vazio SIGNIFICA algo: a pesquisa
+            # dizendo "fechei, não há mais ressalva". Nos outros, vazio quer dizer
+            # "não encontrei" e não pode apagar dado apurado — mas manter uma
+            # pendência que já foi resolvida assusta quem lê o catálogo por nada.
+            # A distinção é entre chave AUSENTE e chave presente com valor vazio.
+            if "pendencia" in reg:
+                novo["pendencia"] = (reg["pendencia"] or "").strip()
+            if novo == e:
+                continue
+            ini = fim = None
+            for i, l in enumerate(linhas):
+                if l.strip() == f'^{e["ancora"]}':
+                    fim = i + 1
+                    for j in range(i, -1, -1):
+                        if linhas[j].startswith("### "):
+                            ini = j
+                            break
+                    break
+            if ini is None:
+                continue
+            linhas = (linhas[:ini]
+                      + mid.render_entrada(novo).rstrip("\n").splitlines()
+                      + linhas[fim:])
+            mudou, aplicados = True, aplicados + 1
+        if mudou:
+            cat.with_suffix(".md.bak").write_text(texto, encoding="utf-8")
+            cat.write_text("\n".join(linhas).rstrip("\n") + "\n", encoding="utf-8")
+            tocados[cat.parents[1].name] = True
+    return {"aplicados": aplicados, "catalogos": sorted(tocados),
+            "ancoras_sem_destino": sorted(ignorados)}
+
+
 def materias_sem_material(concurso_dir: Path) -> dict[str, list]:
     """Matérias que têm mapa e NENHUMA obra no catálogo do seu escopo.
 
@@ -637,6 +697,15 @@ def main() -> int:
     if not a.concurso_dir.is_dir():
         sys.stderr.write(f"ERRO: não é diretório: {a.concurso_dir}\n")
         return 1
+
+    if a.enriquecimento and a.aplicar:
+        dados = json.loads(a.enriquecimento.read_text(encoding="utf-8"))
+        regs = dados if isinstance(dados, list) else dados.get("obras", [])
+        r = enriquecer_catalogos(a.concurso_dir, regs)
+        print(f"  {r['aplicados']} entrada(s) atualizadas em {len(r['catalogos'])} catálogo(s)")
+        for x in r["ancoras_sem_destino"]:
+            print(f"  AVISO: âncora sem destino no catálogo: {x}")
+        return 0
 
     if a.cobertura:
         tocados = atualizar_cobertura(a.concurso_dir)

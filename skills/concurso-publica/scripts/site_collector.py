@@ -791,6 +791,13 @@ def coletar_materia(materia_dir: Path) -> dict | None:
 #
 # `03-MAPAS-MATERIAS` e `03-MAPAS-COMUNS` são dois nomes para a mesma coisa: o
 # primeiro é por cargo, o segundo é o que o SEDES usa no _COMUM.
+# Extensões que NUNCA viram anexo publicado. Backup é trabalho interno do vault:
+# os scripts que reescrevem material deixam `.md.bak` ao lado do arquivo, e a
+# varredura recursiva os transformava em anexo — os backups apareciam no site
+# como arquivo para baixar, e ainda impediam a seção de colapsar num documento
+# só, criando uma página de índice a mais.
+IGNORAR_EXT = {".bak", ".tmp", ".swp", ".orig", ".rej"}
+
 SECOES = {
     # o edital é o que se CONSULTA ("o que a regra diz"), não o que se estuda hoje —
     # fica no registro quieto, mas em primeiro lugar dentro dele
@@ -889,7 +896,7 @@ def coletar_secao(secao_dir: Path, info: tuple) -> dict:
 
     alvos = [secao_dir] if secao_dir.is_file() else sorted(secao_dir.rglob("*"))
     for p in alvos:
-        if p.is_dir() or p.name.startswith("."):
+        if p.is_dir() or p.name.startswith(".") or p.suffix.lower() in IGNORAR_EXT:
             continue
         if p.suffix.lower() in EXT_DOC:
             if DOCS_NAO_PUBLICAVEIS.match(p.stem):
