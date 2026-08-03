@@ -48,11 +48,14 @@ skills/
     └── scripts/            # pacote.py (contrato) e plano.py (o que gerar)
 
 scripts/install.sh          # instalador único (instala/atualiza todas as skills)
-scripts/test-all.sh         # roda as suítes de todas as skills
+scripts/test-all.sh         # roda as suítes de todas as skills + as de shell
+scripts/tests/              # suítes dos scripts de shell (os que mexem no ambiente)
+├── test_install.sh         # instalação/desinstalação, incluindo os subagents
+└── test_deploy.sh          # deploy com ssh/rsync/docker stubados, sem tocar a rede
 deploy/                     # Docker + rsync para servir o site num servidor doméstico
 ├── docker-compose.yml      # nginx:alpine, bind mount, ${CONCURSOS_PORTA:-8099}, 0.5 CPU / 128 MB
 ├── nginx.conf              # serve na raiz em concursos.casa:8099
-├── deploy.sh               # gera o site do vault e sincroniza via SSH
+├── deploy.sh               # reconstrói o build do vault e sincroniza via SSH
 └── README.md               # instalação, troca de porta e troubleshooting
 docs/
 ├── ARQUITETURA.md          # decisões de projeto e o porquê + diagrama do fluxo
@@ -86,6 +89,7 @@ bash scripts/test-all.sh
 ./deploy/deploy.sh --setup                              # 1ª vez
 ./deploy/deploy.sh --concurso-dir <.../SEDES_2026>      # atualizações
 ./deploy/deploy.sh --concurso-dir <...> --dry-run       # conferir antes
+./deploy/deploy.sh --concurso-dir <...> --so-este       # nao reconstruir os outros
 ```
 
 > Após instalar/atualizar, **reinicie a sessão do Claude Code** — ele carrega as skills no início da sessão e pode manter a versão anterior em cache.
@@ -128,7 +132,7 @@ Estas regras vieram de bugs reais. Quebrá-las volta a quebrar coisas.
 - **Índice de nomes é para wikilink; navegação é calculada**: o índice resolve por basename e nomes repetem entre escopos (`lingua-portuguesa` no comum e em cada cargo). Link de navegação sai sempre da rota da própria página — usar o índice fazia o hub do cargo apontar para a matéria do comum e deixava a própria órfã.
 - **Fixture tem de espelhar a saída real da skill anterior**: dois defeitos ficaram verdes por anos porque o fixture inventava o que o gerador não produz — assuntos sob `03-MAPAS-MATERIAS` (a `concurso-aprofunda` usa `03-APROFUNDAMENTO`) e uma chave `notebooklm_url` que o template nunca escrevia. Fixture divergente é teste que se autoconfirma.
 - **Cores só via variáveis de tema**: nada de hex fixo para cor de texto no CSS, senão o tema escuro quebra (já aconteceu com `strong`). Toda variável precisa existir nos dois temas — há teste que barra isso.
-- **Deploy é sincronização**: o container usa bind mount; atualizar o site é rsync, sem rebuild nem restart. Não introduzir passos de build no deploy. **Mas o escopo do build e o do envio não coincidem** — o `deploy.sh` constrói só o concurso de `--concurso-dir` e envia o `out/site/` inteiro com `--delete`, e esse diretório acumula. Concurso construído numa sessão anterior é republicado com o conteúdo daquela data, **sem aviso**: aconteceu com o `BB_2027_PREVISTO` enquanto se publicava o `SEDES_2026`. Enquanto não houver correção, rode o deploy **uma vez por concurso** presente em `out/site/` — e **não** apague o diretório para forçar um só: o envio é `rsync --delete` do build inteiro, então um build com um concurso **remove os outros do servidor**. O `out/site/` é espelho do que está publicado, não cache descartável. Detalhe e contorno em `deploy/README.md`.
+- **Deploy é sincronização, e por isso reconstrói o build inteiro**: o container usa bind mount; atualizar o site é rsync, sem rebuild de imagem nem restart — isso não muda. O que mudou é que **o escopo do build tem de alcançar o do envio**: o `--concurso-dir` nomeia um concurso, mas o envio é `rsync --delete` do `out/site/` inteiro, e esse diretório acumula. Construir só o concurso pedido republicava os demais com o conteúdo da sessão em que foram gerados, **sem aviso** — aconteceu com o `BB_2027_PREVISTO` enquanto se publicava o `SEDES_2026`. Hoje o deploy reconstrói **todos** os concursos do build antes de enviar, achando a origem de cada um no campo `origem` do `.concurso.json`; manifesto antigo sem o campo cai na pasta irmã, **com o palpite ecoado**. Concurso cuja origem sumiu é republicado como está e **avisado duas vezes** (no começo e no fim, porque aviso no meio de saída longa não se lê) — o script nunca escolhe sozinho entre publicar velho e despublicar bom. `--so-este` pula a reconstrução dos outros, avisando. E **não** apague o `out/site/` para forçar um só: o envio é `--delete` do build inteiro, então um build com um concurso **remove os outros do servidor** — o diretório é espelho do que está publicado, não cache descartável. Coberto por `scripts/tests/test_deploy.sh`; detalhe em `deploy/README.md`.
 - **Preservar trabalho do usuário**: re-execuções não apagam resumos, flashcards ou progresso. Scripts que sobrescrevem artefatos do usuário devem fazer backup — e **num lugar só**: quem faz é `notebooklm_pack.py`, que copia para `.bak.md` apenas quando o conteúdo mudou. O wrapper `fix_notebooklm_packs.py` duplicava esse backup incondicionalmente e o resultado era sobrescrito logo depois.
 - **Regra de layout mora no gerador, nunca copiada**: `fix_notebooklm_packs.py` reimplementava a busca do `.md` do assunto e ficou preso no formato plano legado — achava **zero** dos 158 pacotes do vault e saía com sucesso. Quem varre pastas de aprofundamento usa `pastas_de_aprofundamento()`/`arquivo_principal()`, e não achar nada **falha alto**.
 - **O prompt do NotebookLM aponta para a nota do vault, nunca para o livro**: subir o recorte da obra é opcional, então prompt que a nomeia manda o modelo consultar fonte que pode não estar no notebook. A cláusula sai de `clausula_fonte()`, num lugar só, e há teste que varre **todos** os blocos gerados procurando `.pdf`, página, capítulo ou termo que só o `fontes:` conheça.
@@ -137,7 +141,7 @@ Estas regras vieram de bugs reais. Quebrá-las volta a quebrar coisas.
 ## Ao evoluir uma skill
 
 1. **Plano antes de implementar.** O dono do repo revisa planos e listas de gaps antes de qualquer código. Apresente o plano e espere aprovação.
-2. **Testes**: cada skill tem `scripts/tests/test_smoke.py`, que roda standalone (sem pytest). Toda correção de bug ganha um teste que o reproduz.
+2. **Testes**: cada skill tem `scripts/tests/test_smoke.py`, que roda standalone (sem pytest); os scripts de shell têm suíte própria em `scripts/tests/test_*.sh`, que o `test-all.sh` também roda. Toda correção de bug ganha um teste que o reproduz — e vale conferir que ele **falha** contra o código antigo, senão é só decoração.
 3. **Versionamento**: SemVer no frontmatter do `SKILL.md` + entrada no `CHANGELOG.md` da skill.
 4. **Higiene de pacote** antes de fechar uma versão: sem `__pycache__`, sem arquivos órfãos, sem nomes estranhos. (Já houve incidente de pasta criada por expansão de chaves malsucedida — `mkdir -p a/{b,c}` falha em `sh`; use linhas separadas.)
 5. **Degradação graciosa**: dependências são opcionais. Sem `reportlab`, gera-se o `.md` e avisa-se sobre o PDF; sem OCR, PDF-imagem vira pendência. Nunca travar o fluxo inteiro por uma dependência ausente.

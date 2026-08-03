@@ -68,11 +68,17 @@ Toda vez que você atualizar o concurso no vault:
 
 | Flag | O que faz |
 |---|---|
-| `--dry-run` | mostra exatamente o que mudaria no servidor, sem enviar |
+| `--dry-run` | mostra exatamente o que mudaria no servidor, sem enviar (o build local é refeito) |
 | `--so-build` | gera o site local e para (bom para conferir antes) |
+| `--so-este` | constrói só o concurso pedido; avisa quais vão como estão |
 | `--setup` | primeira instalação / recriar o container |
 
+Um comando basta, mesmo com vários concursos publicados: o deploy **reconstrói todos os
+concursos presentes no build** antes de enviar — [por quê](#por-que-o-deploy-reconstrói-todos-os-concursos-e-não-só-o-que-você-pediu).
+
 O rsync usa `--delete`: o que sai do vault sai do site, mantendo os dois em sincronia. Publicar um concurso **não remove os demais** — o índice raiz é reconstruído a partir dos manifestos de todos os concursos já publicados.
+
+Configuração vem, nesta ordem: **variável de ambiente** > `deploy/deploy.env` > padrões do script.
 
 ## Dimensionamento (3 usuários simultâneos)
 
@@ -99,35 +105,48 @@ curl -I http://concursos.casa:8099/           # o site
 
 ## Solução de problemas
 
-### Um concurso republicado desatualizado, sem aviso  ⚠️ defeito conhecido
+### Por que o deploy reconstrói todos os concursos, e não só o que você pediu
 
-**Sintoma:** você roda o deploy de um concurso e, ao abrir o site, **outro** concurso aparece
-com conteúdo velho — sem nenhum erro na saída do comando.
+Não é desperdício: é o que impede o site de publicar conteúdo velho sem avisar.
 
-**Por que acontece.** O `deploy.sh` faz duas coisas com escopos diferentes:
+O `deploy.sh` tem duas operações com escopos que **não coincidem**:
 
-1. **constrói** apenas o concurso de `--concurso-dir`, dentro de `out/site/`;
-2. **envia** o `out/site/` **inteiro**, com `rsync --delete`.
+1. o `--concurso-dir` nomeia **um** concurso;
+2. o envio é `rsync --delete` do `out/site/` **inteiro**.
 
-E o `out/site/` **acumula**: o `site_builder.py` limpa só a pasta do concurso que está
-gerando. Então um concurso construído numa sessão anterior continua ali, e vai para o
-servidor junto — com o conteúdo daquela data, apresentado como se fosse atual.
+E o `out/site/` **acumula** — o `site_builder.py` limpa só a pasta do concurso que está
+gerando, de propósito (apagar o resto mataria os concursos irmãos e o `assets/`
+compartilhado). Construir apenas o concurso pedido, portanto, mandava os outros para o
+servidor com o conteúdo da sessão em que foram gerados.
 
-**Como confirmar** (antes de publicar):
+Por isso o deploy, antes de enviar, **reconstrói todo concurso presente no build**. Ele
+descobre de onde cada um veio pelo campo `origem` do manifesto
+(`out/site/{slug}/.concurso.json`), que o gerador grava desde a `concurso-publica` 0.14.0:
 
-```bash
-# o que está no build local, e de quando
-ls -l out/site/
-find out/site -name index.html -newermt '-1 day' | head    # o que foi construído hoje
+```
+🏗️  Gerando o site — 2 concursos no build:
+   [1/2] SEDES_2026
+         ✓ 412 páginas
+   [2/2] BB_2027_PREVISTO
+         ✓ 190 páginas
+🚀 Enviando para ...
 ```
 
-**Contorno enquanto não há correção:** rode o deploy **uma vez para cada concurso** que
-estiver em `out/site/`. Cada execução reconstrói o seu concurso e preserva os demais, e o
-último envio leva todos atualizados.
+**Manifesto antigo, sem o campo `origem`?** O deploy procura a pasta irmã de
+`--concurso-dir` (os concursos moram todos lado a lado no vault) e **ecoa o palpite** —
+`(origem deduzida da pasta irmã: …)`. Palpite que não aparece na tela é palpite que ninguém
+confere.
+
+**E se a pasta de origem sumiu** (renomeada, vault não montado)? O concurso é republicado
+**como está** e o deploy avisa — nomeando o concurso e a data daquele build, no começo e de
+novo no fim da saída. Ele não decide sozinho entre publicar conteúdo velho e despublicar
+conteúdo bom.
+
+**Para pular a reconstrução dos demais:** `--so-este`. Constrói só o de `--concurso-dir` e
+avisa, nomeando os que vão como estão e de quando são.
 
 ```bash
-./deploy/deploy.sh --concurso-dir <.../SEDES_2026>
-./deploy/deploy.sh --concurso-dir <.../BB_2027_PREVISTO>
+./deploy/deploy.sh --concurso-dir <.../SEDES_2026> --so-este
 ```
 
 > ⚠️ **Não apague o `out/site/` para "forçar" a reconstrução de um só.** O envio é
@@ -135,18 +154,16 @@ estiver em `out/site/`. Cada execução reconstrói o seu concurso e preserva os
 > do servidor** todos os outros. Esvaziar o build só é correto quando você realmente quer um
 > site de um concurso só — e aí a remoção é o efeito desejado, não um acidente.
 
-O `out/site/` funciona, na prática, como **espelho do que está publicado**. Tratá-lo como
-cache descartável é o que transforma o defeito acima (publicar conteúdo velho) no defeito
-inverso, pior: **despublicar** conteúdo bom.
+O `out/site/` funciona, na prática, como **espelho do que está publicado** — não é cache
+descartável.
 
-**Por que ainda não foi corrigido.** A correção não é apagar o build: o acúmulo é o que permite
-servir vários concursos no mesmo site, que é o comportamento desejado. O conserto certo é o
-deploy **reconstruir todos os concursos presentes no destino** (ou avisar quais estão velhos)
-antes do rsync — mudança no contrato do script, que merece plano próprio.
-
-> Foi assim que o `BB_2027_PREVISTO` foi republicado com um build de véspera enquanto se
-> publicava o `SEDES_2026`. Nada quebrou, e é exatamente esse o problema: **falha silenciosa**,
-> a classe que este repositório trata como a pior.
+> **De onde veio esta regra.** O `BB_2027_PREVISTO` foi republicado com um build de véspera
+> enquanto se publicava o `SEDES_2026`: sem a ficha das duas fontes, sem o conteúdo do
+> Rosenthal, e sem uma linha de erro na saída do comando. Nada quebrou, e é exatamente esse o
+> problema — **falha silenciosa**, a classe que este repositório trata como a pior. O
+> contorno documentado na ocasião (`rm -rf out/site`) era pior que o defeito: trocava
+> publicar conteúdo velho por **despublicar** conteúdo bom. Hoje há suíte
+> (`scripts/tests/test_deploy.sh`) que reproduz o caso original.
 
 ### Uma mídia dá 403 e as outras abrem
 

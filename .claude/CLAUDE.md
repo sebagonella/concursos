@@ -35,6 +35,7 @@ bash scripts/test-all.sh                      # roda os testes de todas as skill
 ./deploy/deploy.sh --setup                          # 1a vez no servidor domestico
 ./deploy/deploy.sh --concurso-dir <.../SEDES_2026>  # atualizacoes
 ./deploy/deploy.sh --concurso-dir <...> --dry-run   # conferir antes
+./deploy/deploy.sh --concurso-dir <...> --so-este   # nao reconstruir os outros
 ```
 
 > Apos instalar/atualizar, **reinicie a sessao do Claude Code** — as skills sao
@@ -79,13 +80,17 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
   `_GERAL` e com a chave `notebooklm_url`).
 - **Cores so via variaveis de tema** no CSS (nada de hex fixo para cor de texto);
   toda variavel precisa existir nos dois temas — ha teste que barra isso.
-- **Deploy e sincronizacao**: bind mount + rsync, sem rebuild nem restart. Nao
-  introduzir passos de build no deploy. **Defeito conhecido:** o `deploy.sh` constroi
-  so o concurso de `--concurso-dir` mas envia o `out/site/` inteiro com `--delete`, e
-  esse diretorio acumula — concurso construido numa sessao anterior e republicado com
-  o conteudo daquela data, **sem aviso**. Rode o deploy **uma vez por concurso** presente
-  em `out/site/`, e **nao** apague o diretorio para forcar um so: o envio e `rsync --delete`
-  do build inteiro, entao um build com um concurso **remove os outros do servidor**. Ver `deploy/README.md`.
+- **Deploy e sincronizacao, e por isso reconstroi o build inteiro**: bind mount + rsync,
+  sem rebuild de imagem nem restart — isso nao muda. Mas o `--concurso-dir` nomeia UM
+  concurso enquanto o envio e `rsync --delete` do `out/site/` inteiro, que acumula;
+  construir so o pedido republicava os demais com o conteudo da sessao em que foram
+  gerados, **sem aviso**. Hoje o deploy reconstroi **todos** os concursos do build antes
+  de enviar, achando a origem no campo `origem` do `.concurso.json`; manifesto antigo sem
+  o campo cai na pasta irma, **com o palpite ecoado**. Origem sumida = republicado como
+  esta e **avisado duas vezes** (comeco e fim), nunca escolha silenciosa entre publicar
+  velho e despublicar bom. `--so-este` pula os outros, avisando. E **nao** apague o
+  `out/site/`: um build com um concurso so **remove os outros do servidor** — o diretorio
+  e espelho do publicado, nao cache. Ver `scripts/tests/test_deploy.sh` e `deploy/README.md`.
 - **Acrescentar fonte a um aprofundamento e renomear**: o id *e* o conjunto de fontes e
   o id *e* o path, entao `padrao--pestana` vira `padrao--pestana+rosenthal`. Quem faz e
   `ampliar_aprofundamento.py` (modos `ampliar`/`derivar`), que move primeiro e regenera
