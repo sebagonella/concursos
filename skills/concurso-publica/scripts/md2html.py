@@ -34,6 +34,8 @@ def slug_ancora(texto: str) -> str:
 
 _FRONTMATTER = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
+# `^id` sozinho na linha: block id do Obsidian, alvo de `[[nota#^id]]`
+_BLOCO_ID = re.compile(r"^\s*\^([A-Za-z0-9][A-Za-z0-9-]*)\s*$")
 
 
 def _headings(md: str, pular_frontmatter=True,
@@ -390,6 +392,19 @@ def converter(md: str, wikilink_resolver=None, pular_frontmatter=True,
             texto, i = _corpo_do_item(i, m.group(1))
             abrir_item(_indent(linha), "ol", "",
                        f"<li>{_inline(html.escape(texto), wikilink_resolver)}")
+            continue
+
+        # block id do Obsidian (`^mat-pestana-gramatica`), sozinho na linha.
+        # É METADADO, não conteúdo: no Obsidian ele fica invisível no modo
+        # leitura, e é o alvo de `[[nota#^id]]`. Sem este ramo ele saía como
+        # texto visível na página E o wikilink de âncora resolvia para um id
+        # que não existia — o link levava à página certa e não pulava a lugar
+        # nenhum, que é o pior dos dois mundos: parece funcionar.
+        m = _BLOCO_ID.match(linha)
+        if m:
+            fechar_lista()
+            out.append(f'<span class="ancora-bloco" id="{html.escape(m.group(1))}"></span>')
+            i += 1
             continue
 
         # parágrafo (agrupa linhas até em branco)

@@ -732,3 +732,6 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
   color: var(--tinta);
 }
 .cartao.herdado .meta { margin: 0 0 .8rem; }
+
+/* Âncora de bloco (`^id` do Obsidian): alvo de link, sem ocupar espaço. */
+.ancora-bloco { display: block; height: 0; scroll-margin-top: 2rem; }

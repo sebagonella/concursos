@@ -890,6 +890,26 @@ def test_tipo_do_material_nao_chuta_rotulo_desconhecido():
     assert icone, "item sem tipo ficou sem marcador — some da lista"
 
 
+def test_block_id_do_obsidian_vira_ancora_invisivel():
+    """`^mat-pestana-gramatica` é METADADO, não conteúdo.
+
+    No Obsidian ele é invisível no modo leitura e é o alvo de `[[nota#^id]]`.
+    Sem tratamento ele saía como texto visível na página **e** o wikilink de
+    âncora resolvia para um id inexistente — o link levava à página certa e não
+    pulava a lugar nenhum. Parece funcionar, que é o pior dos dois mundos.
+    """
+    h = md2html.converter("### Obra\n\n- **Autor:** X\n\n^mat-pestana-gramatica\n")
+    assert 'id="mat-pestana-gramatica"' in h, h
+    assert "^mat-pestana-gramatica" not in h, "o id saiu como texto visível"
+    # o wikilink de âncora tem de cair EXATAMENTE nesse id
+    assert md2html.slug_ancora("^mat-pestana-gramatica") == "mat-pestana-gramatica"
+
+
+def test_circunflexo_no_meio_do_texto_nao_vira_ancora():
+    h = md2html.converter("Custo ^2 e potência.\n")
+    assert "ancora-bloco" not in h, h
+
+
 def test_secoes_numeradas_viram_paginas_com_anexos():
     """Item 2 do pedido: todo o conteúdo abaixo do concurso, não só o
     aprofundamento. Os `.md` viram documento; o resto vira anexo copiado, porque o
