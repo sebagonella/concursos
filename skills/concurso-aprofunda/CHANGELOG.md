@@ -2,6 +2,32 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.9.0] - 2026-08-03
+
+### Adicionado
+- **`validar_assuntos.py` — as seções do template deixam de ser opcionais.** A etapa 5
+  substitui os marcadores do arcabouço, mas nada verificava se a escrita preservava a
+  estrutura. **25 assuntos do vault** (normas jurídicas, mais dois de português) foram
+  escritos com títulos próprios — `🧩 Estrutura da norma`, `📌 Artigos-chave`,
+  `⚠️ Pegadinhas Quadrix`, `🔗 Relacionados`, que **não existem em template nenhum** — e
+  no caminho perderam a `## 📝 Para estudar depois`, onde vivem 100% das tarefas de
+  estudo. **Cinco matérias inteiras apareciam no site sem tarefa nenhuma**, sem erro em
+  lugar nenhum. O validador falha alto listando os incompletos; `--corrigir` acrescenta
+  a seção com backup `.md.bak`.
+- Etapa **5c** no fluxo do `SKILL.md`, e a regra escrita: preencher é substituir
+  marcador, nunca reescrever o arquivo com estrutura própria.
+
+### Notas de projeto
+- As tarefas acrescentadas saem só do que o arquivo já declara: a leitura vem do
+  `fontes:` do frontmatter e o link dos flashcards vem do arquivo que existe ao lado.
+  `[[flashcards-{slug}]]` genérico nasceria morto — o nome real carrega o identificador
+  do aprofundamento.
+- O backup é `.md.bak`, **não** `.bak.md`: quem acha o arquivo principal pega o primeiro
+  `*.md` em ordem, e `…SEDES_2026.bak.md` ordena **antes** de `…SEDES_2026.md` — o
+  backup viraria o aprofundamento.
+- Varrer e não achar nada **falha alto** (saída 2), como manda a regra que nasceu do
+  `fix_notebooklm_packs` achando 0 dos 158 pacotes e saindo com sucesso.
+
 ## [0.8.0] - 2026-08-02
 
 ### Adicionado

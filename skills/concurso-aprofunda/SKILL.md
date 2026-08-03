@@ -1,6 +1,6 @@
 ---
 name: concurso-aprofunda
-version: 0.8.0
+version: 0.9.0
 description: Use quando o usuário já tem uma preparação de concurso montada no vault (pela skill concurso-prep) e quer APROFUNDAR uma matéria a partir de um material denso — tipicamente um livro de referência (PDF/EPUB) que está no vault. A skill localiza no livro cada assunto já mapeado daquela matéria (via sumário ou busca por densidade de termos), gera um arquivo .md por assunto no vault com resumo completo próprio + ponteiros de página + trechos-âncora curtos citados (Modelo 2, sem copiar a obra), e produz flashcards nativos (Obsidian + Anki). Prepara também o insumo para a Etapa NotebookLM (podcast, mapa mental), tratada separadamente. Suporta DOIS NÍVEIS de profundidade (padrao = resumo de revisão; detalhado = tratamento exaustivo com exemplos resolvidos e questões comentadas) e VÁRIOS APROFUNDAMENTOS por assunto (fontes diferentes convivem lado a lado). Triggers - "aprofundar português com o livro X", "pegar os assuntos do livro", "mapear o livro de referência", "gerar flashcards do assunto", "extrair assuntos do material para o vault", "aprofundar mais/mais detalhado esse assunto", "aprofundar com outro livro/outra fonte", "versão detalhada do assunto".
 ---
 
@@ -357,6 +357,24 @@ publica como página com prompts copiáveis. A geração da mídia acontece fora
    > página": material sem fonte não é licença para chutar, é obrigação de
    > escrever só o que se sustenta.
 
+   > **As seções do template não são negociáveis.** Preencher é substituir os
+   > marcadores do arcabouço, nunca reescrever o arquivo com uma estrutura
+   > própria. Aconteceu com 25 assuntos de norma do vault: foram escritos com
+   > `🧩 Estrutura da norma`, `📌 Artigos-chave`, `⚠️ Pegadinhas Quadrix` e
+   > `🔗 Relacionados` — títulos que não existem em template nenhum — e no
+   > caminho sumiu a `## 📝 Para estudar depois`, que é **onde vivem 100% das
+   > tarefas de estudo do vault**. Cinco matérias inteiras passaram a aparecer
+   > no site sem tarefa nenhuma, e nada avisou.
+
+5c. VALIDAR as seções obrigatórias  [comando]
+   - scripts/validar_assuntos.py --concurso-dir <.../CONCURSOS/{CONCURSO}>
+   - Falha (saída 1) listando os assuntos incompletos. `--corrigir` acrescenta a
+     seção ausente com backup `.md.bak`, montando as tarefas só com o que o
+     arquivo já declara (o `fontes:` do frontmatter e o arquivo de flashcards que
+     existe ao lado) — nada de página inventada nem de wikilink adivinhado.
+   - Varrer e não achar nada **falha alto**: sair com sucesso sobre zero arquivos
+     é o defeito que fez o `fix_notebooklm_packs` achar 0 dos 158 pacotes.
+
 5b. MESCLAR, quando o aprofundamento foi AMPLIADO  [tarefa do AGENTE]
    Só se aplica depois de `ampliar_aprofundamento.py`. Ampliar NÃO é reescrever do
    zero: o texto existente é a SEMENTE e se edita cirurgicamente. A contribuição da
@@ -494,6 +512,7 @@ Em `scripts/`:
 - `fix_notebooklm_packs.py` — atualiza os _fonte-notebooklm.md de um concurso já existente (com backup), sem regenerar resumos/flashcards
 - `book_coverage.py` — relatório de cobertura: o que no livro está fora do edital (pulável)
 - `build_subject_md.py` — **(Subsistema B)** gera o arcabouço .md por assunto
+- `validar_assuntos.py` — confere que cada `.md` de assunto tem as seções obrigatórias do template (`--corrigir` acrescenta o que falta, com backup). Existe porque 25 assuntos foram escritos fora do template e perderam a seção das tarefas, sem erro nenhum
 - `flashcards_gen.py` — geração nativa de flashcards (Obsidian + Anki). Passe `--aprofundamento`/`--nome-base` para o nome do arquivo casar com o wikilink do `.md`
 - `ampliar_aprofundamento.py` — **acrescenta fonte(s) a um aprofundamento existente** (modos `ampliar`/`derivar`), renomeando pasta, arquivos, mídia e wikilinks e preservando o notebook já criado (dry-run por padrão)
 - `renomear_aprof.py` — máquina de renomeação compartilhada pelo migrador e pelo ampliador: quais arquivos viajam e como o wikilink é reescrito. **Não reimplemente**: há teste que trava a identidade das funções
