@@ -121,13 +121,23 @@ ls -l out/site/
 find out/site -name index.html -newermt '-1 day' | head    # o que foi construído hoje
 ```
 
-**Contorno enquanto não há correção:** rode o deploy **uma vez para cada concurso** que estiver
-em `out/site/`, ou apague `out/site/` antes de publicar um só:
+**Contorno enquanto não há correção:** rode o deploy **uma vez para cada concurso** que
+estiver em `out/site/`. Cada execução reconstrói o seu concurso e preserva os demais, e o
+último envio leva todos atualizados.
 
 ```bash
-rm -rf out/site        # força reconstruir só o que você vai publicar
 ./deploy/deploy.sh --concurso-dir <.../SEDES_2026>
+./deploy/deploy.sh --concurso-dir <.../BB_2027_PREVISTO>
 ```
+
+> ⚠️ **Não apague o `out/site/` para "forçar" a reconstrução de um só.** O envio é
+> `rsync --delete` do diretório inteiro: com apenas um concurso no build, o rsync **remove
+> do servidor** todos os outros. Esvaziar o build só é correto quando você realmente quer um
+> site de um concurso só — e aí a remoção é o efeito desejado, não um acidente.
+
+O `out/site/` funciona, na prática, como **espelho do que está publicado**. Tratá-lo como
+cache descartável é o que transforma o defeito acima (publicar conteúdo velho) no defeito
+inverso, pior: **despublicar** conteúdo bom.
 
 **Por que ainda não foi corrigido.** A correção não é apagar o build: o acúmulo é o que permite
 servir vários concursos no mesmo site, que é o comportamento desejado. O conserto certo é o
