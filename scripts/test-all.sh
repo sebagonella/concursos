@@ -24,21 +24,29 @@ for d in "$SKILLS_DIR"/*/; do
   [[ -f "${d}SKILL.md" ]] || continue
   [[ -n "$ONLY" && "$skill" != "$ONLY" ]] && continue
 
-  suite="${d}scripts/tests/test_smoke.py"
-  if [[ ! -f "$suite" ]]; then
-    echo "⏭️  $skill — sem suíte de testes"
-    continue
-  fi
-
-  total=$((total + 1))
-  echo "▶️  $skill"
-  if saida=$(python3 "$suite" 2>&1); then
-    echo "$saida" | tail -1 | sed 's/^/   /'
-  else
-    echo "$saida" | sed 's/^/   /'
-    falhas=$((falhas + 1))
-  fi
-  echo ""
+  # Toda suíte da skill, não só a `test_smoke.py`: quando a convenção de
+  # material ganhou arquivo próprio (`test_material_id.py`), 65 testes ficaram
+  # invisíveis para o CI porque o runner procurava um nome fixo.
+  achou=0
+  for suite in "${d}scripts/tests/"test_*.py; do
+    [[ -f "$suite" ]] || continue
+    achou=1
+    nome="$(basename "$suite" .py)"
+    total=$((total + 1))
+    if [[ "$nome" == "test_smoke" ]]; then
+      echo "▶️  $skill"
+    else
+      echo "▶️  $skill · $nome"
+    fi
+    if saida=$(python3 "$suite" 2>&1); then
+      echo "$saida" | tail -1 | sed 's/^/   /'
+    else
+      echo "$saida" | sed 's/^/   /'
+      falhas=$((falhas + 1))
+    fi
+    echo ""
+  done
+  [[ $achou -eq 0 ]] && echo "⏭️  $skill — sem suíte de testes"
 done
 
 # Suites de shell: os scripts que mexem no ambiente do usuario (install/deploy)
