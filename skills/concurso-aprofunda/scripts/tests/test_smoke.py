@@ -1777,6 +1777,66 @@ def test_migrador_nao_rebaixa_um_combinado_a_fonte_unica():
     assert fontes == ["A.pdf", "B.pdf"] and tipo == "livro", fontes
 
 
+def _assunto_no_disco(base: Path, corpo: str) -> Path:
+    """Um aprofundamento como a skill o cria: pasta `{nivel}--{fonte}` com o `.md`
+    de nome-base repetindo o identificador."""
+    p = base / "portugues" / "assuntos" / "crase" / "padrao--pestana"
+    p.mkdir(parents=True)
+    md = p / "crase--padrao--pestana--TESTE_2026.md"
+    md.write_text('---\ntitle: "Crase"\nfontes: "Pestana"\n---\n' + corpo,
+                  encoding="utf-8")
+    return md
+
+
+def test_assunto_sem_a_secao_de_tarefas_falha_alto():
+    """16 assuntos de norma do vault foram escritos com uma estrutura própria
+    (`Estrutura da norma`, `Artigos-chave`, `Pegadinhas Quadrix`) que não existe
+    em template nenhum, e perderam a seção `📝 Para estudar depois` — onde vivem
+    100% das tarefas. Cinco matérias inteiras apareceram no site sem tarefa
+    nenhuma, e nada avisou."""
+    import validar_assuntos as va
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d)
+        md = _assunto_no_disco(base, "## 🧩 Estrutura da norma\n\nTexto.\n")
+        assert va.faltantes(md) == ["Para estudar depois"]
+
+        bloco = va.secao_de_tarefas(md, "crase")
+        assert "- [ ] Ler Pestana" in bloco, "a leitura sai do `fontes:` declarado"
+        assert "flashcards" not in bloco, "sem arquivo de flashcards, sem link morto"
+        va.inserir(md, bloco)
+        assert va.faltantes(md) == []
+        assert "Estrutura da norma" in md.read_text(encoding="utf-8"), \
+            "o resumo do usuário não pode ser reescrito"
+        # backup em `.md.bak`: `.bak.md` ordenaria ANTES do original e viraria o
+        # arquivo principal do aprofundamento
+        assert (md.parent / (md.name + ".bak")).exists()
+        assert not list(md.parent.glob("*.bak.md"))
+
+
+def test_link_dos_flashcards_usa_o_arquivo_que_existe():
+    """`[[flashcards-crase]]` nasceria morto: o nome real carrega o identificador
+    do aprofundamento, que é a convenção que impede dois `crase.md` de colidirem."""
+    import validar_assuntos as va
+    with tempfile.TemporaryDirectory() as d:
+        md = _assunto_no_disco(Path(d), "## 🧩 Estrutura da norma\n\nTexto.\n")
+        (md.parent / "flashcards-crase--padrao--pestana--TESTE_2026.md").write_text(
+            "cartões", encoding="utf-8")
+        bloco = va.secao_de_tarefas(md, "crase")
+        assert "[[flashcards-crase--padrao--pestana--TESTE_2026]]" in bloco
+
+
+def test_validador_falha_quando_nao_acha_nada():
+    """Varrer e sair com sucesso sobre zero arquivos é o defeito do
+    `fix_notebooklm_packs`, que achava 0 dos 158 pacotes e passava."""
+    import validar_assuntos as va
+    with tempfile.TemporaryDirectory() as d:
+        assert va.varrer(Path(d)) == []
+        r = subprocess.run([sys.executable, str(ROOT / "validar_assuntos.py"),
+                            "--concurso-dir", d], capture_output=True, text=True)
+        assert r.returncode == 2, r.stdout + r.stderr
+        assert "nenhum aprofundamento" in r.stderr
+
+
 def _run_standalone():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     falhas = 0

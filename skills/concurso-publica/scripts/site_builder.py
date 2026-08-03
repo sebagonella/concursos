@@ -18,6 +18,7 @@ Uso:
     python site_builder.py --modelo site-model.json --out out/site
 """
 import argparse
+import hashlib
 import html
 import json
 import re
@@ -230,6 +231,32 @@ def nome_escopo(nome: str) -> str:
     return nome
 
 
+_VERSAO_ASSET: dict[tuple, str] = {}
+
+
+def versao_asset(nome: str) -> str:
+    """Resumo do conteúdo do asset, para entrar na URL.
+
+    Sem isto o navegador serve **HTML novo com CSS velho**, e o defeito é
+    invisível: a página renderiza, só renderiza errado. Aconteceu de verdade —
+    o nginx manda `expires 1h` e o telefone reaproveitou a folha antiga, então
+    os rótulos das barras saíram no tipo do corpo e a barra de cobertura saiu
+    verde (a cor que ela tinha na versão anterior).
+
+    O cache é por (mtime, tamanho): rápido no build de 350 páginas e correto
+    quando o arquivo muda no meio da mesma sessão, como nos testes.
+    """
+    caminho = ASSETS / nome
+    try:
+        st = caminho.stat()
+    except OSError:
+        return "0"
+    chave = (nome, st.st_mtime_ns, st.st_size)
+    if chave not in _VERSAO_ASSET:
+        _VERSAO_ASSET[chave] = hashlib.sha256(caminho.read_bytes()).hexdigest()[:8]
+    return _VERSAO_ASSET[chave]
+
+
 def pagina(titulo: str, trilha_html: str, corpo: str, rota: str,
            descricao: str = "") -> str:
     """Esqueleto comum. `rota` é o caminho da própria página relativo à raiz do
@@ -243,7 +270,7 @@ def pagina(titulo: str, trilha_html: str, corpo: str, rota: str,
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(titulo)}</title>
 {f'<meta name="description" content="{esc(descricao)}">' if descricao else ''}
-<link rel="stylesheet" href="{prefixo}assets/site.css">
+<link rel="stylesheet" href="{prefixo}assets/site.css?v={versao_asset("site.css")}">
 <script>
 /* aplica o tema antes da pintura, para não piscar */
 (function(){{try{{var t=localStorage.getItem("concursos:tema");
@@ -266,26 +293,155 @@ document.documentElement.setAttribute("data-tema",t);}}catch(e){{}}}})();
 <footer class="rodape">
   Gerado a partir do vault em {ano}. Conteúdo de estudo — confira sempre o edital oficial.
 </footer>
-<script src="{prefixo}assets/site.js"></script>
+<script src="{prefixo}assets/site.js?v={versao_asset("site.js")}"></script>
 </body>
 </html>
 """
 
 
-def gabarito(progresso: dict, max_bolhas: int = 12) -> str:
-    """Elemento-assinatura: as bolhas do cartão-resposta como barra de progresso."""
-    total = progresso.get("total", 0)
-    feitos = progresso.get("feitos", 0)
-    if total <= 0:
+def medidor(linhas: list[dict], compacto: bool = False) -> str:
+    """Barras lisas empilhadas — o indicador de AGREGADO.
+
+    Cada linha é `{rotulo, feitos, total, classe, sufixo, indefinida, nota}`.
+    Duas cores, ambas do mundo da prova: verde `--confere` (o visto: o que EU
+    fiz) para tarefas, azul `--tinta` (a caneta: o que EXISTE) para material.
+
+    A regra de exibição vive aqui e em nenhum outro lugar:
+
+    - `total > 0` sempre aparece, inclusive com `feitos == 0` — esconder o zero
+      faria a lacuna sumir justamente onde ela é maior;
+    - `total == 0` some, porque não há denominador sobre o que afirmar nada;
+    - `indefinida` desenha o trilho hachurado e escreve a ressalva, jamais 0%.
+    """
+    itens = []
+    for ln in linhas:
+        total = ln.get("total") or 0
+        if not total and not ln.get("indefinida"):
+            continue
+        feitos = ln.get("feitos") or 0
+        pct = round(100 * feitos / total) if total else 0
+        if ln.get("indefinida"):
+            conta = esc(ln.get("nota") or "desconhecida")
+            barra = '<div class="barra-cobertura pequena indefinida"></div>'
+            rotulo_aria = f'{ln["rotulo"]}: {ln.get("nota") or "desconhecida"}'
+        else:
+            conta = f'{feitos}/{total}'
+            if ln.get("sufixo"):
+                conta += f' · {esc(ln["sufixo"])}'
+            if ln.get("nota"):
+                conta += f' · {esc(ln["nota"])}'
+            classe = f' {ln["classe"]}' if ln.get("classe") else ""
+            pequena = " pequena" if compacto else ""
+            rotulo_aria = f'{feitos} de {total} · {ln["rotulo"]}'
+            barra = (f'<div class="barra-cobertura{pequena}{classe}" role="img"'
+                     f' aria-label="{esc(rotulo_aria)}">'
+                     f'<span style="width:{pct}%"></span></div>')
+        cls_conta = " incerta" if ln.get("indefinida") else ""
+        itens.append(
+            f'<div class="medidor-linha"><div class="medidor-cabeca">'
+            f'<span class="medidor-rotulo">{esc(ln["rotulo"])}</span>'
+            f'<span class="medidor-conta{cls_conta}">{conta}</span></div>{barra}</div>')
+    return f'<div class="medidor">{"".join(itens)}</div>' if itens else ""
+
+
+def linhas_do_escopo(escopo: dict) -> list[dict]:
+    """As duas medidas de um escopo: o que eu fiz e o que existe de material.
+
+    A matéria sem vínculo fica fora do denominador (senão vira falso zero em
+    escala de escopo), mas **nunca fica fora da página**: ou ressalva a barra
+    medida, ou — quando não sobrou nada mensurável — é ela que a barra declara.
+    """
+    cb = escopo.get("cobertura") or {}
+    sem_vinc = cb.get("n_sem_vinculo") or 0
+    ressalva = f'{sem_vinc} matéria(s) sem vínculo' if sem_vinc else ""
+    if not cb.get("n_topicos") and sem_vinc:
+        cobertura = {"rotulo": "Tópicos do edital", "indefinida": True,
+                     "nota": f'cobertura desconhecida · {ressalva}'}
+    else:
+        cobertura = {"rotulo": "Tópicos do edital",
+                     "feitos": cb.get("n_cobertos", 0),
+                     "total": cb.get("n_topicos", 0),
+                     "sufixo": f'{cb["pct"]}%' if cb.get("pct") is not None else "",
+                     "nota": ressalva}
+    return [
+        {"rotulo": "Tarefas de estudo", "classe": "tarefa",
+         **(escopo.get("progresso_tarefas") or {})},
+        cobertura,
+    ]
+
+
+def linhas_da_materia(materia: dict) -> list[dict]:
+    """Mesmas duas medidas, mesma ordem — a matéria é o escopo em escala menor."""
+    cb = materia.get("cobertura") or {}
+    if cb.get("vinculo_ausente"):
+        cobertura = {"rotulo": "Tópicos do edital", "indefinida": True,
+                     "nota": f'cobertura desconhecida · '
+                             f'{cb["n_assuntos"]} assunto(s) sem vínculo'}
+    else:
+        cobertura = {"rotulo": "Tópicos do edital",
+                     "feitos": cb.get("n_cobertos", 0),
+                     "total": cb.get("n_topicos", 0),
+                     "sufixo": f'{cb["pct"]}%' if cb.get("pct") is not None else ""}
+    return [
+        {"rotulo": "Tarefas de estudo", "classe": "tarefa",
+         **(materia.get("progresso") or {})},
+        cobertura,
+    ]
+
+
+def bloco_estudo_herdado(materia: dict, rota: str) -> str:
+    """A visão Estudo de uma matéria cujo aprofundamento mora no `_COMUM`.
+
+    O cargo guarda o mapa e o comum guarda o material — é a forma real de três
+    matérias do SEDES. Como `tem_estudo` olhava só `materia["assuntos"]`, essas
+    matérias ficavam **só com o Plano**, apesar de a cobertura já afirmar 40%,
+    60% e 25% de aprofundamento: o caminho até o material existia numa frase
+    solta e a aba, não.
+
+    Nada é copiado. Os cards apontam para a página do assunto no outro escopo, e
+    os assuntos vêm de `assuntos_herdados` — chave à parte, que a agregação de
+    progresso ignora, senão os mesmos checkboxes contariam nos dois escopos.
+    """
+    externo = materia.get("aprofundamento_em")
+    herdados = materia.get("assuntos_herdados") or []
+    if not externo or not herdados:
         return ""
-    mostrar = min(total, max_bolhas)
-    cheias = round(feitos / total * mostrar) if total else 0
-    bolhas = "".join(
-        f'<span class="bolha{" cheia" if i < cheias else ""}"></span>'
-        for i in range(mostrar)
-    )
-    return (f'<div class="gabarito"><span class="rotulo">Progresso</span>{bolhas}'
-            f'<span class="contagem">{feitos} de {total}</span></div>')
+    cards = "".join(card_assunto(a, rota_da_materia_irma(externo, rota, a["slug"]))
+                    for a in herdados)
+    onde = nome_escopo(externo["escopo_nome"]) or externo["escopo_nome"]
+    return (f'<section class="grupo"><header><h2>Assuntos aprofundados</h2>'
+            f'<span class="quantos">{len(herdados)} assunto(s)</span></header>'
+            f'<p class="explica">O material desta matéria vale para todos os cargos '
+            f'e fica em <strong>{esc(onde)}</strong>, num lugar só — '
+            f'estes cards abrem lá.</p>'
+            f'<div class="grade">{cards}</div></section>')
+
+
+def rota_da_materia_irma(externo: dict, rota: str, assunto: str = "") -> str:
+    """Caminho relativo até a matéria (ou o assunto) do outro escopo.
+
+    `rota_irma()` não serve aqui: ela troca o último segmento, e a irmã está dois
+    níveis acima, noutro escopo. O cálculo estava embutido em `bloco_cobertura`;
+    fica num lugar só porque a aba Estudo herdada precisa do mesmo destino.
+    """
+    conc = PurePosixPath(rota).parts[0]
+    destino = (f'{conc}/{externo["escopo_slug"]}/materias/'
+               f'{externo["materia_slug"]}/')
+    destino += f'{assunto}/index.html' if assunto else "index.html"
+    return relativo(destino, rota)
+
+
+def barra_de_tarefas(progresso: dict) -> str:
+    """A medida de tarefas sozinha — para o assunto, que não tem cobertura.
+
+    Aqui morava o `gabarito()`, as bolhas do cartão-resposta. Elas saíram do
+    progresso porque o site passou a ter dois jeitos de mostrar o mesmo número
+    em telas vizinhas: barra no card da matéria, bolha no card do assunto. A
+    bolha continua viva onde não mede progresso — o selo de nível (meia =
+    padrão, cheia = detalhado) e o marcador das listas de tarefa.
+    """
+    return medidor([{"rotulo": "Tarefas de estudo", "classe": "tarefa",
+                     **(progresso or {})}], compacto=True)
 
 
 def selos_midia(assunto: dict, so_presentes: bool = False) -> str:
@@ -522,7 +678,7 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
              f'<dl class="ficha">{"".join(ficha)}</dl>'
              f'{corpo_html}</article>')
     lateral = (f'<div class="{cls}" data-aprof="{esc(ident)}">'
-               f'{gabarito(ap["progresso"])}{"".join(blocos)}</div>')
+               f'{barra_de_tarefas(ap["progresso"])}{"".join(blocos)}</div>')
     return corpo, lateral
 
 
@@ -799,7 +955,7 @@ def card_assunto(a: dict, href: str, selo_topico: dict | None = None) -> str:
   {sinais}
   {selos_aprofundamento(a)}
   {selos_midia(a, so_presentes=True)}
-  {gabarito(a["progresso"], max_bolhas=8)}
+  {barra_de_tarefas(a["progresso"])}
 </a>"""
 
 
@@ -1254,15 +1410,11 @@ def bloco_cobertura(materia: dict, rotas: "Rotas", rota: str) -> str:
                       f'a lista completa está na visão <strong>Estudo</strong>.</p>')
     externo = materia.get("aprofundamento_em")
     if externo:
-        conc = PurePosixPath(rota).parts[0]
-        destino = (f'{conc}/{externo["escopo_slug"]}/materias/'
-                   f'{externo["materia_slug"]}/index.html')
-        if destino:
-            partes.append(
-                f'<p>O aprofundamento desta matéria fica em '
-                f'<a href="{esc(relativo(destino, rota))}">'
-                f'{esc(nome_escopo(externo["escopo_nome"]))}</a> — '
-                f'{externo["n_assuntos"]} assunto(s), aproveitados por este cargo.</p>')
+        partes.append(
+            f'<p>O aprofundamento desta matéria fica em '
+            f'<a href="{esc(rota_da_materia_irma(externo, rota))}">'
+            f'{esc(nome_escopo(externo["escopo_nome"]))}</a> — '
+            f'{externo["n_assuntos"]} assunto(s), aproveitados por este cargo.</p>')
     for nome, rotulo in (("00-COBERTURA-LIVRO.md", "Cobertura do livro"),
                          ("00-PENDENCIAS-FORA-DO-LIVRO.md", "Fora do livro")):
         alvo = Path(materia["dir"]) / nome
@@ -1333,12 +1485,16 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
     plano = bloco_plano(materia, rotas, rota)
     cobertura = bloco_cobertura(materia, rotas, rota)
     cob_edital = bloco_cobertura_edital(materia)
+    herdado = bloco_estudo_herdado(materia, rota)
 
     # Uma matéria, duas visões: Plano (o mapa do edital) e Estudo (os assuntos
     # aprofundados). São ângulos diferentes do MESMO recorte — separá-los em duas
     # páginas obrigaria a saber em qual procurar. Reusa o seletor em abas que já
     # existe na página de assunto, em vez de inventar componente.
-    tem_estudo = bool(materia["assuntos"])
+    # `herdado` conta como Estudo: o material EXISTE, só mora no `_COMUM`. Olhar
+    # apenas `materia["assuntos"]` deixava três matérias do SEDES com o Plano
+    # sozinho, apesar de a cobertura já afirmar 40%, 60% e 25% de aprofundamento.
+    tem_estudo = bool(materia["assuntos"]) or bool(herdado)
     seletor = ""
     if plano and tem_estudo:
         seletor = ('<div class="seletor-aprof" role="tablist" aria-label="Visões">'
@@ -1368,17 +1524,23 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
     if tem_estudo:
         ativo = " ativo" if not plano else ""
         estudo = (f'<div class="visao{ativo}" data-visao="estudo">'
-                  f'{bloco_banca}{cob_edital}{eixo}{corpo_estudo}{docs}{cobertura}</div>')
+                  f'{bloco_banca}{cob_edital}{eixo}{corpo_estudo}{herdado}'
+                  f'{docs}{cobertura}</div>')
     elif cobertura:
         estudo = cobertura
 
     linha_resumo = []
-    if tem_estudo:
+    if materia["assuntos"]:
         linha_resumo.append(f'{materia["n_assuntos"]} assuntos aprofundados')
         if materia["n_com_podcast"]:
             linha_resumo.append(f'{materia["n_com_podcast"]} com áudio')
         if materia["n_com_flashcards"]:
             linha_resumo.append(f'{materia["n_com_flashcards"]} com flashcards')
+    elif herdado:
+        # `n_assuntos` é 0 aqui: dizer "0 assuntos aprofundados" numa matéria que
+        # tem aprofundamento seria a afirmação errada que este conserto veio tirar
+        n = len(materia.get("assuntos_herdados") or [])
+        linha_resumo.append(f'{n} assuntos aprofundados no material comum')
 
     corpo = f"""<div class="papel">
   <div class="sobrancelha">{esc(nome_legivel(concurso))}</div>
@@ -1468,21 +1630,12 @@ def pagina_escopo(escopo: dict, concurso: str, rotas: "Rotas", rota: str,
                 partes.append(f'{mat["mapa"]["n_topicos"]} tópicos do edital')
             if mat.get("aprofundamento_em"):
                 partes.append("aprofundado no comum")
-            # a fração de cobertura já no hub: é a pergunta que se faz ao escolher
-            # a matéria — "quanto disto já está pronto?"
-            cb = mat.get("cobertura") or {}
-            cob = ""
-            if cb.get("n_topicos"):
-                cob = (f'<div class="barra-cobertura pequena"'
-                       f' role="img" aria-label="{cb["n_cobertos"]} de '
-                       f'{cb["n_topicos"]} tópicos aprofundados">'
-                       f'<span style="width:{cb["pct"]}%"></span></div>'
-                       f'<div class="meta">{cb["n_cobertos"]}/{cb["n_topicos"]} '
-                       f'tópicos aprofundados ({cb["pct"]}%)</div>')
+            # as duas medidas já no hub: são as perguntas que se fazem ao escolher
+            # a matéria — "quanto eu já fiz?" e "quanto disto tem material?"
             cards.append(f"""<a class="item" href="{esc(href)}">
   <h3>{esc(mat["nome"])}</h3>
   <div class="meta">{esc(" · ".join(partes))}</div>
-  {cob}
+  {medidor(linhas_da_materia(mat), compacto=True)}
 </a>""")
         n_top = sum(m["mapa"]["n_topicos"] for m in escopo["materias"] if m.get("mapa"))
         quantos = [f'{len(escopo["materias"])} matérias']
@@ -1524,11 +1677,10 @@ def pagina_escopo(escopo: dict, concurso: str, rotas: "Rotas", rota: str,
   <ul class="lista-secoes">{"".join(blocos)}</ul>
 </section>""")
 
-    prog = escopo.get("progresso") or {}
     corpo = f"""<div class="papel">
   <div class="sobrancelha">{esc(nome_legivel(concurso))}</div>
   <h1>{esc(rotulo)}</h1>
-  {gabarito(prog) if prog.get("total") else ""}
+  {medidor(linhas_do_escopo(escopo))}
 </div>
 <div style="margin-top:1.25rem">{"".join(grupos)}</div>"""
     trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a>'
@@ -1702,12 +1854,11 @@ def pagina_capa(modelo: dict, rotas: "Rotas", rota: str) -> str:
         n_docs = sum(s["n_documentos"] for s in escopo.get("secoes") or [])
         if n_docs:
             n.append(f"{n_docs} documento(s)")
-        prog = escopo.get("progresso") or {}
         cards.append(f"""<a class="item concurso-item" href="{esc(href)}">
   <h3>{esc(nome_escopo(escopo["nome"]) or "Material")}
   {'<span class="tag">comum</span>' if escopo["tipo"] == "comum" else ""}</h3>
   <div class="meta">{esc(" · ".join(n))}</div>
-  {gabarito(prog, max_bolhas=8) if prog.get("total") else ""}
+  {medidor(linhas_do_escopo(escopo), compacto=True)}
 </a>""")
 
     r = modelo["resumo"]
@@ -1839,7 +1990,8 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
         esc_slug = escopo.get("slug") or "geral"
         rota_esc = f"{slug_conc}/{esc_slug}/index.html"
         # o `99-Status` não vira página (a navegação do site é o índice), mas quem
-        # aponta para ele quer o progresso — que é justamente o que o hub mostra
+        # aponta para ele quer o progresso — e os checkboxes dele são uma das três
+        # parcelas da barra de tarefas que o hub mostra
         rotas.registrar(rota_esc, escopo["nome"], "99-Status")
         plano.append({"rota": rota_esc, "tipo": "escopo", "escopo": escopo,
                       "rota_capa": rota_capa})

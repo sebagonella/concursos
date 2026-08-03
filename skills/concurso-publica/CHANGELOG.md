@@ -2,6 +2,96 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.18.0] - 2026-08-03
+
+### Corrigido
+- **HTML novo era servido com CSS velho, e o defeito era invisível.** O nginx manda
+  `expires 1h` e a URL do asset não tinha versão, então o navegador buscava as páginas
+  novas e reaproveitava a folha antiga: os rótulos das barras saíam no tipo do corpo, o
+  `flex` sumia e rótulo e número colavam, e a barra de cobertura saía **verde** — a cor
+  que ela tinha na versão anterior. A página renderizava; só renderizava errado. Agora
+  o link carrega um resumo do conteúdo (`site.css?v=<hash>`).
+- **12 das 22 matérias apareciam sem a barra de tarefas.** Os checkboxes do mapa do
+  edital estavam excluídos por decisão da 0.17.0 — 1.998 itens, nenhum marcado, "que
+  afogariam as ~200 do aprofundamento". O argumento não se sustentou: "Ler as páginas"
+  e "Resolver 30 questões" são a mesma espécie de trabalho, e a exclusão escondia mais
+  do que protegia. **Os itens do plano voltaram para a barra de tarefas**, na matéria e
+  no escopo. Efeito: 22 de 22 matérias passam a ter as duas barras.
+- **O progresso do assunto contava só o aprofundamento principal**, perdendo **181
+  checkboxes** em 29 assuntos — dois de português apareciam zerados tendo 8 e 7 tarefas
+  na versão detalhada. Agora é a união de todos os aprofundamentos.
+- **Matéria com aprofundamento no `_COMUM` ficava só com a aba Plano.** `tem_estudo`
+  olhava apenas `materia["assuntos"]`, vazia quando o mapa é do cargo e o material é do
+  comum. Três matérias do SEDES estavam assim, com a cobertura já afirmando 40%, 60% e
+  25%. A aba Estudo passa a existir e mostra os assuntos da irmã, linkando para lá.
+- **Matéria criada só a partir de mapa nascia com o progresso zerado à mão**, apagando
+  de 35 a 176 itens que ela de fato tem.
+
+### Alterado
+- **A bolha do cartão-resposta deixou de medir progresso.** Ela sobrevive como selo de
+  nível e como marcador das listas de tarefa; o card e a página do assunto passam a
+  usar a barra, como o resto do site. Tinha ficado o mesmo número com duas aparências
+  em telas vizinhas.
+
+### Notas de projeto
+- O mapa conta para **quem guarda o arquivo**: matéria com `mapa_em` (mapa emprestado
+  pelo cruzamento) não soma os itens do plano — somar dos dois lados contaria 237 em
+  dobro só no `_COMUM` do SEDES.
+- Os assuntos da irmã entram em `assuntos_herdados`, chave à parte que a agregação de
+  progresso ignora. Copiá-los para `assuntos` faria os mesmos checkboxes contarem nos
+  dois escopos.
+
+## [0.17.0] - 2026-08-03
+
+### Adicionado
+- **Duas barras lisas de progresso** no card de escopo (capa), no hub do escopo e no
+  card de matéria: **tarefas de estudo** em cima, **tópicos do edital** embaixo, sempre
+  nessa ordem. Pilha cujo significado por linha muda de card para card é ilegível — e a
+  incomparabilidade entre as caixas foi exatamente a queixa que originou a mudança.
+- `escopos[].progresso_tarefas` — tudo o que há para marcar no escopo: assuntos +
+  documentos de seção + `99-Status.md`. `progresso_documentos` e `progresso_status`
+  eram coletados e **jogados fora**: nenhum consumidor no builder. Efeito no vault: os
+  três cargos do SEDES e o AGENTE-DE-TECNOLOGIA do BB deixam de aparecer **sem
+  indicador nenhum** tendo 21, 17, 8 e 37 tarefas em documentos.
+- `escopos[].cobertura` — o agregado dos tópicos das matérias, para a barra do escopo
+  ser a soma exata das barras das matérias.
+- `materias[].progresso` — a matéria não tinha agregado nenhum, só os assuntos
+  individualmente, então o card não tinha o que mostrar.
+
+### Alterado
+- **A barra de cobertura passou de verde para azul.** Quem conhece o site vai notar.
+  A regra agora é uma só e vale em todo lugar: **verde `--confere` = o que EU fiz**
+  (o visto de concluído, como a tarefa marcada da lista já era) e **azul `--tinta` =
+  o material que existe** (a caneta que o escreveu). Antes a tarefa marcada era verde
+  na lista e azul na bolha, e a cobertura — que é material — era verde.
+- **A bolha do cartão-resposta ficou onde cada bolha é uma tarefa**: o nível do
+  assunto (3 a 5 checkboxes). `min(total, max_bolhas)` fazia 8 bolhas valerem 303
+  tarefas — uma bolha ≈ 38 — e o comprimento da barra variar por card. `gabarito()`
+  agora **delega ao medidor** acima do limite, e não existe mais reescala em lugar
+  nenhum: uma bolha, uma tarefa, sem arredondamento.
+- **`_GERAL` deixou de zerar o progresso à mão** — concurso em layout achatado
+  mostrava barra vazia tendo trabalho real.
+- `examples/site-model-exemplo.json` passou a ser **gerado do fixture da suíte**, não
+  escrito à mão. Estava defasado em silêncio: faltavam `materia_id`, `cobertura`,
+  `sinais`, `progresso_documentos` e `progresso_status`.
+
+### Corrigido
+- **Documentação que mentia.** `SKILL.md`, `site_collector.py` e `site_builder.py`
+  afirmavam que "o progresso do `99-Status` vira a barra do hub do escopo". Não virava:
+  a barra lia só os assuntos. Agora vira de fato — como uma das três parcelas.
+
+### Notas de projeto
+- Os checkboxes dos **mapas continuam fora** da barra de tarefas: os 24 mapas do vault
+  somam 2.220, nenhum marcado, e afogariam as ~200 que alguém pretende marcar.
+- Matéria com `vinculo_ausente` **nunca** entra no denominador agregado — seria o falso
+  zero já proibido no link tópico↔assunto, agora em escala de escopo, onde uma matéria
+  arrastaria a barra de um cargo inteiro. Sai da conta e é declarada por escrito, com
+  o trilho hachurado.
+- Tarefa é de quem guarda o arquivo: a barra da matéria conta só os assuntos
+  **próprios**, senão "aprofundado no comum" contaria os mesmos checkboxes no cargo e
+  no `_COMUM`. Cobertura é o oposto — o tópico é do edital do cargo, então a matéria
+  emprestada entra sim no denominador dele.
+
 ## [0.16.0] - 2026-08-03
 
 ### Corrigido

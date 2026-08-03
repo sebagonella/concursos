@@ -4,8 +4,10 @@
    Direção visual tirada do mundo da prova de concurso brasileira:
    papel de caderno, caneta esferográfica azul (a que o edital obriga),
    marca-texto do estudante e caneta vermelha de correção.
-   Elemento-assinatura: as bolhas do cartão-resposta, usadas como
-   indicador de progresso.
+   Elemento-assinatura: as bolhas do cartão-resposta, usadas como indicador de
+   progresso onde CADA BOLHA É UMA TAREFA (o nível do assunto). Agregado usa as
+   duas barras lisas do `.medidor`: verde `--confere` para tarefas de estudo,
+   azul `--tinta` para o material que existe.
    Sem CDN: tudo local, tipografia por stack de sistema (o site roda offline).
    ========================================================================== */
 
@@ -120,26 +122,15 @@ hr { border: 0; border-top: 1px solid var(--pauta); margin: 2rem 0; }
   text-transform: uppercase; color: var(--tinta-clara); margin-bottom: .5rem;
 }
 
-/* ---------- assinatura: bolhas do cartão-resposta ---------- */
-.gabarito {
-  display: flex; align-items: center; gap: .55rem; flex-wrap: wrap;
-  margin: .9rem 0 0; padding: .7rem .9rem;
-  background: var(--superficie); border: 1px solid var(--pauta); border-radius: var(--raio);
-}
-.gabarito .rotulo {
-  font-family: var(--fonte-dado); font-size: .72rem; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--grafite-fraco); margin-right: .2rem;
-}
+/* ---------- assinatura: bolhas do cartão-resposta ----------
+   A bolha deixou de medir progresso (isso é barra, em todo lugar). Continua
+   sendo a assinatura onde ela diz outra coisa: o selo de nível do
+   aprofundamento e o marcador das listas de tarefa lidas do vault. */
 .bolha {
   width: 14px; height: 14px; border-radius: 50%;
   border: 1.5px solid var(--tinta); display: inline-block; flex: none;
 }
 .bolha.cheia { background: var(--tinta); }
-.gabarito .contagem {
-  margin-left: auto; font-family: var(--fonte-dado); font-size: .8rem;
-  color: var(--grafite-fraco);
-}
-
 /* lista de tarefas (checkboxes do vault, só leitura) */
 ul.tarefas { list-style: none; padding-left: 0; }
 ul.tarefas .tarefa { display: flex; gap: .6rem; align-items: flex-start; margin: .35rem 0; }
@@ -491,8 +482,48 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
   height: 8px; border-radius: 4px; overflow: hidden;
   background: var(--pauta); margin: .5rem 0 .35rem;
 }
-.barra-cobertura > span { display: block; height: 100%; background: var(--confere); }
+/* Azul-caneta é o padrão porque a barra sem modificador mede MATERIAL: o que foi
+   escrito e existe. Verde é o visto de concluído — o que EU fiz —, e por isso
+   fica no modificador `.tarefa`, coerente com a tarefa marcada da lista. */
+.barra-cobertura > span {
+  display: block; height: 100%; background: var(--tinta);
+  transition: width .3s cubic-bezier(.23, 1, .32, 1);
+}
+.barra-cobertura.tarefa > span { background: var(--confere); }
 .barra-cobertura.pequena { height: 5px; margin: .5rem 0 .25rem; }
+@media (prefers-reduced-motion: reduce) {
+  .barra-cobertura > span { transition: none; }
+}
+
+/* ---------- medidor: as duas barras empilhadas ----------
+   Rótulo e contagem na mesma linha, barra embaixo — num card de 260px pôr o
+   rótulo ao lado espremeria a barra até ela não medir mais nada. */
+.medidor { display: grid; gap: .55rem; margin-top: .7rem; }
+.medidor-cabeca {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: .5rem; flex-wrap: wrap;
+}
+/* o rótulo não encolhe: comprimido, "Tópicos do edital" virava duas linhas e a
+   ressalva ao lado continuava numa só, o que lia como dois campos desalinhados */
+.medidor-rotulo {
+  font-family: var(--fonte-dado); font-size: .68rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--grafite-fraco);
+  flex: none; white-space: nowrap;
+}
+.medidor-conta {
+  font-family: var(--fonte-dado); font-size: .72rem; color: var(--grafite-fraco);
+  font-variant-numeric: tabular-nums;   /* o número não dança entre cards */
+}
+/* Medida que existe mas não se pode afirmar: hachura em vez de trilho vazio, que
+   seria lido como zero — e zero aqui é justamente o que não se sabe. */
+.medidor .indefinida {
+  /* listras em `--grafite-fraco` sobre o trilho: em `--pauta` elas somem contra o
+     próprio trilho e o resultado fica idêntico a uma barra vazia — que é
+     justamente a leitura proibida aqui */
+  background-image: repeating-linear-gradient(
+    45deg, transparent 0 3px, var(--grafite-fraco) 3px 6px);
+}
+.medidor-conta.incerta { font-style: italic; }
 .cobertura-edital .lacunas > summary {
   cursor: pointer; list-style: none; min-height: 40px; display: flex;
   align-items: center; gap: .4rem;

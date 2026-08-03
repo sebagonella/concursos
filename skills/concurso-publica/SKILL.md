@@ -1,6 +1,6 @@
 ---
 name: concurso-publica
-version: 0.16.0
+version: 0.18.0
 description: Use quando o usuário quiser transformar a estrutura de um concurso já gerada no vault (pelas skills concurso-prep e concurso-aprofunda) em um site estático navegável para uso local/rede doméstica. Publica TODO o conteúdo abaixo da pasta do concurso, espelhando a organização do vault (COMUM e um galho por cargo) - edital e análise da banca, cronograma, mapas de matéria, materiais e leis baixadas, histórico, sinergia, discursiva, títulos e o aprofundamento. Cada matéria tem duas visões (Plano, do mapa do edital, e Estudo, dos assuntos aprofundados); no Plano, cada tópico leva o literal do edital, os subtópicos derivados, o material recomendado, as pegadinhas da banca, a meta de questões e as seções que o mapa tiver além dessas. Cada assunto tem o podcast tocando, o vídeo rodando, mapa mental e report embutidos, flashcards como quiz e uma página com os prompts do pacote NotebookLM prontos para copiar. Triggers - "publicar o concurso como site", "gerar páginas web do concurso", "site do vault", "ver o material no navegador", "montar o site de estudo", "levar os mapas de matéria para a web", "ver as pegadinhas da banca no site", "publicar o pacote do NotebookLM".
 ---
 
@@ -62,8 +62,26 @@ quiser o link fino preenche `mapa-aliases.json` na pasta da matéria (opcional):
 ```
 
 `00-INDICE.md` e `99-Status.md` são **derivados, não republicados**: a navegação do
-site é o índice, e o progresso do status vira a barra do hub do escopo. Republicá-los
+site é o índice, e os checkboxes do status entram na **barra de tarefas de estudo**
+do escopo, somados aos dos assuntos e aos dos documentos de seção. Republicá-los
 criaria uma segunda lista que envelhece.
+
+**As duas barras.** Escopo e matéria mostram duas medidas empilhadas, sempre nesta
+ordem: **tarefas de estudo** (verde `--confere` — o visto de concluído: o que eu fiz)
+em cima e **tópicos do edital** (azul `--tinta` — a caneta: o material que existe)
+embaixo. O assunto mostra só a de tarefas.
+
+**O que entra em "tarefas de estudo":** os assuntos (a **união** dos aprofundamentos,
+não só o principal), os **itens do plano** do mapa do edital, os documentos de seção e
+o `99-Status.md`. Os mapas ficaram de fora na 0.17.0 e voltaram na 0.18.0 — o argumento
+de que 1.998 itens nunca marcados afogariam as ~200 do aprofundamento não se sustentou:
+"Ler as páginas" e "Resolver 30 questões" são a mesma espécie de trabalho, e a exclusão
+deixava **12 das 22 matérias do vault sem barra nenhuma**. O mapa conta para quem guarda
+o arquivo: matéria com `mapa_em` (mapa emprestado pelo cruzamento) não o soma.
+
+**Os assets levam a versão do conteúdo na URL** (`site.css?v=<hash>`). Sem isso o
+navegador serve HTML novo com CSS velho enquanto o `expires` do nginx não vence — e o
+defeito é invisível, porque a página renderiza, só renderiza errado.
 
 **Como o aprofundamento é lido.** O padrão de pastas da `concurso-aprofunda` é
 
@@ -173,9 +191,13 @@ player de áudio, vídeo, mapa mental com lightbox, guia de estudos e quiz de fl
 
 Paleta e elementos tirados do mundo da prova de concurso: papel, tinta de caneta
 esferográfica azul (a que o edital exige), marca-texto e caneta vermelha de correção.
-O elemento-assinatura é a **bolha do cartão-resposta**, usada como indicador de
-progresso (lido do vault, só leitura). Tipografia por stack de sistema — sem webfonts,
-porque o site precisa funcionar offline na rede doméstica.
+O elemento-assinatura é a **bolha do cartão-resposta**, hoje usada onde ela não mede
+progresso: o selo de nível do aprofundamento (meia = padrão, cheia = detalhado) e o
+marcador das listas de tarefa lidas do vault. **Progresso é sempre barra** — a bolha
+tentou medi-lo duas vezes e falhou das duas: primeiro valendo 38 tarefas cada, depois
+convivendo com a barra e pondo o mesmo número com duas aparências em telas vizinhas.
+Tipografia por stack de sistema — sem webfonts, porque o site precisa funcionar offline
+na rede doméstica.
 
 ## Deploy (servidor doméstico)
 

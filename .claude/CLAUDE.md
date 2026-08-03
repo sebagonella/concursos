@@ -62,7 +62,41 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
   vault; o progresso exibido e so leitura.
 - **O site espelha COMUM/cargo** (`{concurso}/{comum|cargo}/`). `00-INDICE.md` e
   `99-Status.md` sao derivados, nao republicados — mas continuam sendo lidos (deles
-  saem a ordenacao das materias e os selos de questoes/prioridade).
+  saem a ordenacao das materias, os selos de questoes/prioridade e, do status, os
+  checkboxes que entram na barra de tarefas do escopo).
+- **Progresso e barra, em todo lugar.** A bolha do cartao-resposta nao mede mais
+  progresso — sobrevive como selo de nivel e marcador das listas de tarefa. Duas
+  tentativas falharam antes: `min(total, max_bolhas)` fazia 8 bolhas valerem 303
+  tarefas, e depois barra na materia com bolha no assunto punha o mesmo numero com
+  duas aparencias em telas vizinhas. Escopo e materia usam **duas barras lisas,
+  sempre na mesma ordem**: tarefas de estudo (verde `--confere`) em cima, topicos do
+  edital (azul `--tinta`) embaixo; o assunto usa so a de tarefas.
+- **Tarefas de estudo = assuntos (uniao dos aprofundamentos) + itens do plano do mapa
+  + documentos de secao + `99-Status.md`** (`progresso_tarefas`). Cada exclusao aqui ja
+  escondeu trabalho: so os assuntos deixava os cargos sem barra tendo 21/17/8 tarefas em
+  documentos; so o aprofundamento principal sumia com 181 checkboxes em 29 assuntos. Os
+  **mapas sairam na 0.17.0 e voltaram na 0.18.0** — o argumento de que 1.998 itens nunca
+  marcados afogariam as ~200 reais estava errado, e a exclusao deixava **12 das 22
+  materias sem barra nenhuma**.
+- **O mapa conta para quem guarda o arquivo**: materia com `mapa_em` (mapa emprestado
+  pelo cruzamento) nao soma os itens do plano — somar dos dois lados contaria 237 em
+  dobro so no comum do SEDES. As demais parcelas nao se sobrepoem por construcao: o
+  status fica fora das pastas de `SECOES` e a secao herdada do `_COMUM` e ponteiro com
+  `documentos: []`.
+- **Barra ausente, vazia e desconhecida sao tres coisas**: some so quando o medido nao
+  existe; vem vazia com o trilho a vista quando esta em zero (`0/48`, nunca `0/0`); vem
+  hachurada e escrita quando e `vinculo_ausente`. Materia sem vinculo nunca entra no
+  denominador agregado — falso zero em escala de escopo esconde o trabalho de uma
+  materia inteira.
+- **Tarefa e de quem guarda o arquivo; cobertura e de quem tem o edital**: a barra de
+  tarefas da materia conta so os assuntos proprios (senao "aprofundado no comum" conta
+  duas vezes), mas a materia emprestada entra sim na cobertura do cargo. E ela **tem aba
+  Estudo**: os assuntos da irma entram em `assuntos_herdados`, chave a parte que a
+  agregacao ignora — antes `tem_estudo` olhava so `assuntos` e tres materias do SEDES
+  ficavam so com o Plano tendo 40%, 60% e 25% de cobertura.
+- **Asset publicado leva a versao do conteudo na URL** (`site.css?v=<hash>`): o nginx
+  manda `expires 1h`, entao sem isso o navegador serve **HTML novo com CSS velho** — e o
+  defeito e invisivel, porque a pagina renderiza, so renderiza errado.
 - **Nada escrito no topico do mapa se perde em silencio**: H3 fora do template e
   publicado com o texto do vault **e avisado** na geracao; rotulo repetido no mesmo
   topico acumula, nunca sobrescreve; e a lista exibida conta o mesmo que o contador
