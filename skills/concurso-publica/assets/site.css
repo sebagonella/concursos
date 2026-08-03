@@ -723,3 +723,12 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
   display: flex; align-items: baseline; gap: .45rem;
 }
 .mat-topico .ic { color: var(--grafite-fraco); flex: none; min-width: 1em; }
+
+/* Bloco do que o escopo herda do _COMUM. Só variáveis de tema: hex fixo para cor
+   de texto já quebrou o tema escuro neste arquivo (aconteceu com `strong`). */
+.cartao.herdado { margin-top: 1rem; border-left: 3px solid var(--tinta-lavada); }
+.cartao.herdado > h2 {
+  margin: 0 0 .5rem; font-size: .95rem; font-family: var(--fonte-titulo);
+  color: var(--tinta);
+}
+.cartao.herdado .meta { margin: 0 0 .8rem; }

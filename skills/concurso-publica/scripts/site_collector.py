@@ -1234,6 +1234,69 @@ def coletar_escopo(escopo_dir: Path) -> dict:
     }
 
 
+# Seções do `_COMUM` que valem para quem estuda por um cargo. `04-MATERIAIS` é a
+# bibliografia: quem é do cargo X precisa ver, num lugar só, o que se aplica a ele.
+# As outras (edital, histórico, sinergia) ficam de fora por enquanto — herdar tudo
+# encheria o galho do cargo com o comum inteiro, e a decisão foi sobre material.
+SECOES_HERDAVEIS = ("materiais",)
+
+
+def herdar_secoes_comuns(escopos: list[dict]) -> None:
+    """Faz o galho do cargo enxergar as seções do `_COMUM` que se aplicam a ele.
+
+    Sem isto, a página de Materiais **some em silêncio** no cargo: a coleta é
+    estritamente por escopo, e três filtros em cascata (aqui, `montar_rotas` e
+    `pagina_escopo`) descartam a seção inexistente sem avisar. Medido no vault em
+    03/08/2026: 5 dos 7 escopos não têm `04-MATERIAIS`, então quem estuda por um
+    cargo não tem NENHUM caminho de navegação até a bibliografia.
+
+    Herda por REFERÊNCIA, nunca por cópia. O conteúdo continua morando no
+    `_COMUM`; o cargo ganha um ponteiro que o builder transforma em link. Copiar
+    os anexos para cada cargo multiplicaria os PDFs no disco — é o mesmo defeito
+    que já fez o site pular de 78 para 685 PDFs quando os anexos passaram a ser
+    copiados por documento em vez de por seção.
+    """
+    comum = next((e for e in escopos if e["tipo"] == "comum"), None)
+    if not comum:
+        return
+    for herdavel in SECOES_HERDAVEIS:
+        origem = next((s for s in comum["secoes"] if s["slug"] == herdavel), None)
+        if not origem:
+            continue
+        ponteiro = {
+            "escopo": comum["nome"], "escopo_slug": comum["slug"],
+            "secao_slug": origem["slug"], "rotulo": origem["rotulo"],
+            "n_documentos": origem["n_documentos"], "n_anexos": origem["n_anexos"],
+        }
+        for escopo in escopos:
+            if escopo is comum or escopo["tipo"] == "geral":
+                continue
+            # o cargo só herda se tiver conteúdo próprio — cargo sem matéria
+            # nenhuma não precisa de página de bibliografia
+            if not escopo["materias"]:
+                continue
+            propria = next((s for s in escopo["secoes"] if s["slug"] == herdavel), None)
+            if propria:
+                propria["herdado_de"] = ponteiro
+                continue
+            escopo["secoes"].append({
+                "ordinal": origem["ordinal"], "rotulo": origem["rotulo"],
+                "slug": origem["slug"], "registro": origem["registro"],
+                "modo": origem["modo"], "dir": "",
+                "documentos": [], "anexos": [],
+                "n_documentos": 0, "n_anexos": 0, "bytes_anexos": 0,
+                "herdado_de": ponteiro,
+            })
+        comum_secao = origem
+        comum_secao.setdefault("herdada_por", [])
+        comum_secao["herdada_por"] = [
+            e["nome"] for e in escopos
+            if e is not comum and e["tipo"] != "geral" and e["materias"]
+        ]
+    for escopo in escopos:
+        escopo["secoes"].sort(key=lambda s: (s["ordinal"], s["slug"]))
+
+
 def cruzar_materias_comuns(escopos: list[dict]) -> None:
     """Liga as duas metades de uma matéria que vive em escopos diferentes.
 
@@ -1403,6 +1466,7 @@ def coletar_concurso(base: Path) -> dict:
     # `_COMUM` primeiro (é o que vale para todos), cargos em ordem alfabética
     escopos.sort(key=lambda e: (e["tipo"] != "comum", e["nome"]))
     cruzar_materias_comuns(escopos)
+    herdar_secoes_comuns(escopos)
     calcular_cobertura(escopos)
     avisar_rotulos_extras(escopos)
 

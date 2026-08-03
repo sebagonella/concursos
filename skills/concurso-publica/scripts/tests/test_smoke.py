@@ -813,6 +813,83 @@ def test_capa_agrupa_por_escopo():
         assert not orfas, orfas
 
 
+def test_cargo_herda_a_pagina_de_materiais_do_comum():
+    """A bibliografia mora no `_COMUM` e o cargo não tinha caminho nenhum até ela.
+
+    A coleta é por escopo, e três filtros em cascata descartavam a seção
+    inexistente **sem avisar**: `coletar_escopo` só anexa seção com conteúdo,
+    `montar_rotas` não cria rota do que não existe e `pagina_escopo` pula grupo
+    vazio. Medido no vault em 03/08/2026: 5 dos 7 escopos sem `04-MATERIAIS`.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        pag = out / "teste_2026" / "cargo-x" / "materiais" / "index.html"
+        assert pag.exists(), "cargo continua sem página de materiais"
+        h = pag.read_text(encoding="utf-8")
+        assert "Comum a todos os cargos" in h, "não diz de onde herdou"
+        m = re.search(r'class="botao" href="([^"]+)"', h)
+        assert m, "sem link para a página do comum"
+        assert (pag.parent / m.group(1)).resolve().exists(), \
+            f"link herdado aponta para página inexistente: {m.group(1)}"
+
+
+def test_heranca_nao_duplica_anexo_no_cargo():
+    """Herda por REFERÊNCIA. Copiar os PDFs para cada cargo é o defeito que já fez
+    o site pular de 78 para 685 arquivos."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        no_cargo = list((out / "teste_2026" / "cargo-x").rglob("*.pdf"))
+        assert not no_cargo, f"anexo duplicado no cargo: {[p.name for p in no_cargo]}"
+        assert list((out / "teste_2026" / "comum").rglob("lei-1234-1990.pdf")), \
+            "o anexo sumiu do escopo que realmente o tem"
+
+
+def test_material_por_topico_classifica_e_lista():
+    """O bloco agregado não tinha NENHUMA asserção — só CSS."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "materias" / "portugues"
+             / "index.html").read_text(encoding="utf-8")
+        assert "Material por tópico" in h
+        assert "📕" in h and "✎" in h, "ícone de livro/questões sumiu da lista"
+        assert "Pestana" in h, "o item do mapa não chegou ao bloco agregado"
+
+
+def test_material_por_topico_aponta_para_a_pagina_de_materiais():
+    """O texto antigo mandava a 'Materiais, no menu do concurso' — menu que não
+    existe, para uma página que no cargo também não existia."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        pag = (out / "teste_2026" / "cargo-x" / "materias" / "portugues"
+               / "index.html")
+        h = pag.read_text(encoding="utf-8")
+        assert "no menu do concurso" not in h, "a frase morta continua na página"
+        m = re.search(r'<a href="([^"]+)">a bibliografia completa fica em Materiais</a>', h)
+        assert m, "sem link para a bibliografia"
+        assert (pag.parent / m.group(1)).resolve().exists(), \
+            f"link da bibliografia quebrado: {m.group(1)}"
+
+
+def test_tipo_do_material_nao_chuta_rotulo_desconhecido():
+    """~40 dos 458 itens do vault usam rótulo fora da tripla do template. Eles não
+    podem sumir nem virar palpite."""
+    assert sb.tipo_do_material("Livro: *X* — Y")[0] == "livro"
+    assert sb.tipo_do_material("Questões: qconcursos")[0] == "questoes"
+    assert sb.tipo_do_material("YouTube: canal")[0] == "video"
+    assert sb.tipo_do_material("Norma-fonte: Lei 8.742")[0] == "norma"
+    tipo, icone = sb.tipo_do_material("Referência de apoio (gratuito): blog")
+    assert tipo == "outro", f"chutou o tipo: {tipo}"
+    assert icone, "item sem tipo ficou sem marcador — some da lista"
+
+
 def test_secoes_numeradas_viram_paginas_com_anexos():
     """Item 2 do pedido: todo o conteúdo abaixo do concurso, não só o
     aprofundamento. Os `.md` viram documento; o resto vira anexo copiado, porque o
@@ -1251,8 +1328,15 @@ def test_exemplo_do_modelo_constroi_de_verdade():
     # repo público), então o site inteiro não sai daqui — o que se exercita é a aba
     # que consome o mapa, que é justamente a parte do contrato que mudou
     class _RotasFalsas:
+        """Dublê do `Rotas`. Precisa espelhar a interface REAL: quando o
+        `bloco_plano` passou a calcular a rota de Materiais do escopo, um dublê
+        sem `tem_pagina` derrubou o teste — que é o comportamento certo. Dublê
+        que não acompanha a interface esconde o que o código passou a exigir."""
         def resolvedor(self, rota):
             return lambda alvo: None
+
+        def tem_pagina(self, rota):
+            return False
 
     # o pacote é a outra metade do contrato, e era onde o exemplo estava velho:
     # trazia `roteiro: []` congelado em mapa mental e report
