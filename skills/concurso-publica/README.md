@@ -24,9 +24,12 @@ edital) e **Estudo** (os assuntos aprofundados). No Plano, cada tópico traz o l
 do edital e o checklist derivado à vista, e a um clique o material recomendado, as
 pegadinhas da banca, a meta de questões e o que mais o mapa tiver escrito.
 
-Versão atual: **0.13.0** (a ficha do aprofundamento mostra onde **cada** fonte foi
+Versão atual: **0.14.0** (o manifesto de cada concurso guarda a pasta de origem no vault,
+que é o que permite ao `deploy.sh` reconstruir todo o build antes de enviar — sem isso,
+concurso construído numa sessão anterior era republicado com o conteúdo daquela data).
+Na 0.13.0: a ficha do aprofundamento mostra onde **cada** fonte foi
 localizada, e o ponteiro vai inteiro — metade dos valores do vault é prosa livre que a
-regex de página não casa). Na 0.12.0: correção de documentação, com o `SKILL.md`
+regex de página não casa. Na 0.12.0: correção de documentação, com o `SKILL.md`
 acumulando "novidades da versão X" que pararam na 0.7.0. Na 0.11.2:
 quatro defeitos de renderização — lista aninhada deixa de achatar, item de lista não
 perde a linha de continuação, negrito contendo itálico converte, e o pipe cru de

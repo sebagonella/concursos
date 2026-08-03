@@ -108,7 +108,8 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
 
 Ao evoluir uma skill: **plano antes de implementar** (o dono do repo aprova
 planos e listas de gaps antes de qualquer codigo), teste que reproduz cada bug
-corrigido, SemVer no frontmatter do `SKILL.md` + entrada no `CHANGELOG.md`, e
+corrigido, SemVer nos **tres** lugares que o CI confere (`SKILL.md`, `Versao atual:` do
+`README.md` da skill e topo do `CHANGELOG.md`), e
 higiene de pacote (sem `__pycache__`, sem orfaos) antes de fechar versao.
 
 > Regras completas, estrutura de pastas e contexto de dominio: `CLAUDE.md` da

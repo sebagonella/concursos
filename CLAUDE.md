@@ -142,7 +142,7 @@ Estas regras vieram de bugs reais. Quebrá-las volta a quebrar coisas.
 
 1. **Plano antes de implementar.** O dono do repo revisa planos e listas de gaps antes de qualquer código. Apresente o plano e espere aprovação.
 2. **Testes**: cada skill tem `scripts/tests/test_smoke.py`, que roda standalone (sem pytest); os scripts de shell têm suíte própria em `scripts/tests/test_*.sh`, que o `test-all.sh` também roda. Toda correção de bug ganha um teste que o reproduz — e vale conferir que ele **falha** contra o código antigo, senão é só decoração.
-3. **Versionamento**: SemVer no frontmatter do `SKILL.md` + entrada no `CHANGELOG.md` da skill.
+3. **Versionamento**: SemVer em **três** lugares, que o CI confere batendo um contra o outro — frontmatter do `SKILL.md`, linha `Versão atual:` do `README.md` da skill e topo do `CHANGELOG.md`. Esquecer o README é fácil justamente porque ele não parece metadado; foi assim que a 0.14.0 quebrou o CI.
 4. **Higiene de pacote** antes de fechar uma versão: sem `__pycache__`, sem arquivos órfãos, sem nomes estranhos. (Já houve incidente de pasta criada por expansão de chaves malsucedida — `mkdir -p a/{b,c}` falha em `sh`; use linhas separadas.)
 5. **Degradação graciosa**: dependências são opcionais. Sem `reportlab`, gera-se o `.md` e avisa-se sobre o PDF; sem OCR, PDF-imagem vira pendência. Nunca travar o fluxo inteiro por uma dependência ausente.
 
