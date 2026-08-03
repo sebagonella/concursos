@@ -85,6 +85,75 @@ def mapas_do_escopo(escopo_dir: Path) -> list[Path]:
     return achados
 
 
+_FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+_PREFIXO_NUM = re.compile(r"^\d+[-_]")
+
+
+def _parece_slug(texto: str) -> bool:
+    """`lingua-inglesa` é identificador; `Língua Inglesa` é rótulo de leitura."""
+    t = (texto or "").strip()
+    return bool(t) and " " not in t and t == t.lower()
+
+
+def _tokens(texto: str) -> frozenset:
+    return frozenset(mid.tokens_titulo(texto))
+
+
+def materias_do_concurso(concurso_dir: Path) -> list[dict]:
+    """As matérias do concurso: onde o mapa de cada uma vive e como se chama.
+
+    Três sinais por mapa, porque nenhum é confiável sozinho no vault real: dos 9
+    mapas do BB, `materia:` está preenchido em 4 e `materia_id:` em 2. O nome do
+    arquivo é o único que existe sempre.
+    """
+    materias = []
+    for escopo_dir in sorted(p for p in concurso_dir.iterdir() if p.is_dir()):
+        for mapa in mapas_do_escopo(escopo_dir):
+            fm = {}
+            m = _FRONTMATTER.match(mapa.read_text(encoding="utf-8"))
+            if m:
+                fm = dict(re.findall(r'^(\w+):\s*"?([^"\n]*)"?', m.group(1), re.M))
+            stem = _PREFIXO_NUM.sub("", mapa.stem)
+            chaves = [c for c in (_tokens(fm.get("materia", "")),
+                                  _tokens(fm.get("materia_id", "")),
+                                  _tokens(stem)) if c]
+            materias.append({"escopo": escopo_dir.name, "chaves": chaves,
+                             "rotulo": (fm.get("materia") or "").strip() or stem,
+                             "declarado": bool(fm.get("materia"))})
+    return materias
+
+
+def resolver_materia(nome: str, materias: list[dict]) -> dict | None:
+    """A matéria a que este nome se refere — ou None se não der para saber."""
+    alvo = _tokens(nome)
+    if not alvo:
+        return None
+    for m in materias:
+        if alvo in m["chaves"]:
+            return m
+    contidas = [m for m in materias if any(c <= alvo for c in m["chaves"])]
+    return contidas[0] if len(contidas) == 1 else None
+
+
+def resolver_escopo(materia: str, tabela) -> str:
+    """Escopo de uma matéria nomeada no catálogo legado — ou "" se não resolver.
+
+    Duas etapas, e a segunda é deliberadamente estreita. O título do catálogo é
+    mais longo que o nome do arquivo do mapa ("Conhecimentos Específicos do
+    Agente Social" contra `especificos-agente-social`), então casamento exato
+    falha em 4 das 5 matérias do SEDES. A saída é **contenção única**: os tokens
+    do mapa cabem inteiros dentro do título, e só um mapa satisfaz isso.
+
+    Isso NÃO é o casamento por similaridade que o repo proíbe. Lá o universo era
+    203 tópicos contra 92 assuntos, com 18% de acerto; aqui são 4 a 5 mapas do
+    mesmo concurso cujos nomes foram derivados desses mesmos títulos. E a
+    exigência de unicidade é o que impede o palpite: empate devolve "" e vira
+    aviso, nunca escolha silenciosa.
+    """
+    m = resolver_materia(materia, tabela)
+    return m["escopo"] if m else ""
+
+
 def varrer(concurso_dir: Path) -> tuple[dict, dict]:
     """(itens por escopo, catálogo existente por escopo)."""
     itens: dict[str, list] = defaultdict(list)
@@ -103,7 +172,29 @@ def varrer(concurso_dir: Path) -> tuple[dict, dict]:
             if not entradas:                       # catálogo legado: lista de bullets
                 entradas = _entradas_do_catalogo_legado(cat)
             catalogos[escopo] = entradas
-    return itens, catalogos
+
+    # A PASTA onde o catálogo está não diz a que escopo a obra pertence. O
+    # catálogo legado do BB mora em `_COMUM` e traz 25 livros de Tecnologia da
+    # Informação, que é matéria de UM cargo — rotear pelo arquivo mandou os 25
+    # para o comum. Quem manda é a matéria: o escopo é o do mapa dela.
+    materias = materias_do_concurso(concurso_dir)
+    for escopo, entradas in catalogos.items():
+        for e in entradas:
+            fonte = e.get("materia") or e.get("cobre") or ""
+            m = resolver_materia(fonte, materias)
+            e["_escopo"] = m["escopo"] if m else escopo
+            e["_escopo_resolvido"] = m is not None
+            if m:
+                # O mapa que não declara `materia:` adota o título do catálogo
+                # legado como rótulo: `probabilidade-estatistica` é identificador,
+                # "Probabilidade e Estatística" é como a pessoa lê. O critério é
+                # LEGIBILIDADE, não comprimento — comparar tamanho fazia
+                # "Matemática" (9) perder para `matematica` (10).
+                if not m["declarado"] and fonte and _parece_slug(m["rotulo"]) \
+                        and not _parece_slug(fonte):
+                    m["rotulo"] = fonte.strip()
+                e["cobre"] = m["rotulo"]
+    return itens, catalogos, materias
 
 
 def _entradas_do_catalogo_legado(cat: Path) -> list[dict]:
@@ -139,7 +230,14 @@ def _entradas_do_catalogo_legado(cat: Path) -> list[dict]:
     return entradas
 
 
-def consolidar(itens: dict, catalogos: dict) -> tuple[dict, list, list]:
+def _rotulo_do_mapa(mapa: Path, materias) -> str:
+    """O rótulo canônico da matéria deste mapa — o mesmo que o catálogo usa."""
+    stem = _PREFIXO_NUM.sub("", mapa.stem)
+    m = resolver_materia(stem, materias or [])
+    return m["rotulo"] if m else stem
+
+
+def consolidar(itens: dict, catalogos: dict, materias: list = None) -> tuple[dict, list, list]:
     """Uma entrada por obra, no escopo certo.
 
     A obra vai para o escopo que a cita. Citada por mapas de mais de um escopo, ou
@@ -159,15 +257,24 @@ def consolidar(itens: dict, catalogos: dict) -> tuple[dict, list, list]:
         if atual is None or pontos(dados) > pontos(atual):
             exemplar[chave] = dados
 
+    nao_resolvidos = []
     for escopo, entradas in catalogos.items():
         for e in entradas:
             if not e["titulo"]:
                 continue
+            destino = e.get("_escopo") or escopo
+            if e.get("materia") and not e.get("_escopo_resolvido"):
+                nao_resolvidos.append({"escopo": escopo, "materia": e["materia"],
+                                       "titulo": e["titulo"]})
             chave = mid.chave_obra(e["titulo"], e.get("autor", ""))
-            registrar(chave, dict(e), escopo,
+            dados = dict(e)
+            dados.setdefault("cobre", "")
+            if not dados["cobre"] and e.get("materia"):
+                dados["cobre"] = e["materia"]
+            registrar(chave, dados, destino,
                       f'{e["titulo"]} — {e.get("autor", "")} ({e.get("editora", "")})')
 
-    sem_autor, nao_casados = [], []
+    sem_autor = []
     for escopo, registros in itens.items():
         for r in registros:
             item = r["item"]
@@ -177,7 +284,8 @@ def consolidar(itens: dict, catalogos: dict) -> tuple[dict, list, list]:
                 continue
             chave = mid.chave_obra(item["titulo"], item["autor"])
             registrar(chave, {"titulo": item["titulo"], "autor": item["autor"],
-                              "editora": item["editora"], "isbn": "", "cobre": "",
+                              "editora": item["editora"], "isbn": "",
+                              "cobre": _rotulo_do_mapa(r["mapa"], materias),
                               "onde_obter": "", "pendencia": "", "ancora": "",
                               "materia": r["mapa"].stem},
                       escopo, item["texto"])
@@ -203,7 +311,7 @@ def consolidar(itens: dict, catalogos: dict) -> tuple[dict, list, list]:
         for i, e in enumerate(entradas):
             if str(i) in novos:
                 e["ancora"] = novos[str(i)]
-    return dict(por_escopo), sem_autor, nao_casados
+    return dict(por_escopo), sem_autor, nao_resolvidos
 
 
 def planejar_reescrita(itens: dict, por_escopo: dict) -> tuple[list, list]:
@@ -297,12 +405,22 @@ def _render_catalogo(escopo: str, entradas: list) -> str:
         "> `- Livro: [[livros-recomendados#^mat-pestana-gramatica|Pestana — A Gramática]] — cap. 4`",
         "", "---", "",
     ]
-    corpo = []
+    # Agrupado por matéria, e não por acaso: o `Cobre:` de cada entrada mais o
+    # `## Matéria` são o que permite a uma execução futura saber a que escopo a
+    # obra pertence. Sem eles, o catálogo novo perderia a informação que o legado
+    # tinha — e o roteamento voltaria a depender da pasta onde o arquivo está,
+    # que foi exatamente o defeito que mandou 25 livros de TI para o comum.
+    grupos: dict[str, list] = {}
     for e in entradas:
-        corpo.append(mid.render_entrada(e))
-        if e.get("_variantes"):
-            corpo.append("<!-- grafias encontradas no vault, consolidadas aqui:\n"
-                         + "\n".join(f"     · {v}" for v in e["_variantes"]) + "\n-->\n")
+        grupos.setdefault((e.get("cobre") or e.get("materia") or "Sem matéria"), []).append(e)
+    corpo = []
+    for materia, itens_g in sorted(grupos.items()):
+        corpo.append(f"## {materia}\n")
+        for e in itens_g:
+            corpo.append(mid.render_entrada(e))
+            if e.get("_variantes"):
+                corpo.append("<!-- grafias encontradas no vault, consolidadas aqui:\n"
+                             + "\n".join(f"     · {v}" for v in e["_variantes"]) + "\n-->\n")
     return "\n".join(cabeca) + "\n".join(corpo)
 
 
@@ -392,13 +510,13 @@ def main() -> int:
         sys.stderr.write(f"ERRO: não é diretório: {a.concurso_dir}\n")
         return 1
 
-    itens, catalogos = varrer(a.concurso_dir)
+    itens, catalogos, materias = varrer(a.concurso_dir)
     if not itens and not catalogos:
         sys.stderr.write("ERRO: nenhum mapa nem catálogo encontrado — "
                          "o caminho é a pasta do concurso?\n")
         return 1
 
-    por_escopo, sem_autor, _ = consolidar(itens, catalogos)
+    por_escopo, sem_autor, nao_resolvidos = consolidar(itens, catalogos, materias)
 
     if a.enriquecimento:
         dados = json.loads(a.enriquecimento.read_text(encoding="utf-8"))
