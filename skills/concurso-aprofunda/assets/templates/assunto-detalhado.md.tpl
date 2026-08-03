@@ -6,7 +6,7 @@ topico_id: {TOPICO_ID}
 topico: {TOPICO}
 concurso: "{CONCURSO}"
 tipo: assunto-aprofundado
-localizacao_livro: "{LIVRO} — págs. {PAGINAS}"
+localizacao_livro: "{LIVRO} — págs. {PAGINAS}"{LOCALIZACAO_EXTRA_FM}
 confianca_localizacao: {CONFIANCA}
 prioridade: {PRIORIDADE}
 aprofundamento: "{APROFUNDAMENTO}"
@@ -19,7 +19,7 @@ status: nao-iniciado
 # {ASSUNTO} — estudo detalhado
 
 > 📍 **Fontes:** {FONTES}
-> 📖 **No livro:** *{LIVRO}*, páginas **{PAGINAS}** ({METODO_LOCALIZACAO}, confiança {CONFIANCA}).
+> 📖 **No livro:** *{LIVRO}*, páginas **{PAGINAS}** ({METODO_LOCALIZACAO}, confiança {CONFIANCA}).{LOCALIZACOES_EXTRA}
 > {AVISO_CONFERIR}
 > 🎯 **Nível detalhado** — tratamento exaustivo. Para revisão rápida, veja a versão padrão.
 
@@ -72,7 +72,7 @@ status: nao-iniciado
 
 ## 📝 Para estudar depois
 
-- [ ] Ler as páginas {PAGINAS} das fontes
+- [ ] Ler as páginas {PAGINAS} das fontes{CHECKLIST_LEITURA_EXTRA}
 - [ ] Revisar os flashcards ([[flashcards-{SLUG_ASSUNTO}]])
 - [ ] Refazer os exemplos resolvidos sem olhar a resposta
 - [ ] Resolver questões da banca sobre {ASSUNTO}

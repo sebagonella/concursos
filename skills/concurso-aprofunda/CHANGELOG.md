@@ -2,6 +2,60 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.8.0] - 2026-08-02
+
+### Adicionado
+- **`ampliar_aprofundamento.py` — acrescentar fonte a um aprofundamento já escrito.**
+  A identidade de um aprofundamento *é* o conjunto de fontes e o id *é* o path, então
+  acrescentar uma fonte é necessariamente renomear (`padrao--pestana` ->
+  `padrao--pestana+rosenthal`). Não havia como fazer isso: a única saída era gerar do
+  zero e perder o texto já escrito. Dois modos, que só diferem em mover vs. copiar —
+  **`ampliar`** (o id antigo deixa de existir; o texto vira a semente da mescla) e
+  **`derivar`** (os dois convivem; a cópia nasce semeada). Dry-run é o padrão.
+- **Etapa 5b (MESCLAR)** no fluxo: os quatro baldes em que a fonte nova cai
+  (confirma / completa / corrige / diverge), com a divergência indo para
+  `{DIVERGENCIAS}` em vez de o agente escolher lado no corpo. E a regra dos
+  flashcards: **acrescentar, nunca regenerar** — o plugin Spaced Repetition ancora o
+  histórico de revisão no texto da frente do cartão, então reescrever a frente zera o
+  histórico do usuário mesmo sem apagar arquivo nenhum.
+- **Localização por fonte**: `localizacao_2:`, `localizacao_3:`, ... para as fontes
+  2..N. `--mapa` vira repetível, um por fonte, na mesma ordem de `--fontes`. Assunto
+  não localizado numa das fontes é gravado como "não localizado" em vez de sumir —
+  omitir não deixaria saber se a fonte não cobre o assunto ou se ninguém procurou.
+- **`renomear_aprof.py`**: a máquina de renomeação (quais arquivos viajam, como o
+  wikilink é reescrito nas duas granularidades) extraída do `migrar_aprofundamentos.py`
+  e compartilhada com o ampliador. Teste trava por **identidade de objeto**, para
+  ninguém "consertar" copiando de volta.
+- `notebooklm_pack.gerar_para_pasta()`, extraída do laço de `main()`: regenerar o
+  pacote de uma pasta não pode espalhar `.bak.md` pelos irmãos.
+- **`--mapa` também no ampliador**, repetível, um por fonte nova. É o caminho correto no
+  **modo em lote**: o ponteiro de página é POR ASSUNTO, e o `--localizacao` aplica o mesmo
+  valor a todos os alvos — numa matéria de 11 assuntos gravaria a página certa de um e
+  errada de dez. Descoberto rodando contra o vault real, não em revisão de código. Passar
+  os dois juntos é erro de uso: teriam de concordar e não há como saber qual vale.
+
+### Corrigido
+- **`_notebooklm-estado.json` ficava para trás** no layout legado-plano: caía no
+  `continue` de "arquivo alheio". Ele guarda o `notebook_id`, e perdê-lo obriga a
+  recriar o notebook do zero.
+- **O migrador rebaixava um aprofundamento combinado a fonte única**, porque
+  `fontes_do_assunto` só olhava `localizacao_livro`.
+- **O pacote do NotebookLM listava o recorte de uma fonte só.** Num combinado isso
+  faz o usuário subir metade do material; agora é um item `(Referência)` por fonte.
+
+### Notas
+- O ampliador **avisa da nota antiga que continua dentro do notebook já criado**:
+  `garantir_fontes()` sobe fonte pelo nome e **só adiciona**, nunca remove, então
+  gerar mídia depois de ampliar produziria podcast sobre material contraditório. Vira
+  pendência nomeada e `notebooklm_fonte_obsoleta` no pacote — herdado por prefixo,
+  sobrevive a toda regeração futura.
+- Os slugs derivados passam a ser **sempre ecoados**, não só quando suspeitos: um nome
+  de arquivo corrompido produz slug plausível e errado que `slug_suspeito()` não acusa,
+  e o erro só apareceria depois de a pasta existir.
+- Com **uma fonte só a saída é byte a byte idêntica** à da 0.7.2 — verificado gerando
+  com o código anterior e comparando, nos dois níveis.
+- Testes: 68 -> 99.
+
 ## [0.7.2] - 2026-07-31
 
 ### Corrigido

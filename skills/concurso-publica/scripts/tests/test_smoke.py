@@ -2488,6 +2488,46 @@ def test_collector_repassa_cargos_validados():
         assert "campo_que_nao_deve_vazar" not in m["meta"]
 
 
+def test_site_mostra_a_localizacao_de_cada_fonte():
+    """Num combinado, mostrar só a primeira faria o leitor procurar no livro errado
+    as outras. E o texto vai inteiro: metade do vault escreve o ponteiro em prosa
+    livre ('slides 12 a 21'), que a regex de página não extrai."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        dd = _mat_vault(base) / "assuntos" / "crase" / "padrao--pestana+rosenthal"
+        dd.mkdir(parents=True, exist_ok=True)
+        (dd / "crase--padrao--pestana+rosenthal.md").write_text(
+            '---\ntitle: "Crase"\nstatus: concluido\n'
+            'fontes: "Pestana, Rosenthal"\n'
+            'localizacao_livro: "Pestana.pdf — págs. 78–142"\n'
+            'localizacao_2: "Rosenthal — slides 12 a 21"\n---\nTexto.\n',
+            encoding="utf-8")
+        modelo = _rodar(base)
+        ap = next(a for a in _assunto_do_modelo(modelo, "crase")["aprofundamentos"]
+                  if a["aprofundamento"] == "padrao--pestana+rosenthal")
+        assert ap["localizacoes"] == [
+            {"fonte": "pestana", "texto": "Pestana.pdf — págs. 78–142"},
+            {"fonte": "rosenthal", "texto": "Rosenthal — slides 12 a 21"},
+        ], ap["localizacoes"]
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        html = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
+        assert "Onde está" in html, "a ficha tem de listar as duas fontes"
+        # o ponteiro em prosa aparece mesmo sem casar a regex de página
+        assert "slides 12 a 21" in html, html[:400]
+
+
+def test_localizacao_unica_continua_dizendo_no_livro():
+    """Retrocompat: os 122 arquivos de fonte única não podem mudar de forma."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        html = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
+        assert "No livro" in html and "Onde está" not in html, html[:400]
+
+
 def _run_standalone():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     falhas = 0

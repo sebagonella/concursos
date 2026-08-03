@@ -7,7 +7,7 @@ Skills do [Claude Code](https://claude.com/claude-code) que automatizam a prepar
 | Skill | Etapa | O que faz |
 |---|---|---|
 | **`concurso-prep`** | 1 | Do **edital** → estrutura completa de estudos: cronograma adaptativo (até 4 fases, conforme o prazo), mapas por matéria, análise da banca, histórico do órgão, leis baixadas (MD+PDF), sinergias entre concursos |
-| **`concurso-aprofunda`** | 2 | Do **livro de referência** → um `.md` por assunto (resumo próprio + páginas do livro + citações curtas), flashcards (Obsidian/Anki) e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM |
+| **`concurso-aprofunda`** | 2 | Do **livro de referência** → um `.md` por assunto (resumo próprio + páginas do livro + citações curtas), flashcards (Obsidian/Anki) e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM. Aceita **várias fontes** por aprofundamento, e sabe **acrescentar uma fonte ao que já está escrito** |
 | **`concurso-publica`** | 3 | Do **vault** → site estático navegável com **todo** o conteúdo do concurso, espelhando a organização em COMUM e cargos: edital, cronograma, mapas de matéria, leis, histórico, sinergia, discursiva e o aprofundamento — com o podcast tocando, o vídeo rodando, flashcards como quiz e os prompts do NotebookLM a um toque |
 | **`concurso-notebooklm`** | 3+ | Executa os pacotes NotebookLM que a Etapa 2 deixou prontos: cria o notebook, sobe as fontes, gera as mídias e salva os arquivos com o nome que o site reconhece. **Opcional** — o modo manual continua valendo, e a biblioteca usada não é oficial |
 
@@ -177,6 +177,17 @@ Use a skill concurso-aprofunda:
 - livro: "40_RECURSOS/livros/gramatica-pestana.pdf"
 - materia: "Língua Portuguesa"
 - concurso: "SEDES_2026"
+
+# Etapa 2 com DUAS fontes desde o início (geram UM aprofundamento combinado)
+Use a skill concurso-aprofunda:
+- livros: "…/gramatica-pestana.pdf", "…/gramatica-rosenthal.pdf"
+- materia: "Língua Portuguesa"
+- concurso: "SEDES_2026"
+- nivel: detalhado
+
+# Etapa 2 — ACRESCENTAR uma fonte ao que já está escrito
+Use a skill concurso-aprofunda para ampliar o aprofundamento padrao--pestana
+de Língua Portuguesa do SEDES_2026 com o livro "…/gramatica-rosenthal.pdf"
 
 # Etapa 3 (site)
 Use a skill concurso-publica para gerar o site do concurso SEDES_2026

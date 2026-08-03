@@ -74,6 +74,26 @@ Os nomes de arquivo repetem o identificador porque o Obsidian resolve wikilinks 
 
 A convenção é implementada uma única vez, em `skills/concurso-aprofunda/scripts/aprofundamento_id.py`. Como as skills são instaladas de forma independente, a `concurso-publica` não pode importá-la — tem uma **cópia sincronizada**, com teste de smoke nas duas pontas que falha se divergirem. Cópia com detector de drift foi preferida a um pacote compartilhado porque o instalador copia skills isoladas para `~/.claude/skills/`, sem resolução de dependências.
 
+#### Acrescentar uma fonte é renomear — e por que isso não é acidente
+
+Como o id **é** o conjunto de fontes e o id **é** o path, não existe "adicionar fonte sem mexer no nome": `padrao--pestana` vira `padrao--pestana+rosenthal`. A alternativa seria omitir a fonte do nome quando há só uma — e foi exatamente isso que se recusou, porque então *toda* segunda fonte forçaria uma renomeação, em vez de só as ampliações deliberadas.
+
+A renomeação é feita por `ampliar_aprofundamento.py`, em dois modos que diferem apenas em mover ou copiar: **ampliar** (o id antigo deixa de existir; o texto vira a semente da mescla) e **derivar** (os dois convivem). Modelar as duas operações como um script só, e não dois, veio de constatar que o trabalho mecânico é idêntico — o que muda é `shutil.move` × `shutil.copy2` e o que **não** viaja na cópia.
+
+A cópia deliberadamente **não** leva `notebooklm_url`, o sidecar de estado nem a mídia. O motivo é o inverso do que faz a herança existir no modo ampliar: duas pastas apontando para o mesmo notebook fariam a `concurso-notebooklm` subir a nota da variante para dentro do notebook do original — porque `garantir_fontes()` sobe fonte **pelo nome e só adiciona, nunca remove**. Essa mesma característica é a razão de o ampliar emitir pendência nomeada em vez de tentar consertar sozinho: remover fonte do notebook exigiria importar a dependência frágil (`notebooklm-py`), que por decisão de projeto mora só na skill irmã.
+
+A ordem das fontes é **significativa e nunca canonicalizada**. Ordenar alfabeticamente parece limpeza, mas renomearia material que ninguém pediu para mexer — quatro pastas do vault já estão fora de ordem alfabética. A ordem codifica cronologia de composição: a fonte 1 é aquela de onde o texto foi escrito, as seguintes completam. Daí acrescentar **no fim** ser o padrão, e conjunto igual em outra ordem ser pendência em vez de escolha silenciosa.
+
+#### Localização por fonte: chaves numeradas, não separador
+
+Um aprofundamento combinado precisa de um ponteiro de página **por fonte**. A fonte 1 fica em `localizacao_livro` e as demais em `localizacao_2`, `localizacao_3`. Três decisões aqui:
+
+- **Numeradas, e não uma chave só com separador**, porque os ponteiros reais do vault já contêm `;` dentro deles (`"pp. 5 a 7 (arts. 1º a 4º); art. 7º VI na p. 1"`) — um separador seria ambíguo por construção.
+- **A fonte 1 não virou `localizacao_1`**, para a retrocompatibilidade ser passiva: 122 arquivos de fonte única continuam documentos válidos sem tocar em nada, e nenhum dos quatro consumidores precisou mudar para continuar correto.
+- **Nada é obrigado a ser parseável.** Dos 122 valores, só 61 casam o molde `— págs. N–M`; o resto é prosa (`"slides 12 a 21"`). É texto humano com atribuição de fonte — quem quiser página tenta extrair e **degrada**, nunca exige o formato.
+
+O `book_index.py` continua indexando **um livro por execução**: N fontes já são N execuções, e juntá-las num arquivo só criaria um quarto formato e um lugar novo onde "de qual livro é esta página" se perde. Por isso `--mapa` é repetível, pareado por posição com `--fontes` — e por isso, no modo em lote do ampliador, `--mapa` é o único caminho correto: o ponteiro é por assunto, e um `--localizacao` único gravaria a página certa de um assunto e errada de todos os outros.
+
 ### A arquitetura de informação do site
 
 O site espelha a organização do vault: `{concurso}/{comum|cargo}/`, com as seções

@@ -99,6 +99,45 @@ curl -I http://concursos.casa:8099/           # o site
 
 ## Solução de problemas
 
+### Um concurso republicado desatualizado, sem aviso  ⚠️ defeito conhecido
+
+**Sintoma:** você roda o deploy de um concurso e, ao abrir o site, **outro** concurso aparece
+com conteúdo velho — sem nenhum erro na saída do comando.
+
+**Por que acontece.** O `deploy.sh` faz duas coisas com escopos diferentes:
+
+1. **constrói** apenas o concurso de `--concurso-dir`, dentro de `out/site/`;
+2. **envia** o `out/site/` **inteiro**, com `rsync --delete`.
+
+E o `out/site/` **acumula**: o `site_builder.py` limpa só a pasta do concurso que está
+gerando. Então um concurso construído numa sessão anterior continua ali, e vai para o
+servidor junto — com o conteúdo daquela data, apresentado como se fosse atual.
+
+**Como confirmar** (antes de publicar):
+
+```bash
+# o que está no build local, e de quando
+ls -l out/site/
+find out/site -name index.html -newermt '-1 day' | head    # o que foi construído hoje
+```
+
+**Contorno enquanto não há correção:** rode o deploy **uma vez para cada concurso** que estiver
+em `out/site/`, ou apague `out/site/` antes de publicar um só:
+
+```bash
+rm -rf out/site        # força reconstruir só o que você vai publicar
+./deploy/deploy.sh --concurso-dir <.../SEDES_2026>
+```
+
+**Por que ainda não foi corrigido.** A correção não é apagar o build: o acúmulo é o que permite
+servir vários concursos no mesmo site, que é o comportamento desejado. O conserto certo é o
+deploy **reconstruir todos os concursos presentes no destino** (ou avisar quais estão velhos)
+antes do rsync — mudança no contrato do script, que merece plano próprio.
+
+> Foi assim que o `BB_2027_PREVISTO` foi republicado com um build de véspera enquanto se
+> publicava o `SEDES_2026`. Nada quebrou, e é exatamente esse o problema: **falha silenciosa**,
+> a classe que este repositório trata como a pior.
+
 ### Uma mídia dá 403 e as outras abrem
 
 O `rsync -a` preserva a permissão da origem. Arquivo que está `0600` no vault chega

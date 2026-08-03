@@ -253,3 +253,65 @@ def rotulo(aprof_id: str) -> str:
         # "proprio" é o token do path; na tela ele vira a descrição do artefato
         return f"{nivel} — material próprio"
     return f"{nivel} — {' + '.join(info['fontes'])}"
+
+
+# --------------------------------------------------------------- localização
+# Onde cada fonte de um aprofundamento combinado foi localizada. A fonte 1 mora em
+# `localizacao_livro` e as demais em `localizacao_2`, `localizacao_3`, ...
+#
+# Por que chaves NUMERADAS e não uma chave só com separador: os valores reais do
+# vault já contêm ';' dentro do próprio ponteiro ("pp. 5 a 7 (arts. 1º a 4º); art.
+# 7º VI na p. 1"), então um separador seria ambíguo por construção. E por que a
+# fonte 1 não vira `localizacao_1`: renomeá-la obrigaria a migrar 122 arquivos
+# para ganhar simetria estética — assim a retrocompatibilidade é passiva, e todo
+# documento de fonte única que já existe continua válido sem tocar em nada.
+#
+# NADA AQUI EXIGE QUE O VALOR SEJA PARSEÁVEL. Metade dos valores do vault é prosa
+# livre ("slides 12 a 21"); isto é texto humano com atribuição de fonte, e quem
+# quiser página que tente extrair e degrade quando não conseguir.
+CHAVE_LOC_1 = "localizacao_livro"
+
+
+def chave_localizacao(i: int) -> str:
+    """Índice 0-based da fonte -> chave de frontmatter."""
+    return CHAVE_LOC_1 if i == 0 else f"localizacao_{i + 1}"
+
+
+def localizacoes(fm: dict) -> list[str]:
+    """Ponteiros de página, na ordem do id.
+
+    Para no primeiro buraco de propósito: `localizacao_3` sem `localizacao_2` não é
+    "a terceira fonte", é frontmatter quebrado, e adivinhar a qual fonte o valor
+    pertence seria fingir precisão.
+    """
+    out, i = [], 0
+    while (v := (fm.get(chave_localizacao(i)) or "").strip()):
+        out.append(v)
+        i += 1
+    return out
+
+
+def localizacoes_por_fonte(fm: dict, aprof_id: str) -> list[tuple[str, str]]:
+    """[(slug da fonte, ponteiro)] — casadas por posição, que é a ordem do id."""
+    info = parse_id(aprof_id) or {}
+    fontes = list(info.get("fontes") or [])
+    return [(fontes[i] if i < len(fontes) else "", loc)
+            for i, loc in enumerate(localizacoes(fm))]
+
+
+def conferir_localizacoes(fm: dict, aprof_id: str) -> list[str]:
+    """Avisos quando o id e as localizações não batem.
+
+    "3 fontes no id, 2 localizações" é exatamente o tipo de meia-verdade que a
+    regra "nunca fingir precisão" manda expor em vez de deixar passar.
+    """
+    info = parse_id(aprof_id)
+    if not info:
+        return []
+    fontes, locs = info["fontes"], localizacoes(fm)
+    if len(locs) < len(fontes):
+        return [f"{len(fontes)} fonte(s) no id e {len(locs)} localização(ões): "
+                f"{fontes[len(locs):]} sem ponteiro de página"]
+    if len(locs) > len(fontes):
+        return [f"{len(locs)} localizações para {len(fontes)} fonte(s) no id"]
+    return []

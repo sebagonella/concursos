@@ -456,7 +456,18 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
     ficha = []
     if ap.get("fontes"):
         ficha.append(f'<div><dt>Fonte</dt><dd style="font-size:.92rem">{esc(ap["fontes"])}</dd></div>')
-    if pag:
+    # Uma linha por fonte quando o aprofundamento é combinado. Mostrar só a
+    # primeira faria o leitor procurar no livro errado as outras — e o texto do
+    # ponteiro vai inteiro, porque metade do vault escreve em prosa livre
+    # ("slides 12 a 21") que nenhuma regex de página extrai.
+    locs = [l for l in (ap.get("localizacoes") or []) if l.get("texto")]
+    if len(locs) > 1:
+        itens = "".join(
+            f'<div>{esc(l["fonte"]) + ": " if l.get("fonte") else ""}{esc(l["texto"])}</div>'
+            for l in locs)
+        ficha.append(f'<div><dt>Onde está</dt>'
+                     f'<dd style="font-size:.92rem">{itens}</dd></div>')
+    elif pag:
         ficha.append(f'<div><dt>No livro</dt><dd style="font-size:.92rem">págs. {esc(pag)}</dd></div>')
     ficha.append(f'<div><dt>Nível</dt><dd style="font-size:.92rem">'
                  f'{esc(ROTULO_NIVEL.get(ap.get("nivel",""), ap.get("nivel","")))}</dd></div>')
