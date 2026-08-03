@@ -1,0 +1,690 @@
+#!/usr/bin/env python3
+"""
+test_migrar_materiais.py — trava o comportamento da migração de material.
+
+Roda standalone:
+    python3 skills/concurso-prep/scripts/tests/test_migrar_materiais.py
+
+O que precisa estar travado, e por quê:
+
+  - **dry-run é o padrão** — o script escreve no vault do usuário;
+  - **nada do que a pessoa escreveu se perde** — o ponteiro de leitura (`cap. 4`)
+    sobrevive à reescrita, e há backup antes de tocar no arquivo;
+  - **casamento exato ou nada** — sem limiar de similaridade;
+  - **o bloco de nível 2** do mapa de Português do SEDES é lido: é o único caso
+    divergente do vault (11 itens num bloco `##` no fim do arquivo) e um leitor
+    que só olha `###` o perderia inteiro.
+"""
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import material_id as mid            # noqa: E402
+import migrar_materiais as mig       # noqa: E402
+
+FALHAS: list[str] = []
+PASSES = 0
+
+
+def checar(nome, cond, detalhe=""):
+    global PASSES
+    if cond:
+        print(f"  PASS  {nome}")
+        PASSES += 1
+    else:
+        print(f"  FAIL  {nome}: {detalhe}")
+        FALHAS.append(nome)
+
+
+MAPA = """---
+tipo: mapa-materia
+materia: "Língua Portuguesa"
+---
+# Mapa
+
+## 1. Crase
+
+### Material recomendado
+- Livro: *A Gramática para Concursos* — Fernando Pestana (Método) — cap. 4
+- Questões: https://qconcursos.com/crase
+
+### Meta
+- [ ] 30 questões
+"""
+
+MAPA_H2 = """---
+tipo: mapa-materia
+---
+# Mapa
+
+## 1. Tópico
+
+### Subtópicos derivados
+- [ ] x
+
+## 📎 Material recomendado (referências)
+
+- Livro: *Moderna Gramática Portuguesa* — Evanildo Bechara (Nova Fronteira)
+- Livro: *Estatística Básica* — Bussab & Morettin (Saraiva)
+"""
+
+CATALOGO_LEGADO = """---
+tipo: documentacao
+tags:
+  - concurso/bb/previsto
+  - area/carreira
+---
+# Livros
+
+## Língua Portuguesa
+- Fernando Pestana — *A Gramática para Concursos Públicos*. Ed. Método.
+- Rocha Lima — *Gramática Normativa da Língua Portuguesa*. Ed. José Olympio.
+"""
+
+
+def _montar(base: Path, com_catalogo=True, mapa=MAPA) -> Path:
+    conc = base / "TESTE_2026"
+    (conc / "_COMUM" / "03-MAPAS-COMUNS").mkdir(parents=True)
+    (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").write_text(
+        mapa, encoding="utf-8")
+    if com_catalogo:
+        (conc / "_COMUM" / "04-MATERIAIS").mkdir(parents=True)
+        (conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md").write_text(
+            CATALOGO_LEGADO, encoding="utf-8")
+    return conc
+
+
+def _montar_multicargo(base: Path) -> Path:
+    """Concurso onde o catálogo mora em `_COMUM` mas traz matéria de UM cargo.
+
+    É a forma exata do BB: `_COMUM/04-MATERIAIS/livros-recomendados.md` com uma
+    seção "Tecnologia da Informação", cujo mapa vive em AGENTE-DE-TECNOLOGIA.
+    """
+    conc = base / "TESTE_2026"
+    (conc / "_COMUM" / "03-MAPAS-COMUNS").mkdir(parents=True)
+    (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-lingua-portuguesa.md").write_text(
+        "---\nmateria: \"Língua Portuguesa\"\n---\n# Mapa\n", encoding="utf-8")
+    (conc / "TECNOLOGIA" / "03-MAPAS-MATERIAS").mkdir(parents=True)
+    (conc / "TECNOLOGIA" / "03-MAPAS-MATERIAS" / "07-tecnologia-da-informacao.md").write_text(
+        "---\nmateria: \"Tecnologia da Informação\"\n---\n# Mapa\n", encoding="utf-8")
+    (conc / "TECNOLOGIA" / "03-MAPAS-MATERIAS" / "05-probabilidade-estatistica.md").write_text(
+        "# Mapa sem frontmatter\n", encoding="utf-8")
+    (conc / "_COMUM" / "04-MATERIAIS").mkdir(parents=True)
+    (conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md").write_text(
+        "# Livros\n\n"
+        "## Língua Portuguesa\n"
+        "- Fernando Pestana — *A Gramática para Concursos*. Método.\n\n"
+        "## Tecnologia da Informação\n"
+        "- Aurélien Géron — *Hands-On Machine Learning*. O'Reilly.\n"
+        "- Kristina Chodorow — *MongoDB: The Definitive Guide*. O'Reilly.\n\n"
+        "## Probabilidade e Estatística\n"
+        "- Sheldon Ross — *Probabilidade: um Curso Moderno*. Bookman.\n",
+        encoding="utf-8")
+    return conc
+
+
+MAPA_FASE2 = """---
+materia: "Língua Portuguesa"
+---
+# Mapa
+
+## 1. Crase
+
+### Material recomendado
+- Livro: *A Gramática para Concursos* — Fernando Pestana (Método) — cap. 4
+- Livro: *Português para Concursos* — Fernando Pestana (Método)
+- Norma-fonte: Lei nº 8.742/1993 (LOAS) — texto atualizado
+- Livro: *Obra Que Ninguem Catalogou* — Fulano (Ed)
+- Questões: https://qconcursos.com/x
+
+### Meta
+- [ ] 30 questões
+"""
+
+CATALOGO_FASE2 = """---
+tipo: material
+---
+# Catálogo
+
+## Língua Portuguesa
+
+### A Gramática para Concursos
+
+- **Autor:** Fernando Pestana
+- **Editora:** Método
+
+^mat-pestana-gramatica
+<!-- grafia consolidada nesta entrada:
+     · Português para Concursos -->
+
+### Gramática Normativa
+
+- **Autor:** Rocha Lima
+
+^mat-lima-gramatica-normativa
+"""
+
+
+def _montar_fase2(base: Path) -> Path:
+    conc = base / "TESTE_2026"
+    (conc / "_COMUM" / "03-MAPAS-COMUNS").mkdir(parents=True)
+    (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").write_text(
+        MAPA_FASE2, encoding="utf-8")
+    (conc / "_COMUM" / "04-MATERIAIS" / "leis-baixadas").mkdir(parents=True)
+    (conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md").write_text(
+        CATALOGO_FASE2, encoding="utf-8")
+    (conc / "_COMUM" / "04-MATERIAIS" / "leis-baixadas"
+     / "lei-8742-1993-loas.pdf").write_bytes(b"%PDF-1.4")
+    return conc
+
+
+def test_fase2_aponta_preserva_e_nao_inventa():
+    """A reescrita: aponta o que casa, preserva o que a pessoa escreveu, e não
+    adivinha o que não casa."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        r = mig.reescrever_mapas(conc, aplicar=True)
+        texto = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8")
+        checar("fase2_aponta_por_titulo",
+               "#^mat-pestana-gramatica|" in texto, texto[:400])
+        checar("fase2_link_traz_o_caminho_do_escopo",
+               "[[_COMUM/04-MATERIAIS/livros-recomendados#^" in texto,
+               "link sem caminho: há um livros-recomendados por escopo")
+        checar("fase2_preserva_ponteiro_de_leitura", "— cap. 4" in texto, texto[:400])
+        checar("fase2_alias_da_fusao_tambem_aponta",
+               texto.count("mat-pestana-gramatica") == 2,
+               f"{texto.count('mat-pestana-gramatica')} ocorrências")
+        checar("fase2_nao_inventa_para_o_que_nao_casa",
+               "*Obra Que Ninguem Catalogou* — Fulano" in texto, texto[:600])
+        checar("fase2_relata_o_nao_casado",
+               any("Ninguem Catalogou" in x["texto"] for x in r["sem_correspondencia"]),
+               str(r["sem_correspondencia"]))
+
+
+def test_fase2_liga_norma_ao_pdf_baixado():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        mig.reescrever_mapas(conc, aplicar=True)
+        texto = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8")
+        checar("fase2_norma_vira_link",
+               "[[lei-8742-1993-loas.pdf|Lei nº 8.742/1993]]" in texto, texto)
+        checar("fase2_norma_preserva_o_resto",
+               "(LOAS) — texto atualizado" in texto, texto)
+
+
+def test_fase2_canoniza_prefixo():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        mig.reescrever_mapas(conc, aplicar=True)
+        texto = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8")
+        checar("fase2_prefixo_canonico", "- Norma: " in texto, texto)
+        checar("fase2_prefixo_antigo_sumiu", "Norma-fonte:" not in texto, texto)
+
+
+def test_fase2_nao_altera_nada_fora_do_bloco():
+    """O mapa é texto do usuário. Fora de `### Material recomendado`, nada muda."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        antes = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8").splitlines()
+        mig.reescrever_mapas(conc, aplicar=True)
+        depois = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8").splitlines()
+        checar("fase2_mesmo_numero_de_linhas", len(antes) == len(depois),
+               f"{len(antes)} -> {len(depois)}")
+        for i, (a, b) in enumerate(zip(antes, depois)):
+            if a != b and not a.lstrip().startswith(("- Livro", "- Norma")):
+                checar("fase2_nao_toca_fora_do_bloco", False, f"linha {i}: {a!r} -> {b!r}")
+                return
+        checar("fase2_nao_toca_fora_do_bloco", True)
+
+
+def test_fase2_dry_run_nao_escreve():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        mapa = conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md"
+        antes = mapa.read_bytes()
+        r = mig.reescrever_mapas(conc, aplicar=False)
+        checar("fase2_dry_run_intacto", mapa.read_bytes() == antes)
+        checar("fase2_dry_run_relata", len(r["apontados"]) >= 2, str(len(r["apontados"])))
+        checar("fase2_dry_run_sem_backup", not mapa.with_suffix(".md.bak").exists())
+
+
+def test_fase2_ambiguidade_nao_desempata_sem_autor():
+    """Dois títulos iguais e o mapa sem autor: fica como está."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.write_text(cat.read_text(encoding="utf-8")
+                       + "\n### A Gramática para Concursos\n\n- **Autor:** Outro Autor\n\n^mat-outro-gramatica\n",
+                       encoding="utf-8")
+        mapa = conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md"
+        mapa.write_text(MAPA_FASE2.replace(
+            "- Livro: *A Gramática para Concursos* — Fernando Pestana (Método) — cap. 4",
+            "- Livro: *A Gramática para Concursos*"), encoding="utf-8")
+        r = mig.reescrever_mapas(conc, aplicar=True)
+        checar("fase2_ambiguo_reportado", len(r["ambiguos"]) >= 1, str(r["ambiguos"]))
+        checar("fase2_ambiguo_intacto",
+               "- Livro: *A Gramática para Concursos*\n" in mapa.read_text(encoding="utf-8"))
+
+
+def test_fase2_desempata_por_sobrenome_exato():
+    """Título ambíguo COM autor escrito no mapa: o sobrenome desempata. É
+    casamento exato num segundo campo, não similaridade."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.write_text(cat.read_text(encoding="utf-8")
+                       + "\n### A Gramática para Concursos\n\n- **Autor:** Outro Autor\n\n^mat-outro-gramatica\n",
+                       encoding="utf-8")
+        mig.reescrever_mapas(conc, aplicar=True)
+        texto = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8")
+        checar("fase2_desempate_por_sobrenome",
+               "mat-pestana-gramatica" in texto and "mat-outro-gramatica" not in texto,
+               texto[:400])
+
+
+def test_enriquecimento_limpa_pendencia_resolvida_mas_nao_apaga_dado():
+    """`pendencia` é o único campo em que vazio SIGNIFICA algo: a pesquisa
+    dizendo "fechei, não há mais ressalva". Nos outros, vazio quer dizer "não
+    encontrei". A distinção é chave AUSENTE vs. chave presente com valor vazio —
+    e sem ela o catálogo guardava ressalva de dúvida já resolvida."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = Path(d) / "TESTE_2026"
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.parent.mkdir(parents=True)
+        cat.write_text("# C\n\n### Obra\n\n- **Autor:** Fulano\n"
+                       "- **Editora:** Cortez\n"
+                       "- **⚠️ Pendência:** edição em confirmação\n\n^mat-x\n",
+                       encoding="utf-8")
+        mig.enriquecer_catalogos(conc, [
+            {"ancora": "mat-x", "editora": "Cortez · 8ª ed., 2018",
+             "autor": "", "pendencia": ""}])
+        e = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))[0]
+        checar("pendencia_resolvida_e_limpa", e["pendencia"] == "", repr(e["pendencia"]))
+        checar("editora_atualizada", "8ª ed." in e["editora"], e["editora"])
+        checar("autor_vazio_nao_apaga", e["autor"] == "Fulano", e["autor"])
+
+        # chave ausente: a pendência FICA
+        cat.write_text("# C\n\n### Obra\n\n- **Autor:** Fulano\n"
+                       "- **⚠️ Pendência:** segue em aberto\n\n^mat-y\n", encoding="utf-8")
+        mig.enriquecer_catalogos(conc, [{"ancora": "mat-y", "isbn": "123"}])
+        e = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))[0]
+        checar("pendencia_nao_mencionada_permanece",
+               e["pendencia"] == "segue em aberto", repr(e["pendencia"]))
+
+
+def test_materia_sem_material_e_declarada_no_catalogo():
+    """Matéria com mapa e nenhuma obra é lacuna de PREPARAÇÃO, e precisa estar
+    escrita — no vault e, por consequência, no site. Lacuna que só existe na
+    cabeça de quem auditou volta a existir na execução seguinte."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        # matéria nova, com mapa e sem nenhuma obra
+        (conc / "TECNOLOGIA" / "03-MAPAS-MATERIAS" / "09-redes.md").write_text(
+            '---\nmateria: "Redes de Computadores"\n---\n# Mapa\n', encoding="utf-8")
+        (conc / "TECNOLOGIA" / "04-MATERIAIS").mkdir(parents=True, exist_ok=True)
+        (conc / "TECNOLOGIA" / "04-MATERIAIS" / "livros-recomendados.md").write_text(
+            "# Catálogo\n\n### Obra\n\n- **Autor:** Fulano\n- **Cobre:** Tecnologia da Informação\n\n^mat-x\n",
+            encoding="utf-8")
+        sem = mig.materias_sem_material(conc)
+        checar("detecta_materia_sem_material",
+               "Redes de Computadores" in sem.get("TECNOLOGIA", []), str(sem))
+        checar("materia_com_obra_nao_e_listada",
+               "Tecnologia da Informação" not in sem.get("TECNOLOGIA", []), str(sem))
+
+        mig.atualizar_cobertura(conc)
+        texto = (conc / "TECNOLOGIA" / "04-MATERIAIS" / "livros-recomendados.md").read_text(
+            encoding="utf-8")
+        checar("secao_escrita_no_catalogo", mig.MARCA_COBERTURA in texto, texto[-200:])
+        checar("secao_nomeia_a_materia", "Redes de Computadores" in texto, texto[-200:])
+
+
+def test_cobertura_e_reescrita_quando_a_lacuna_some():
+    """Seção desatualizada é pior do que seção ausente: uma lacuna já resolvida
+    continuaria assustando quem lê."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.write_text(cat.read_text(encoding="utf-8")
+                       + f"\n\n{mig.MARCA_COBERTURA}\n\n- Matéria Fantasma\n",
+                       encoding="utf-8")
+        mig.atualizar_cobertura(conc)
+        texto = cat.read_text(encoding="utf-8")
+        checar("secao_obsoleta_removida", "Matéria Fantasma" not in texto, texto[-160:])
+
+
+def test_fusao_mantem_a_entrada_mais_completa():
+    """Re-executar a migração não resolve duplicata — CRIA duplicata, porque a
+    autoria corrigida diverge do texto do mapa. A fusão edita o catálogo, que é
+    a autoridade, e a entrada que fica não pode sair mais pobre."""
+    with tempfile.TemporaryDirectory() as d:
+        cat = Path(d) / "livros-recomendados.md"
+        cat.write_text(
+            "# Catálogo\n\n"
+            "### Python para Análise de Dados\n\n"
+            "- **Autor:** Wes McKinney\n\n"
+            "^mat-mckinney-python\n\n"
+            "### Python para Análise de Dados\n\n"
+            "- **Autor:** Wes McKinney\n"
+            "- **ISBN:** 9788575228418\n"
+            "- **Editora:** Novatec\n\n"
+            "^mat-pandas-python\n", encoding="utf-8")
+        r = mig.fundir_entradas(cat, "mat-mckinney-python", "mat-pandas-python")
+        ents = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))
+        checar("fusao_sobra_uma", len(ents) == 1, str([e["ancora"] for e in ents]))
+        checar("fusao_mantem_a_ancora_certa", ents[0]["ancora"] == "mat-mckinney-python",
+               ents[0]["ancora"])
+        checar("fusao_herda_campos_vazios", ents[0]["isbn"] == "9788575228418",
+               f"isbn={ents[0]['isbn']!r}")
+        checar("fusao_herda_editora", ents[0]["editora"] == "Novatec", ents[0]["editora"])
+        checar("fusao_faz_backup", cat.with_suffix(".md.bak").exists())
+        checar("fusao_relata_o_removido", r["removeu"] == "mat-pandas-python", str(r))
+
+
+def test_fusao_com_ancora_ausente_falha_alto():
+    with tempfile.TemporaryDirectory() as d:
+        cat = Path(d) / "livros-recomendados.md"
+        cat.write_text("### X\n\n- **Autor:** Y\n\n^mat-x\n", encoding="utf-8")
+        try:
+            mig.fundir_entradas(cat, "mat-x", "mat-que-nao-existe")
+            checar("fusao_ancora_ausente_falha", False, "não falhou")
+        except SystemExit:
+            checar("fusao_ancora_ausente_falha", True)
+
+
+def test_obra_de_materia_de_cargo_sai_do_comum():
+    """O DEFEITO relatado: a PASTA onde o catálogo está não diz a que escopo a
+    obra pertence.
+
+    O catálogo legado do BB mora em `_COMUM` e traz 25 livros de Tecnologia da
+    Informação — matéria de um cargo só. Rotear pelo arquivo mandou os 25 para o
+    comum. Quem manda é a matéria: o escopo é o do mapa dela.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, _ = mig.consolidar(itens, catalogos, materias)
+        no_comum = [e["titulo"] for e in por_escopo.get("_COMUM", [])]
+        no_cargo = [e["titulo"] for e in por_escopo.get("TECNOLOGIA", [])]
+        checar("ml_vai_para_o_cargo",
+               any("Hands-On" in x for x in no_cargo), str(no_cargo))
+        checar("mongodb_vai_para_o_cargo",
+               any("MongoDB" in x for x in no_cargo), str(no_cargo))
+        checar("ml_sai_do_comum",
+               not any("Hands-On" in x for x in no_comum), str(no_comum))
+        checar("portugues_fica_no_comum",
+               any("Gramática" in x for x in no_comum), str(no_comum))
+
+
+def test_materia_sem_frontmatter_resolve_pelo_nome_do_arquivo():
+    """`05-probabilidade-estatistica.md` não declara `materia:`; o título do
+    catálogo é "Probabilidade e Estatística". Casamento exato falha (o 'e'
+    some na normalização do arquivo), e a contenção única resolve."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, _ = mig.consolidar(itens, catalogos, materias)
+        no_cargo = [e["titulo"] for e in por_escopo.get("TECNOLOGIA", [])]
+        checar("ross_vai_para_o_cargo",
+               any("Probabilidade" in x for x in no_cargo), str(no_cargo))
+
+
+def test_rotulo_da_materia_e_canonico_e_legivel():
+    """A mesma matéria não pode aparecer duas vezes com rótulos diferentes
+    (`Tecnologia da Informação` e `tecnologia-da-informacao`), e entre um slug e
+    um nome legível vence o legível — o critério é legibilidade, não comprimento
+    ('Matemática' tem 9 caracteres e `matematica` tem 10)."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, _ = mig.consolidar(itens, catalogos, materias)
+        rotulos = {e["cobre"] for e in por_escopo.get("TECNOLOGIA", [])}
+        checar("sem_rotulo_duplicado_da_mesma_materia",
+               "tecnologia-da-informacao" not in rotulos, str(rotulos))
+        checar("rotulo_legivel_adotado",
+               "Probabilidade e Estatística" in rotulos, str(rotulos))
+
+
+def test_materia_nao_resolvida_nao_muda_de_escopo():
+    """Sem saber a que matéria a obra pertence, ela FICA onde estava. Mover por
+    palpite é pior do que deixar no lugar errado conhecido."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.write_text(cat.read_text(encoding="utf-8")
+                       + "\n## Matéria Que Não Tem Mapa\n- Fulano — *Obra X*. Ed.\n",
+                       encoding="utf-8")
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, nao_resolvidos = mig.consolidar(itens, catalogos, materias)
+        no_comum = [e["titulo"] for e in por_escopo.get("_COMUM", [])]
+        checar("nao_resolvida_fica_no_comum", "Obra X" in no_comum, str(no_comum))
+        checar("nao_resolvida_e_reportada",
+               any("Que Não Tem Mapa" in n["materia"] for n in nao_resolvidos),
+               str(nao_resolvidos))
+
+
+def test_tags_do_frontmatter_nao_viram_obra():
+    """A lista `tags:` do YAML usa `  - item`, o mesmo bullet do corpo.
+
+    Sem cortar o frontmatter, três tags do BB (`area/carreira`,
+    `concurso/bb/previsto`, `tipo/material`) viraram entradas de catálogo, com
+    âncora e tudo — e só apareceram porque a pesquisa estranhou. Lixo que entra
+    em silêncio é pior do que erro.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d))
+        _, catalogos, _mats = mig.varrer(conc)
+        titulos = [e["titulo"] for e in catalogos["_COMUM"]]
+        for tag in ("concurso/bb/previsto", "area/carreira"):
+            checar(f"tag_fora_do_catalogo({tag})", tag not in titulos, str(titulos))
+        checar("obras_do_corpo_preservadas", len(titulos) == 2, str(titulos))
+
+
+def test_enriquecimento_casa_por_ancora_e_nao_apaga():
+    """A pesquisa preenche o que falta; o que ela não achou NÃO apaga o que havia.
+
+    Campo vazio no enriquecimento significa "não encontrei", que é diferente de
+    "não existe". Deixar o vazio sobrescrever transformaria uma pesquisa
+    incompleta em perda de dado já apurado.
+    """
+    por_escopo = {"_COMUM": [
+        {"titulo": "A Gramática para Concursos", "autor": "Fernando Pestana",
+         "editora": "Método", "isbn": "", "cobre": "", "onde_obter": "",
+         "pendencia": "", "ancora": "mat-pestana-gramatica"},
+        {"titulo": "Matemática básica", "autor": "", "editora": "", "isbn": "",
+         "cobre": "", "onde_obter": "", "pendencia": "autoria não identificada",
+         "ancora": "mat-matematica-basica"},
+    ]}
+    aplicados, ignorados = mig.aplicar_enriquecimento(por_escopo, [
+        {"ancora": "mat-pestana-gramatica", "autor": "", "editora": "",
+         "isbn": "978-85-309-8888-8", "pendencia": ""},
+        {"ancora": "mat-matematica-basica", "autor": "Fulano de Tal",
+         "editora": "Editora Y", "pendencia": ""},
+        {"ancora": "mat-que-nao-existe", "autor": "Ninguém"},
+    ])
+    a, b = por_escopo["_COMUM"]
+    checar("enriquece_isbn", a["isbn"] == "978-85-309-8888-8", a["isbn"])
+    checar("nao_apaga_autor_existente", a["autor"] == "Fernando Pestana", a["autor"])
+    checar("nao_apaga_editora_existente", a["editora"] == "Método", a["editora"])
+    checar("preenche_o_que_faltava", b["autor"] == "Fulano de Tal", b["autor"])
+    checar("achou_autor_limpa_pendencia", b["pendencia"] == "", b["pendencia"])
+    checar("aplicados_conta_so_os_casados", aplicados == 2, str(aplicados))
+    checar("ancora_desconhecida_e_reportada",
+           ignorados == ["mat-que-nao-existe"], str(ignorados))
+
+
+def test_enriquecimento_nao_renomeia_a_ancora():
+    """Achar o autor depois NÃO muda o id: o mapa já pode estar apontando para
+    ele, e renomear é a operação que quebra vínculo — a lição do
+    `aprofundamento_id.py` vale igual aqui."""
+    por_escopo = {"_COMUM": [
+        {"titulo": "Obra X", "autor": "", "editora": "", "isbn": "", "cobre": "",
+         "onde_obter": "", "pendencia": "sem autoria", "ancora": "mat-obra-x"},
+    ]}
+    mig.aplicar_enriquecimento(por_escopo, [
+        {"ancora": "mat-obra-x", "autor": "Sobrenome Achado"}])
+    checar("ancora_estavel", por_escopo["_COMUM"][0]["ancora"] == "mat-obra-x",
+           por_escopo["_COMUM"][0]["ancora"])
+
+
+def test_bloco_de_nivel_2_e_lido():
+    """O mapa de Português do SEDES põe os 11 itens num bloco `##` no fim."""
+    faixas = mig.blocos_de_material(MAPA_H2)
+    checar("h2_um_bloco", len(faixas) == 1, f"deu {len(faixas)}")
+    linhas = MAPA_H2.splitlines()
+    ini, fim = faixas[0]
+    itens = mid.itens_do_bloco("\n".join(linhas[ini:fim]))
+    checar("h2_dois_itens", len(itens) == 2, f"deu {len(itens)}")
+    checar("h2_titulo", itens[0]["titulo"] == "Moderna Gramática Portuguesa",
+           itens[0]["titulo"])
+
+
+def test_bloco_h3_para_no_proximo_heading_do_mesmo_nivel():
+    faixas = mig.blocos_de_material(MAPA)
+    linhas = MAPA.splitlines()
+    itens = mid.itens_do_bloco("\n".join(linhas[faixas[0][0]:faixas[0][1]]))
+    checar("h3_nao_engole_a_meta", len(itens) == 2, f"deu {len(itens)}")
+    checar("h3_nao_pegou_checkbox",
+           all("30 questões" not in i["texto"] for i in itens))
+
+
+def test_dry_run_nao_escreve_nada():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d))
+        antes = {p: p.read_bytes() for p in conc.rglob("*.md")}
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, _ = mig.consolidar(itens, catalogos, materias)
+        mig.planejar_reescrita(itens, por_escopo)
+        depois = {p: p.read_bytes() for p in conc.rglob("*.md")}
+        checar("dry_run_nao_altera", antes == depois, "arquivo mudou sem --aplicar")
+        checar("dry_run_sem_arquivo_novo", set(antes) == set(depois))
+
+
+def test_catalogo_legado_e_aproveitado():
+    """Os 62 itens já pesquisados não podem ser descartados: refazer a pesquisa
+    inteira é caro, e o resultado pareceria que o vault não tinha bibliografia."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d))
+        _, catalogos, _mats = mig.varrer(conc)
+        entradas = catalogos["_COMUM"]
+        checar("legado_leu_as_duas", len(entradas) == 2, f"deu {len(entradas)}")
+        checar("legado_autor", entradas[0]["autor"] == "Fernando Pestana",
+               entradas[0]["autor"])
+        checar("legado_editora", entradas[0]["editora"] == "Método",
+               entradas[0]["editora"])
+
+
+def test_grafias_da_mesma_obra_viram_uma_entrada():
+    """No catálogo: 'A Gramática para Concursos Públicos'; no mapa: '… para
+    Concursos'. Mesma obra, duas grafias — uma entrada só."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d))
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, _ = mig.consolidar(itens, catalogos, materias)
+        titulos = [e["titulo"] for e in por_escopo["_COMUM"]]
+        pestana = [t for t in titulos if "Gramática para Concursos" in t]
+        checar("uma_entrada_por_obra", len(pestana) == 1,
+               f"{len(pestana)} entradas: {pestana}")
+
+
+def test_reescrita_preserva_o_ponteiro_de_leitura():
+    """`— cap. 4` é a única parte do item que o catálogo NÃO guarda."""
+    entrada = {"titulo": "A Gramática para Concursos", "autor": "Fernando Pestana",
+               "ancora": "mat-pestana-gramatica"}
+    novo = mig.reescrever_item(
+        "Livro: *A Gramática para Concursos* — Fernando Pestana (Método) — cap. 4",
+        entrada)
+    checar("reescrita_tem_ancora", "#^mat-pestana-gramatica" in novo, novo)
+    checar("reescrita_preserva_capitulo", novo.rstrip().endswith("cap. 4"), novo)
+    checar("reescrita_preserva_prefixo", novo.startswith("Livro: "), novo)
+
+
+def test_aplicar_faz_backup_e_escreve():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d))
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, _ = mig.consolidar(itens, catalogos, materias)
+        casados, _ = mig.planejar_reescrita(itens, por_escopo)
+        escritos = mig.aplicar(conc, por_escopo, casados, reescrever=True)
+        checar("aplicar_escreveu_catalogo", len(escritos["catalogos"]) == 1,
+               str(escritos["catalogos"]))
+        checar("aplicar_fez_backup", len(escritos["backups"]) >= 1,
+               str(escritos["backups"]))
+        mapa = conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md"
+        texto = mapa.read_text(encoding="utf-8")
+        checar("mapa_aponta_para_o_catalogo",
+               "livros-recomendados#^" in texto, texto[:200])
+        checar("mapa_manteve_o_capitulo", "cap. 4" in texto)
+        bak = mapa.with_suffix(".md.bak")
+        checar("backup_do_mapa_existe", bak.exists())
+        checar("backup_tem_o_texto_original",
+               "— Fernando Pestana (Método)" in bak.read_text(encoding="utf-8"))
+
+
+def test_catalogo_gerado_e_relido_pela_convencao():
+    """Round-trip: o que a migração escreve, o `material_id` tem de reler."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d))
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, _ = mig.consolidar(itens, catalogos, materias)
+        mig.aplicar(conc, por_escopo, [], reescrever=False)
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        lidas = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))
+        checar("round_trip_conta", len(lidas) == len(por_escopo["_COMUM"]),
+               f'{len(lidas)} lidas vs {len(por_escopo["_COMUM"])} escritas')
+        checar("round_trip_todas_com_ancora",
+               all(e["ancora"] for e in lidas),
+               str([e["titulo"] for e in lidas if not e["ancora"]]))
+
+
+def test_sem_autor_vira_pendencia_declarada():
+    mapa = MAPA.replace(
+        "- Livro: *A Gramática para Concursos* — Fernando Pestana (Método) — cap. 4",
+        "- Livro: Matemática básica para concursos")
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d), com_catalogo=False, mapa=mapa)
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, sem_autor, _ = mig.consolidar(itens, catalogos, materias)
+        checar("sem_autor_reportado", len(sem_autor) == 1, str(sem_autor))
+        entrada = por_escopo["_COMUM"][0]
+        checar("sem_autor_tem_pendencia", bool(entrada["pendencia"]),
+               str(entrada))
+        checar("sem_autor_nao_inventa_autor", entrada["autor"] == "",
+               entrada["autor"])
+
+
+def test_obra_de_um_cargo_so_fica_no_cargo():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d), com_catalogo=False)
+        cargo = conc / "CARGO-X" / "03-MAPAS-MATERIAS"
+        cargo.mkdir(parents=True)
+        (cargo / "02-especificos.md").write_text(
+            "# M\n\n### Material recomendado\n"
+            "- Livro: *Só do Cargo* — Fulano de Tal (Editora X)\n", encoding="utf-8")
+        itens, catalogos, materias = mig.varrer(conc)
+        por_escopo, _, _ = mig.consolidar(itens, catalogos, materias)
+        no_cargo = [e["titulo"] for e in por_escopo.get("CARGO-X", [])]
+        no_comum = [e["titulo"] for e in por_escopo.get("_COMUM", [])]
+        checar("obra_do_cargo_no_cargo", "Só do Cargo" in no_cargo, str(no_cargo))
+        checar("obra_do_cargo_fora_do_comum", "Só do Cargo" not in no_comum,
+               str(no_comum))
+
+
+if __name__ == "__main__":
+    for nome, fn in sorted(list(globals().items())):
+        if nome.startswith("test_") and callable(fn):
+            fn()
+    print()
+    total = PASSES + len(FALHAS)
+    if FALHAS:
+        print(f"{PASSES}/{total} testes passaram — {len(FALHAS)} falha(s).")
+        sys.exit(1)
+    print(f"{PASSES}/{total} testes passaram.")

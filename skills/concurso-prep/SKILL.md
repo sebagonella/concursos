@@ -1,6 +1,6 @@
 ---
 name: concurso-prep
-version: 1.9.0
+version: 1.11.0
 description: Use quando o usuário fornecer um edital de concurso público (PDF/DOCX/MD) e pedir para montar a estrutura de estudos completa, OU quando pedir para começar a estudar para um concurso ainda SEM edital/data (concurso previsto/esperado — usa o edital anterior como proxy), OU quando o edital oficial sair/for retificado e for preciso reconciliar/atualizar o que já foi gerado. Triggers comuns - "preparar concurso", "analisar edital", "montar cronograma de concurso", "estudar para concurso da {órgão}", "concurso previsto sem edital", "começar antes do edital", "edital saiu, atualizar", "edital foi retificado", "reconciliar edital". Gera no vault Obsidian estrutura completa - cronograma adaptativo (ou relativo sem datas no modo previsto), mapas por matéria, materiais de referência (leis baixadas em Markdown E PDF), histórico do órgão, provas anteriores e concursos com sinergia. Suporta multi-cargo (pasta única com subpastas por cargo), modo previsto (--modo previsto) e reconciliação/retificação (--reconciliar).
 ---
 
@@ -223,7 +223,51 @@ documentado, e que o BB ficou sem o conteúdo programático de um cargo inteiro.
 
 > No modo previsto, o aluno é orientado a **avançar continuamente** e, quando o edital sair, rodar `--reconciliar` para ganhar datas e ajustar o ritmo.
 
-### Etapa 5 — Mapas por matéria (subagents `materia-mapper` em paralelo)
+### Etapa 5 — Coleta de materiais (subagent `material-collector`)
+
+Delegar `material-collector` com:
+- `materias`: objetos `{materia_id, nome, cargos_ids[], topicos[]}` — **não** só o
+  nome. Sem `cargos_ids` o subagent não tem como rotear por escopo.
+- `escopos`: `_COMUM` e cada `CARGO`, com o path de cada um
+- `leis_citadas`: as leis citadas no edital (extraídas pelo edital-parser)
+- `banca`, `concurso_dir`
+
+O subagent vai:
+1. Montar o **catálogo de obras** de cada escopo, pesquisando (mínimo 2 buscas por
+   matéria) e confirmando autor/editora/edição/ISBN em fonte primária. Entrada sem
+   autor não é descartada nem maquiada: vai com `⚠️ Pendência` dizendo o que se
+   procurou.
+2. Listar canais YouTube gratuitos (URLs)
+3. Listar plataformas de questões (URLs filtradas pela banca quando possível)
+4. **Baixar PDFs das leis** citadas no edital:
+   - Federais: `planalto.gov.br/ccivil_03/_ato{ANO}/LEI/L{NUMERO}.htm`
+   - DF: `sinj.df.gov.br`
+   - Resoluções: portais oficiais (MDS, CNAS, CFP, etc.)
+5. Salvar **no escopo de cada matéria** — a mesma regra de `cargos_ids[]` que vale
+   para os mapas na Etapa 6: matéria de vários cargos vai em
+   `{OUTPUT_DIR}/_COMUM/04-MATERIAIS/`, matéria de um cargo só vai em
+   `{OUTPUT_DIR}/{CARGO}/04-MATERIAIS/`.
+
+**Guardar o `catalogos[].entradas[]` que o subagent devolve** — é ele que vai
+inline para os mapas na etapa seguinte. Sem isso a Etapa 6 volta a redigitar obra
+de memória, que é o defeito que a ordem nova corrige.
+
+> **Só se baixa o que é livre.** Normas de fonte oficial, provas de banca, obra em
+> domínio público e publicação de órgão. De livro comercial entra **metadado e onde
+> obter** — nunca a obra. É o Modelo 2 do projeto, e vale igual aqui.
+
+
+> **Por que os materiais vêm ANTES dos mapas.** Até 03/08/2026 a ordem era a
+> inversa, e o `materia-mapper` recebia a instrução de "reaproveitar a
+> bibliografia de `04-MATERIAIS/livros-recomendados.md`" — arquivo que, nesta
+> etapa, **ainda não tinha sido escrito**. Ele então redigitava a obra de
+> memória. O resultado medido nos dois concursos do vault: 473 itens de material
+> nos mapas contra 62 nos catálogos, com 15,6% (BB) e 5,9% (SEDES) de
+> interseção, e o mesmo livro do Pestana com 4 grafias e 3 editoras
+> contraditórias. O consumidor rodava antes do produtor; inverter é a correção
+> de raiz, e sem ela nenhuma instrução de "reaproveite o catálogo" funciona.
+
+### Etapa 6 — Mapas por matéria (subagents `materia-mapper` em paralelo)
 
 Para cada matéria do edital, despachar um subagent `materia-mapper` em paralelo via múltiplas chamadas Task na mesma resposta. Input para cada um, **tudo inline no prompt**:
 - nome da matéria
@@ -232,11 +276,17 @@ Para cada matéria do edital, despachar um subagent `materia-mapper` em paralelo
 - tópicos literais do edital
 - banca (para perfil de cobrança)
 - cargo (para contexto)
+- **`catalogo`**: as entradas de material do escopo, vindas da Etapa 5
+  (`[{ancora, titulo, autor, editora, cobre}]`). É de onde saem os `Livro:` de cada
+  tópico, citados por âncora — `[[livros-recomendados#^mat-pestana-gramatica|…]]`.
 
-> **Inline, literalmente.** O `materia-mapper` tem `tools: WebSearch, Write` — ele
-> **não lê arquivo**. Passar um caminho não funciona, e o modo de falha observado é
-> ele ir à web reconstruir os tópicos do edital a partir de blog de cursinho. Os
-> tópicos literais vão no texto do prompt, sempre.
+> **Inline, literalmente.** Mesmo tendo `Read` desde a 1.6.0, o `materia-mapper`
+> recebe os tópicos literais e o catálogo **no texto do prompt**. Passar caminho tem
+> um modo de falha observado: ele vai à web reconstruir os tópicos do edital a partir
+> de blog de cursinho. (Até 03/08/2026 esta nota afirmava que o agent não lê arquivo
+> — o frontmatter já dizia o contrário havia uma versão inteira. Dois documentos com
+> contratos diferentes é o padrão de defeito que esta skill já pagou caro para
+> aprender.)
 
 **Onde gravar — a regra do escopo.** Uma matéria pertence a **`cargos_ids[]`** (quais
 cargos a cobram, da Etapa 2):
@@ -267,22 +317,6 @@ Agente e Cuidador Social").
 **Ao terminar, conferir a cobertura**: toda matéria do edital tem de ter mapa. O
 `validate_output.py` checa isso na Etapa 10, mas um subagent que falhou (2 retries e
 segue) é mais barato de reprocessar agora do que depois.
-
-### Etapa 6 — Coleta de materiais (subagent `material-collector`)
-
-Delegar `material-collector` com:
-- lista completa de matérias e tópicos
-- lista de leis citadas no edital (extraída pelo edital-parser)
-
-O subagent vai:
-1. Para cada matéria, listar livros de referência (sem download, só nome+autor+ISBN)
-2. Listar canais YouTube gratuitos (URLs)
-3. Listar plataformas de questões (URLs filtradas pela banca quando possível)
-4. **Baixar PDFs das leis** citadas no edital:
-   - Federais: `planalto.gov.br/ccivil_03/_ato{ANO}/LEI/L{NUMERO}.htm`
-   - DF: `sinj.df.gov.br`
-   - Resoluções: portais oficiais (MDS, CNAS, CFP, etc.)
-5. Salvar em `{OUTPUT_DIR}/_COMUM/04-MATERIAIS/`
 
 ### Etapa 7 — Histórico do órgão (subagent `historico-researcher`)
 
@@ -569,6 +603,7 @@ Todos em `assets/templates/`:
 - `cronograma-semanal.md.tpl` — **(opcional, Etapa 4.6)** detalhe semana a semana
 - `analise-banca.md.tpl`
 - `mapa-materia.md.tpl`
+- `livros-recomendados.md.tpl` — **(Etapa 5)** o catálogo de material do escopo
 - `historico-concurso.md.tpl`
 - `concursos-similares.md.tpl`
 - `discursiva.md.tpl`
@@ -584,6 +619,14 @@ Em `scripts/`:
 - `materia_id.py` — **FONTE DE VERDADE da identidade de matéria**: resolve o
   `materia_id` reusando o que já está declarado no `.meta.json`, em vez de re-derivar.
   Não reimplemente a convenção em outro script
+- `material_id.py` — **FONTE DE VERDADE da identidade de um material**: a âncora do
+  catálogo (`^mat-pestana-gramatica`, block id do Obsidian), o conjunto canônico de
+  prefixos e o casamento **exato ou nada** entre item de mapa e entrada de catálogo.
+  Não reimplemente a convenção em outro script
+- `migrar_materiais.py` — **(migração)** constrói o catálogo dos concursos já
+  gerados a partir do que existe (mapas + catálogo legado), deduplica por obra e
+  reescreve o item do mapa para ponteiro **só no casamento exato**. Dry-run por
+  padrão; faz backup antes de tocar em qualquer arquivo
 - `validate_parsed.py` — valida a saída da Etapa 2 contra `assets/schema-edital.json`;
   roda ANTES da Etapa 3 e para o fluxo se o contrato estiver quebrado
 - `fetch_lei.py` — **baixa lei de fonte oficial e gera MD + PDF** (item 9)

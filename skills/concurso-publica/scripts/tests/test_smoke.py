@@ -813,6 +813,186 @@ def test_capa_agrupa_por_escopo():
         assert not orfas, orfas
 
 
+def test_cargo_com_catalogo_proprio_ainda_ve_o_do_comum():
+    """Regressão: quando o cargo ganhou catálogo próprio, a seção passou a ter um
+    documento só, COLAPSOU numa página de documento, e o bloco de herança sumiu
+    junto — o cargo exibia a própria bibliografia e perdia o caminho para a do
+    comum, que é a maior. O caso do fixture (cargo SEM catálogo) não pegava isto.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        proprio = base / "CARGO-X" / "04-MATERIAIS"
+        proprio.mkdir(parents=True)
+        (proprio / "livros-recomendados.md").write_text(
+            "# Catálogo\n\n### Obra do Cargo\n\n- **Autor:** Fulano\n\n^mat-fulano-obra\n",
+            encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        pag = out / "teste_2026" / "cargo-x" / "materiais" / "index.html"
+        h = pag.read_text(encoding="utf-8")
+        assert 'id="mat-fulano-obra"' in h, "o catálogo próprio do cargo não saiu"
+        assert "Comum a todos os cargos" in h, "perdeu o caminho para a bibliografia do comum"
+        m = re.search(r'class="botao" href="([^"]+)"', h)
+        assert m and (pag.parent / m.group(1)).resolve().exists(), \
+            "link para o comum quebrado na página colapsada"
+
+
+def test_cargo_herda_a_pagina_de_materiais_do_comum():
+    """A bibliografia mora no `_COMUM` e o cargo não tinha caminho nenhum até ela.
+
+    A coleta é por escopo, e três filtros em cascata descartavam a seção
+    inexistente **sem avisar**: `coletar_escopo` só anexa seção com conteúdo,
+    `montar_rotas` não cria rota do que não existe e `pagina_escopo` pula grupo
+    vazio. Medido no vault em 03/08/2026: 5 dos 7 escopos sem `04-MATERIAIS`.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        pag = out / "teste_2026" / "cargo-x" / "materiais" / "index.html"
+        assert pag.exists(), "cargo continua sem página de materiais"
+        h = pag.read_text(encoding="utf-8")
+        assert "Comum a todos os cargos" in h, "não diz de onde herdou"
+        m = re.search(r'class="botao" href="([^"]+)"', h)
+        assert m, "sem link para a página do comum"
+        assert (pag.parent / m.group(1)).resolve().exists(), \
+            f"link herdado aponta para página inexistente: {m.group(1)}"
+
+
+def test_heranca_nao_duplica_anexo_no_cargo():
+    """Herda por REFERÊNCIA. Copiar os PDFs para cada cargo é o defeito que já fez
+    o site pular de 78 para 685 arquivos."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        no_cargo = list((out / "teste_2026" / "cargo-x").rglob("*.pdf"))
+        assert not no_cargo, f"anexo duplicado no cargo: {[p.name for p in no_cargo]}"
+        assert list((out / "teste_2026" / "comum").rglob("lei-1234-1990.pdf")), \
+            "o anexo sumiu do escopo que realmente o tem"
+
+
+def test_material_por_topico_classifica_e_lista():
+    """O bloco agregado não tinha NENHUMA asserção — só CSS."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "materias" / "portugues"
+             / "index.html").read_text(encoding="utf-8")
+        assert "Material por tópico" in h
+        assert "📕" in h and "✎" in h, "ícone de livro/questões sumiu da lista"
+        assert "Pestana" in h, "o item do mapa não chegou ao bloco agregado"
+
+
+def test_material_por_topico_aponta_para_a_pagina_de_materiais():
+    """O texto antigo mandava a 'Materiais, no menu do concurso' — menu que não
+    existe, para uma página que no cargo também não existia."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        pag = (out / "teste_2026" / "cargo-x" / "materias" / "portugues"
+               / "index.html")
+        h = pag.read_text(encoding="utf-8")
+        assert "no menu do concurso" not in h, "a frase morta continua na página"
+        m = re.search(r'<a href="([^"]+)">a bibliografia completa fica em Materiais</a>', h)
+        assert m, "sem link para a bibliografia"
+        assert (pag.parent / m.group(1)).resolve().exists(), \
+            f"link da bibliografia quebrado: {m.group(1)}"
+
+
+def test_tipo_do_material_nao_chuta_rotulo_desconhecido():
+    """~40 dos 458 itens do vault usam rótulo fora da tripla do template. Eles não
+    podem sumir nem virar palpite."""
+    assert sb.tipo_do_material("Livro: *X* — Y")[0] == "livro"
+    assert sb.tipo_do_material("Questões: qconcursos")[0] == "questoes"
+    assert sb.tipo_do_material("YouTube: canal")[0] == "video"
+    assert sb.tipo_do_material("Norma-fonte: Lei 8.742")[0] == "norma"
+    tipo, icone = sb.tipo_do_material("Referência de apoio (gratuito): blog")
+    assert tipo == "outro", f"chutou o tipo: {tipo}"
+    assert icone, "item sem tipo ficou sem marcador — some da lista"
+
+
+def test_wikilink_com_ancora_resolve_pela_ancora_nao_pelo_nome():
+    """Há um `livros-recomendados.md` por escopo — sete no concurso real.
+
+    `Rotas.chave` reduz tudo ao basename, então `[[…/livros-recomendados#^mat-x]]`
+    caía sempre na PRIMEIRA página homônima registrada: 160 links de material
+    apontaram para uma âncora que não existia naquela página. A âncora é única
+    dentro do concurso e por isso vence o nome.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # dois catálogos homônimos, cada um com a sua âncora
+        for escopo, ancora in (("_COMUM", "mat-do-comum"), ("CARGO-X", "mat-do-cargo")):
+            pasta = base / escopo / "04-MATERIAIS"
+            pasta.mkdir(parents=True, exist_ok=True)
+            (pasta / "livros-recomendados.md").write_text(
+                f"# Catálogo\n\n### Obra\n\n- **Autor:** Fulano\n\n^{ancora}\n",
+                encoding="utf-8")
+        # o mapa do CARGO cita a âncora que vive no catálogo do CARGO
+        mapa = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "01-portugues.md"
+        texto = mapa.read_text(encoding="utf-8").replace(
+            "- Livro: *Gramática* — Pestana (Método).",
+            "- Livro: [[CARGO-X/04-MATERIAIS/livros-recomendados#^mat-do-cargo|Obra]]")
+        mapa.write_text(texto, encoding="utf-8")
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "materias" / "portugues"
+             / "index.html").read_text(encoding="utf-8")
+        m = re.search(r'<a href="([^"]*#mat-do-cargo)"', h)
+        assert m, f"o link com âncora não virou href: {h[:400]}"
+        arq, _, anc = m.group(1).partition("#")
+        alvo = (out / "teste_2026" / "cargo-x" / "materias" / "portugues" / arq).resolve()
+        assert alvo.exists(), f"aponta para página inexistente: {m.group(1)}"
+        assert f'id="{anc}"' in alvo.read_text(encoding="utf-8"), \
+            f"a página não contém a âncora {anc} — resolveu pela homônima errada"
+
+
+def test_backup_nao_vira_anexo_publicado():
+    """Os scripts que reescrevem material deixam `.md.bak` ao lado do arquivo.
+
+    A varredura recursiva os transformava em anexo: os backups apareciam no site
+    como arquivo para baixar — e, por existir um "anexo", a seção deixava de
+    colapsar num documento só e ganhava uma página de índice a mais, escondendo
+    o conteúdo do catálogo um clique adiante.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mat = base / "_COMUM" / "04-MATERIAIS"
+        (mat / "livros-recomendados.md.bak").write_text("# backup\n", encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        assert not list(out.rglob("*.bak")), \
+            f"backup publicado: {[p.name for p in out.rglob('*.bak')]}"
+        m = sc.coletar_concurso(base)
+        anexos = [a["arquivo"] for e in _escopos(m) for s in e["secoes"]
+                  for a in s["anexos"]]
+        assert not [a for a in anexos if a.endswith(".bak")], anexos
+
+
+def test_block_id_do_obsidian_vira_ancora_invisivel():
+    """`^mat-pestana-gramatica` é METADADO, não conteúdo.
+
+    No Obsidian ele é invisível no modo leitura e é o alvo de `[[nota#^id]]`.
+    Sem tratamento ele saía como texto visível na página **e** o wikilink de
+    âncora resolvia para um id inexistente — o link levava à página certa e não
+    pulava a lugar nenhum. Parece funcionar, que é o pior dos dois mundos.
+    """
+    h = md2html.converter("### Obra\n\n- **Autor:** X\n\n^mat-pestana-gramatica\n")
+    assert 'id="mat-pestana-gramatica"' in h, h
+    assert "^mat-pestana-gramatica" not in h, "o id saiu como texto visível"
+    # o wikilink de âncora tem de cair EXATAMENTE nesse id
+    assert md2html.slug_ancora("^mat-pestana-gramatica") == "mat-pestana-gramatica"
+
+
+def test_circunflexo_no_meio_do_texto_nao_vira_ancora():
+    h = md2html.converter("Custo ^2 e potência.\n")
+    assert "ancora-bloco" not in h, h
+
+
 def test_secoes_numeradas_viram_paginas_com_anexos():
     """Item 2 do pedido: todo o conteúdo abaixo do concurso, não só o
     aprofundamento. Os `.md` viram documento; o resto vira anexo copiado, porque o
@@ -1251,8 +1431,15 @@ def test_exemplo_do_modelo_constroi_de_verdade():
     # repo público), então o site inteiro não sai daqui — o que se exercita é a aba
     # que consome o mapa, que é justamente a parte do contrato que mudou
     class _RotasFalsas:
+        """Dublê do `Rotas`. Precisa espelhar a interface REAL: quando o
+        `bloco_plano` passou a calcular a rota de Materiais do escopo, um dublê
+        sem `tem_pagina` derrubou o teste — que é o comportamento certo. Dublê
+        que não acompanha a interface esconde o que o código passou a exigir."""
         def resolvedor(self, rota):
             return lambda alvo: None
+
+        def tem_pagina(self, rota):
+            return False
 
     # o pacote é a outra metade do contrato, e era onde o exemplo estava velho:
     # trazia `roteiro: []` congelado em mapa mental e report

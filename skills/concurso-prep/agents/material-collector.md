@@ -1,7 +1,7 @@
 ---
 name: material-collector
 description: Coleta e baixa materiais de referência para estudo de concurso. Recebe lista de matérias e leis citadas no edital. Lista livros, canais YouTube e plataformas de questões (sem reprodução de conteúdo). Baixa leis, decretos e resoluções (em Markdown E PDF) de fontes oficiais públicas (Planalto, SINJ-DF, portais oficiais). Use quando precisar coletar referências bibliográficas e materiais legais para uma preparação.
-tools: WebSearch, WebFetch, Bash, Write
+tools: Read, WebSearch, WebFetch, Bash, Write
 ---
 
 # Subagent: Material Collector
@@ -12,39 +12,86 @@ Coletar e organizar todo o material de referência necessário para o estudo, ba
 
 ## Inputs esperados
 
-- `materias`: lista completa de matérias do edital
+- `materias`: lista de objetos `{materia_id, nome, cargos_ids[], topicos[]}` — **não**
+  só o nome. `materia_id` é a chave que liga a bibliografia ao mapa e ao
+  aprofundamento; `cargos_ids` é o que decide **onde** o catálogo é gravado.
+- `escopos`: os escopos existentes (`_COMUM` e cada `CARGO`), com o path de cada um
 - `leis_citadas`: lista de leis/decretos/resoluções
 - `banca`: nome da banca (para filtros de questões)
-- `output_dir`: pasta de destino (`{vault}/.../_COMUM/04-MATERIAIS/`)
+- `concurso_dir`: raiz do concurso no vault
 - `no_download`: bool (se true, só lista URLs sem baixar)
+
+## Onde gravar — a regra do escopo
+
+Vale a **mesma regra dos mapas** (Etapa 6 do `SKILL.md`): quem manda é `cargos_ids[]`.
+
+| `cargos_ids[]` da matéria | Catálogo de destino |
+|---|---|
+| mais de um cargo | `{concurso_dir}/_COMUM/04-MATERIAIS/livros-recomendados.md` |
+| um cargo só | `{concurso_dir}/{CARGO}/04-MATERIAIS/livros-recomendados.md` |
+
+Isto **não** era feito: o destino era o caminho fixo `_COMUM/04-MATERIAIS/`, escrito
+à mão. O resultado, medido no vault em 03/08/2026, é que 5 dos 7 escopos não têm
+catálogo nenhum, e que o catálogo do BB se intitula "Agente de Tecnologia" sem ter
+seção para as 3 matérias exclusivas do Agente Comercial — 99 itens de material nos
+mapas sem bibliografia correspondente. Matéria de cargo tem catálogo no cargo.
 
 ## Workflow
 
-### Passo 1 — Livros recomendados por matéria
+### Passo 1 — Catálogo de obras, por matéria (CRÍTICO)
 
-Para cada matéria, identificar 1-3 livros de referência consagrados.
+Este passo produz o **catálogo canônico**: o único lugar onde uma obra é descrita.
+O mapa de matéria vai **apontar** para as entradas daqui, em vez de redigitar
+título e autor — foi a redigitação que produziu 4 grafias e 3 editoras
+contraditórias para o mesmo livro do Pestana.
 
-Output: `{output_dir}/livros-recomendados.md`
+**Pesquisar, não lembrar.** Para cada matéria, no mínimo **2 buscas** antes de
+escrever qualquer entrada. Não basta ter `WebSearch` disponível: sem busca, o que
+sai é a memória do modelo, e é de lá que vieram as 25 entradas sem autor do vault.
 
-Formato (exemplo de estrutura):
-```markdown
-# Livros Recomendados
-
-> Apenas referências bibliográficas. Não há reprodução de conteúdo.
-> Adquira pelos canais oficiais (editoras, livrarias).
-
-## Língua Portuguesa
-- Marcelo Rosenthal — *Gramática para concursos*. Elsevier.
-- Décio Terror — *Português para concursos*.
-
-## Administração Geral
-- Idalberto Chiavenato — *Administração Geral e Pública*. Manole.
-- Augustinho Paludo — *Administração Pública*. JusPodivm.
-
-[...continuar para cada matéria]
+```
+"{matéria} para concursos" livro {banca} bibliografia
+"{matéria}" "{tópico mais cobrado}" livro autor editora edição
 ```
 
-**Não copiar texto dos livros sob nenhuma hipótese.** Apenas listar autor + título + editora.
+Confirmar autor, editora e edição em pelo menos uma destas fontes, nesta ordem de
+preferência: **site da editora** → **Open Library / Google Books** → catálogo de
+biblioteca universitária → livraria de grande porte. Blog de cursinho e
+marketplace servem para descobrir a obra, **não** para confirmar o metadado.
+
+**Piso de qualidade — título + autor.** Uma entrada sem autor identificado NÃO é
+descartada e NÃO é maquiada: entra com o campo `⚠️ Pendência` dizendo **o que foi
+procurado**. É o que permite distinguir "procurei e não achei" de "não procurei" —
+hoje impossível, e a razão de existirem itens como `Livro: Matemática básica para
+concursos` no vault.
+
+**Formato da entrada** — a convenção vive em `scripts/material_id.py`, fonte de
+verdade. O `^mat-...` no fim é um **block id do Obsidian**, e é o que o mapa cita:
+
+```markdown
+### Gramática para Concursos
+
+- **Autor:** Marcelo Rosenthal
+- **Editora:** Elsevier · 3ª ed., 2019
+- **ISBN:** 978-85-352-0000-0
+- **Cobre:** lingua-portuguesa
+- **Onde obter:** editora · biblioteca
+
+^mat-rosenthal-gramatica
+```
+
+`Cobre:` leva os `materia_id` que a obra atende (um por linha ou separados por
+vírgula) — é o que permite conferir que toda matéria tem bibliografia.
+
+Para propor o id: `python3 scripts/material_id.py --propor "{título}" "{autor}"`.
+**Não invente o formato do id** e não o derive à mão: a regra mora num lugar só.
+
+Campo vazio é **omitido**, nunca escrito em branco. E **não copiar texto das obras
+sob nenhuma hipótese** — do livro entram só metadado e onde obter.
+
+**O que não achou vai para `{escopo}/04-MATERIAIS/pendencias-material.md`**, com a
+matéria, o que se procurou e por quê parou. Lacuna registrada é trabalho;
+lacuna silenciosa é dívida.
 
 ### Passo 2 — Canais YouTube gratuitos
 
@@ -186,7 +233,20 @@ Retornar para skill principal:
 ```json
 {
   "status": "ok",
-  "livros_listados": 28,
+  "catalogos": [
+    {"escopo": "_COMUM", "arquivo": ".../_COMUM/04-MATERIAIS/livros-recomendados.md",
+     "entradas": [
+       {"ancora": "mat-pestana-gramatica",
+        "titulo": "A Gramática para Concursos",
+        "autor": "Fernando Pestana", "editora": "Método", "edicao": "6ª ed., 2023",
+        "isbn": "978-85-309-0000-0", "cobre": ["lingua-portuguesa"],
+        "pendencia": ""}
+     ]}
+  ],
+  "sem_autor": [
+    {"titulo": "Matemática básica para concursos", "materia_id": "matematica",
+     "procurei": "3 buscas; nenhuma edição com autoria identificável"}
+  ],
   "canais_listados": 8,
   "plataformas_listadas": 4,
   "leis_baixadas_ok": 12,
@@ -196,3 +256,10 @@ Retornar para skill principal:
   ]
 }
 ```
+
+> **As entradas voltam inteiras, não só contadas.** Antes o retorno era só
+> `"livros_listados": 28` — nenhum dado das obras chegava de volta à skill, então
+> a etapa dos mapas não tinha como citar o catálogo nem conferir nada. Era a raiz
+> mecânica da divergência entre as duas listas: quem escreve o mapa nunca via o
+> que o catálogo tinha. É o `catalogos[].entradas[]` que a Etapa 6 passa **inline**
+> ao `materia-mapper`.

@@ -2,6 +2,66 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.16.0] - 2026-08-03
+
+### Corrigido
+- **Wikilink com âncora resolvia pelo BASENAME.** Há um `livros-recomendados.md` por
+  escopo — sete no concurso real — e `Rotas.chave` reduz tudo ao último segmento, então
+  `[[…/livros-recomendados#^mat-x]]` caía sempre na primeira página homônima
+  registrada. Foram **160 links** apontando para âncora que não existe naquela página.
+  A âncora é única dentro do concurso (35 no SEDES, 93 no BB, zero repetidas entre
+  escopos) e por isso vence o nome. O `md2html` passa a entregar a âncora ao resolvedor.
+- **O block id do Obsidian saía como texto visível** e o wikilink resolvia para um id
+  inexistente — o link levava à página certa e não pulava a lugar nenhum. Vira âncora
+  HTML invisível, como no modo leitura do Obsidian.
+- **Backups eram publicados como anexo.** Os scripts que reescrevem material deixam
+  `.md.bak` ao lado do arquivo, e a varredura recursiva os tratava como anexo: viravam
+  arquivo para baixar. Pior, o "anexo" impedia a seção de colapsar num documento só, e
+  o catálogo ficava um clique adiante.
+- **Cargo com catálogo próprio perdia o link para o do comum**: com um documento só, a
+  seção colapsa numa página de documento, e `pagina_documento` não renderizava o bloco
+  de herança.
+
+### Notas
+- Site dos dois concursos: 264 links para o catálogo resolvendo, 0 quebrados, e 64
+  links diretos para PDF de lei nas páginas de matéria.
+- Testes: 145 -> 147.
+
+## [0.15.0] - 2026-08-03
+
+### Corrigido
+- **A página de Materiais não existia no cargo, e sumia em silêncio.** A coleta é
+  estritamente por escopo, e três filtros em cascata descartavam a seção inexistente
+  sem avisar: `coletar_escopo` só anexa seção com conteúdo, `montar_rotas` não cria
+  rota do que não existe e `pagina_escopo` pula grupo vazio. Medido no vault: **5 dos
+  7 escopos** sem `04-MATERIAIS`, ou seja, quem estuda por um cargo não tinha nenhum
+  caminho de navegação até a bibliografia. Agora o cargo herda a seção do `_COMUM`
+  **por referência** — o conteúdo continua num lugar só, e o cargo ganha o ponteiro.
+  Copiar os anexos para cada cargo é o defeito que já fez o site pular de 78 para 685
+  PDFs; há teste que barra a duplicação.
+- **A frase que mandava o leitor a "Materiais, no menu do concurso" era texto morto**
+  — o esqueleto da página tem só marca, trilha e botão de tema, e a página apontada
+  não existia no cargo. Virou link calculado da rota da própria página (nunca
+  procurado no índice de nomes: `materiais` existe em vários escopos, e o índice
+  devolveria sempre o primeiro registrado).
+
+### Adicionado
+- `Rotas.marcar()`/`tem_pagina()` — registro das páginas efetivamente emitidas, para a
+  navegação poder perguntar "esta página existe?" sem passar pelo índice de nomes.
+- Testes do que não tinha nenhum: o bloco "Material por tópico", a classificação
+  `tipo_do_material` (incluindo o fallback deliberado para rótulo desconhecido), a
+  herança do cargo e a não-duplicação de anexos. Eram 4 comportamentos com CSS e sem
+  asserção.
+
+### Notas
+- O dublê `_RotasFalsas` da suíte ganhou `tem_pagina`: dublê que não acompanha a
+  interface real esconde o que o código passou a exigir — e foi assim que a suíte
+  acusou a mudança, corretamente.
+- Rodado contra os dois concursos: 7 páginas de Materiais (eram 2), 5 links herdados
+  e 21 links de bibliografia resolvendo, 0 ocorrências da frase morta, 78 PDFs (sem
+  duplicação).
+- Testes: 137 -> 142.
+
 ## [0.14.0] - 2026-08-03
 
 ### Adicionado

@@ -5,6 +5,97 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.11.0] - 2026-08-03
+
+### Adicionado
+- **`migrar_materiais.py --so-mapas`** — a segunda fase da migração: o tópico do mapa
+  aponta para a entrada do catálogo em vez de redigitar título e autor. 120 itens
+  migrados nos dois concursos, com **zero ambíguos**. O catálogo é a AUTORIDADE e não
+  é reconstruído: reconstruir depois que a pesquisa corrigiu uma autoria cria
+  duplicata em vez de resolvê-la (medido: +23 entradas).
+- Casamento em três degraus, todos exatos: título normalizado de forma estrita; as
+  grafias registradas nas fusões (procedência gravada quando se DECIDIU que duas
+  entradas eram a mesma obra); e o sobrenome, quando o título é ambíguo e o mapa traz
+  o autor. Foi o terceiro degrau que levou os ambíguos de 6 a zero.
+- **Normas ligadas ao PDF baixado** — 28 itens, casando por número e ano da norma.
+  Antes eram 2 de 473 itens do vault linkando para algo efetivamente baixado.
+- **`--cobertura`** — matéria com mapa e nenhuma obra vira lacuna DECLARADA no
+  catálogo, que o site publica. O validador cobra que a ausência esteja escrita, não
+  que a bibliografia exista.
+- **`--fundir MANTER=REMOVER`** e **`--enriquecimento --aplicar`** — edição do catálogo
+  existente, para consolidar duplicatas e absorver metadado pesquisado sem passar pela
+  consolidação.
+
+### Corrigido
+- **Frase de qualificação caía no campo do autor** (`apenas consulta`, `foco em
+  CESGRANRIO`, `coletâneas de referência`). A lista de palavras nunca daria conta; o
+  sinal estrutural é a maiúscula, o mesmo que já separa editora de prosa.
+- **A pasta do catálogo era usada como prova de escopo**, e o catálogo do BB mora em
+  `_COMUM` trazendo 25 livros de TI — matéria de um cargo só. Quem manda é a matéria.
+- **Tags do YAML viravam obras** (o frontmatter não era pulado) e **`--json` escrevia
+  texto no stdout**, quebrando quem consumia com `json.load`.
+
+### Notas
+- Conferido em cópia isolada antes de aplicar no vault: mesma contagem de itens (158)
+  e de linhas (2.816), e zero alterações fora dos blocos de material.
+- Testes: 62 + **82** (`test_material_id`) + **81** (`test_migrar_materiais`).
+
+## [1.10.0] - 2026-08-03
+
+### Corrigido
+- **O consumidor da bibliografia rodava ANTES do produtor.** A Etapa 5 (mapas) vinha
+  antes da Etapa 6 (materiais), e o `materia-mapper` recebia a instrução de
+  "reaproveitar `04-MATERIAIS/livros-recomendados.md`" — arquivo que ainda não tinha
+  sido escrito. Ele então redigitava a obra de memória. As duas etapas trocaram de
+  lugar: materiais é a 5, mapas é a 6, e o catálogo vai **inline** para o mapper.
+- **O catálogo era gravado sempre em `_COMUM`, por caminho escrito à mão.** Agora
+  vale a mesma regra de `cargos_ids[]` dos mapas: matéria de um cargo só tem catálogo
+  no cargo. Media-se, no vault, 5 dos 7 escopos sem catálogo nenhum — e o do BB
+  intitulado "Agente de Tecnologia", sem seção para as 3 matérias exclusivas do
+  Agente Comercial (99 itens de material sem bibliografia correspondente).
+- **O `material-collector` não tinha passo de pesquisa.** Tinha `WebSearch` no
+  frontmatter e uma instrução de "identificar 1-3 livros consagrados" — sem query,
+  sem fonte, sem critério. Passa a exigir no mínimo 2 buscas por matéria e
+  confirmação de autor/editora/edição/ISBN em fonte primária (site da editora, Open
+  Library/Google Books, biblioteca), com **piso de autor**: sem ele a entrada vai
+  marcada como pendência dizendo o que se procurou. Era impossível distinguir "não
+  encontrei" de "não procurei".
+- **O retorno do collector eram só contagens.** `"livros_listados": 28` não permitia
+  a nenhuma etapa posterior citar ou conferir a bibliografia — a raiz mecânica da
+  divergência. Agora devolve `catalogos[].entradas[]` inteiras.
+- Três contratos conflitantes sobre a mesma coisa: ISBN exigido em 3 lugares com 3
+  redações; o `SKILL.md` afirmando que o `materia-mapper` não lê arquivo quando o
+  frontmatter já dizia o contrário desde a 1.6.0; e `edital-resumo.md.tpl` com
+  `04-Materiais` em CamelCase, wikilink que não resolve em filesystem case-sensitive.
+
+### Adicionado
+- **`scripts/material_id.py`** — fonte de verdade da identidade de um material: a
+  âncora do catálogo (`^mat-pestana-gramatica`, block id do Obsidian), o conjunto
+  canônico de prefixos e o casamento **exato ou nada** entre item de mapa e entrada.
+  65 testes, todos com linhas literais do vault.
+- **`assets/templates/livros-recomendados.md.tpl`** — o catálogo nunca teve template;
+  nascia da prosa dentro do agent, sem contrato de formato versionado.
+- **`check_material` no `validate_output.py`** — escopo com mapa tem catálogo, `Livro:`
+  de mapa resolve para âncora existente, entrada sem autor está marcada como
+  pendência, e prefixo fora do conjunto vira aviso (nunca erro: descartar item
+  apagaria conteúdo escrito à mão). Rodado contra o vault, acusa exatamente os 7
+  problemas que a auditoria mediu.
+
+- **`scripts/migrar_materiais.py`** — migração dos concursos já gerados. Lê também
+  o bloco de nível 2 do mapa de Português do SEDES (11 itens que um leitor só de
+  `###` perderia inteiros) e o catálogo legado, para não jogar fora 62 itens já
+  pesquisados. Dry-run por padrão, backup antes de escrever, e o ponteiro de
+  leitura (`— cap. 4`) sobrevive à reescrita: é a única parte do item que o
+  catálogo não guarda. 27 testes.
+
+### Notas
+- A auditoria de 03/08/2026 nos dois concursos: 473 itens de material nos mapas contra
+  62 nos catálogos; interseção de 15,6% (BB) e 5,9% (SEDES); Pestana com 4 grafias e 3
+  editoras contraditórias; 25 livros sem autor; 31 prefixos distintos; 2 dos 473 itens
+  linkando para algo baixado.
+- Testes: 62 -> 62 + **76** (`test_material_id.py`) + **27** (`test_migrar_materiais.py`). O `test-all.sh` passou a rodar
+  toda `test_*.py` da skill, não só `test_smoke.py`.
+
 ## [1.9.0] - 2026-08-01
 
 ### Adicionado

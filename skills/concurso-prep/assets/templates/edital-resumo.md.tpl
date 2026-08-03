@@ -76,7 +76,7 @@ data_geracao: {{DATA_GERACAO}}
 
 {{LISTA_LEIS_CITADAS}}
 
-> 📥 PDFs disponíveis em [[../04-Materiais/leis-baixadas/00-INDICE|Leis Baixadas]]
+> 📥 PDFs disponíveis em [[../04-MATERIAIS/leis-baixadas/00-INDICE|Leis Baixadas]]
 
 ## 🔗 Canais Oficiais
 

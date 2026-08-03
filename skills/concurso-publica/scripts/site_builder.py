@@ -104,6 +104,18 @@ class Rotas:
 
     def __init__(self) -> None:
         self._por_nome: dict[str, str] = {}
+        # Rotas de páginas efetivamente emitidas. Serve para NAVEGAÇÃO — que é
+        # calculada da rota da própria página —, nunca para resolver wikilink:
+        # nomes repetem entre escopos, e usar o índice de nomes para navegar foi
+        # o que fez o hub do cargo apontar para a matéria do comum.
+        self._paginas: set[str] = set()
+        # Âncora de bloco -> rota da página que a CONTÉM. Existe porque o nome do
+        # arquivo não desambigua: há um `livros-recomendados.md` por escopo, e
+        # `Rotas.chave` reduz tudo ao basename — um `[[livros-recomendados#^mat-x]]`
+        # caía sempre na primeira página registrada, e 160 links de material
+        # apontaram para uma âncora que não existia naquela página. A âncora, essa,
+        # é única dentro do concurso.
+        self._por_ancora: dict[str, str] = {}
 
     @classmethod
     def chave(cls, nome: str) -> str:
@@ -116,10 +128,24 @@ class Rotas:
         base = (nome or "").strip().rstrip("/").split("/")[-1]
         return cls.EXTENSOES.sub("", base).lower()
 
+    def registrar_ancora(self, ancora: str, rota: str) -> None:
+        self._por_ancora.setdefault(ancora.lstrip("^").lower(), rota)
+
+    def rota_da_ancora(self, ancora: str) -> str | None:
+        return self._por_ancora.get((ancora or "").lstrip("^").lower())
+
+    def marcar(self, rota: str) -> None:
+        """Registra que esta rota vira página, sem associá-la a nome nenhum."""
+        self._paginas.add(rota)
+
+    def tem_pagina(self, rota: str) -> bool:
+        return rota in self._paginas
+
     def registrar(self, rota: str, *nomes: str, ancora: str = "") -> None:
         """Associa nomes do vault a uma rota. O primeiro registro vence, para uma
         página não ser sequestrada por um homônimo registrado depois."""
         destino = rota + (f"#{ancora}" if ancora else "")
+        self._paginas.add(rota)
         for nome in nomes:
             chave = self.chave(nome)
             if chave:
@@ -129,11 +155,31 @@ class Rotas:
         return self._por_nome.get(self.chave(nome))
 
     def resolvedor(self, rota_atual: str):
-        """Closure no formato que o `md2html` espera: `alvo → href | None`."""
-        def resolver(alvo: str) -> str | None:
-            destino = self._por_nome.get(self.chave(alvo))
+        """Closure no formato que o `md2html` espera: `(alvo, âncora) → href`.
+
+        A âncora VENCE o nome quando ela existe: é o único dos dois que
+        desambigua entre os sete `livros-recomendados.md` do concurso.
+        """
+        def resolver(alvo: str, ancora: str = "") -> str | None:
+            destino = self.rota_da_ancora(ancora) if ancora else None
+            if not destino:
+                destino = self._por_nome.get(self.chave(alvo))
             return relativo(destino, rota_atual) if destino else None
         return resolver
+
+
+_ANCORA_BLOCO = re.compile(r"^\s*\^([A-Za-z0-9][A-Za-z0-9-]*)\s*$", re.M)
+
+
+def _registrar_ancoras(rotas: "Rotas", doc: dict, rota: str) -> None:
+    """Indexa os block ids do documento, para o wikilink com âncora resolver
+    para a página que REALMENTE a contém — e não para a primeira homônima."""
+    try:
+        texto = Path(doc["caminho"]).read_text(encoding="utf-8")
+    except OSError:
+        return
+    for m in _ANCORA_BLOCO.finditer(texto):
+        rotas.registrar_ancora(m.group(1), rota)
 
 
 def rota_irma(rota: str, *segmentos: str) -> str:
@@ -915,6 +961,20 @@ def secoes_do_topico(topico: dict, blocos: list[dict], resolver) -> str:
     return "".join(partes)
 
 
+def rota_materiais_do_escopo(rotas: "Rotas", rota: str) -> str:
+    """Rota da página de Materiais do escopo desta página, ou "" se não houver.
+
+    Calculada da rota da PRÓPRIA página (`{conc}/{escopo}/materias/…`), nunca
+    procurada pelo nome: `materiais` existe em vários escopos e o índice de nomes
+    devolveria sempre o primeiro registrado.
+    """
+    partes = rota.split("/")
+    if len(partes) < 3:
+        return ""
+    candidata = f"{partes[0]}/{partes[1]}/materiais/index.html"
+    return relativo(candidata, rota) if rotas.tem_pagina(candidata) else ""
+
+
 def bloco_plano(materia: dict, rotas: "Rotas", rota: str) -> str:
     """A aba **Plano**: o que o edital exige, tópico por tópico.
 
@@ -1000,7 +1060,7 @@ def bloco_plano(materia: dict, rotas: "Rotas", rota: str) -> str:
     {origem}
     <ol class="lista-topicos">{"".join(itens)}</ol>
   </section>
-  {bloco_material_por_topico(materia, resolver)}
+  {bloco_material_por_topico(materia, resolver, rota_materiais_do_escopo(rotas, rota))}
   {aux}
 </div>"""
 
@@ -1027,7 +1087,8 @@ def tipo_do_material(texto: str) -> tuple[str, str]:
     return "outro", "·"
 
 
-def bloco_material_por_topico(materia: dict, resolver=None) -> str:
+def bloco_material_por_topico(materia: dict, resolver=None,
+                              rota_materiais: str = "") -> str:
     """Todo o material recomendado da matéria, na ordem do edital.
 
     **Derivado**, não redigitado: os itens já estão em `### Material recomendado`
@@ -1056,10 +1117,15 @@ def bloco_material_por_topico(materia: dict, resolver=None) -> str:
                       f'{esc(t["titulo"])}</h3><ul>{"".join(lis)}</ul></section>')
     if not secoes:
         return ""
+    # O texto antigo mandava o leitor a "Materiais, no menu do concurso" — menu
+    # que não existe (o esqueleto da página tem só marca, trilha e tema), para uma
+    # página que, no cargo, também não existia. Agora é link calculado da rota da
+    # própria página, não texto morto.
+    ponte = (f' · <a href="{rota_materiais}">a bibliografia completa fica em Materiais</a>'
+             if rota_materiais else "")
     return f"""<section class="papel material-topicos">
   <h2 id="material-por-topico">Material por tópico</h2>
-  <p class="meta">{total} itens, na ordem do edital · a bibliografia da matéria
-     fica em <strong>Materiais</strong>, no menu do concurso</p>
+  <p class="meta">{total} itens, na ordem do edital{ponte}</p>
   {"".join(secoes)}
 </section>"""
 
@@ -1470,15 +1536,48 @@ def pagina_escopo(escopo: dict, concurso: str, rotas: "Rotas", rota: str,
     return pagina(f"{rotulo} — {nome_legivel(concurso)}", trilha, corpo, rota)
 
 
+def bloco_herdado(secao: dict, slug_conc: str, rota: str) -> str:
+    """O que este escopo herda do `_COMUM`, como link — nunca como cópia.
+
+    Existe porque a bibliografia mora no `_COMUM` e o estudante do cargo não tinha
+    caminho nenhum até ela: a seção simplesmente não existia no galho do cargo, e
+    sumia sem aviso. O conteúdo continua num lugar só; aqui vai o ponteiro.
+    """
+    herdado = secao.get("herdado_de")
+    if not herdado:
+        return ""
+    destino = (f'{slug_conc}/{herdado["escopo_slug"]}'
+               f'/{herdado["secao_slug"]}/index.html')
+    partes = []
+    if herdado["n_documentos"]:
+        partes.append(f'{herdado["n_documentos"]} documento(s)')
+    if herdado["n_anexos"]:
+        partes.append(f'{herdado["n_anexos"]} arquivo(s)')
+    resumo = " · ".join(partes) or "sem conteúdo"
+    proprio = secao["documentos"] or secao["anexos"]
+    titulo = ("Também vale para este cargo" if proprio
+              else f'{esc(secao["rotulo"])} deste concurso')
+    return f"""<section class="cartao herdado">
+  <h2>{titulo}</h2>
+  <p class="meta">Vale para todos os cargos e fica em
+     <strong>{esc(nome_escopo(herdado["escopo"]) or herdado["escopo"])}</strong>,
+     num lugar só — {esc(resumo)}.</p>
+  <p><a class="botao" href="{relativo(destino, rota)}">Abrir {esc(herdado["rotulo"])} do comum</a></p>
+</section>"""
+
+
 def pagina_secao(secao: dict, escopo: dict, concurso: str, rotas: "Rotas",
-                 rota: str, rota_escopo: str, rota_capa: str) -> str:
-    """Índice de uma seção: seus documentos e seus anexos."""
+                 rota: str, rota_escopo: str, rota_capa: str,
+                 slug_conc: str = "") -> str:
+    """Índice de uma seção: seus documentos, seus anexos e o que ela herda."""
     rotulo_esc = nome_escopo(escopo["nome"]) or nome_legivel(concurso)
+    proprio = secao["documentos"] or secao["anexos"]
     corpo = f"""<div class="papel">
   <div class="sobrancelha">{esc(secao["ordinal"])} · {esc(rotulo_esc)}</div>
   <h1>{esc(secao["rotulo"])}</h1>
-  {lista_documentos(secao, rotas, rota)}
+  {lista_documentos(secao, rotas, rota) if proprio else ""}
 </div>
+{bloco_herdado(secao, slug_conc, rota)}
 {lista_anexos(secao, rotas, rota)}"""
     trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a> › '
               f'<a href="{relativo(rota_escopo, rota)}">{esc(rotulo_esc)}</a> › '
@@ -1505,7 +1604,7 @@ def bloco_sumario(md: str, rota_atual: str) -> str:
 
 def pagina_documento(doc: dict, secao: dict, escopo: dict, concurso: str,
                      rotas: "Rotas", rota: str, trilha_meio: tuple,
-                     rota_capa: str) -> str:
+                     rota_capa: str, slug_conc: str = "") -> str:
     md = Path(doc["caminho"]).read_text(encoding="utf-8")
     corpo_html = md2html.converter(md, wikilink_resolver=rotas.resolvedor(rota))
     sumario = bloco_sumario(md, rota)
@@ -1516,6 +1615,12 @@ def pagina_documento(doc: dict, secao: dict, escopo: dict, concurso: str,
                  f'<aside class="lateral">{sumario}</aside></div>')
     else:
         corpo = f'<article class="papel">{corpo_html}</article>'
+
+    # A seção colapsada É este documento, então o que ela herda tem de aparecer
+    # AQUI. Quando cada cargo ganhou catálogo próprio, a seção passou a ter um
+    # documento só, colapsou, e o bloco de herança sumiu junto: o cargo exibia a
+    # própria bibliografia e perdia o caminho para a do comum, que é a maior.
+    corpo += bloco_herdado(secao, slug_conc, rota)
 
     # o nível do meio da trilha é a seção quando ela tem índice próprio, e o escopo
     # quando a seção É este documento
@@ -1749,6 +1854,7 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
             if len(secao["documentos"]) == 1 and not secao["anexos"]:
                 doc = secao["documentos"][0]
                 rotas.registrar(rota_sec, doc["arquivo"], doc["slug"], secao["slug"])
+                _registrar_ancoras(rotas, doc, rota_sec)
                 plano.append({"rota": rota_sec, "tipo": "documento", "doc": doc,
                               "secao": secao, "escopo": escopo,
                               "trilha_meio": (rota_esc, rotulo_esc),
@@ -1758,6 +1864,7 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
                               "colapsada": True})
                 continue
 
+            rotas.marcar(rota_sec)
             plano.append({"rota": rota_sec, "tipo": "secao", "secao": secao,
                           "escopo": escopo, "rota_escopo": rota_esc,
                           "rota_capa": rota_capa})
@@ -1765,6 +1872,7 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
             for doc in secao["documentos"]:
                 rota_doc = (f'{slug_conc}/{esc_slug}/{secao["slug"]}'
                             f'/{doc["slug"]}/index.html')
+                _registrar_ancoras(rotas, doc, rota_doc)
                 # o documento é citado pelo nome do arquivo (com e sem prefixo
                 # numérico) — as duas formas aparecem nos wikilinks do vault
                 rotas.registrar(rota_doc, doc["arquivo"], doc["slug"])
@@ -1879,12 +1987,12 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
             html_pag = pagina_escopo(item["escopo"], concurso, rotas, rota, rota_capa)
         elif tipo == "secao":
             html_pag = pagina_secao(item["secao"], item["escopo"], concurso, rotas,
-                                    rota, item["rota_escopo"], rota_capa)
+                                    rota, item["rota_escopo"], rota_capa, slug_conc)
             copiar_anexos(item["secao"], destino, rota)
         elif tipo == "documento":
             html_pag = pagina_documento(item["doc"], item["secao"], item["escopo"],
                                         concurso, rotas, rota, item["trilha_meio"],
-                                        rota_capa)
+                                        rota_capa, slug_conc)
             # Só quando a seção foi colapsada neste documento: aí a rota da página é
             # a da seção e `rota_anexo` acerta o destino. Copiar aqui sempre fazia
             # CADA documento receber uma cópia inteira dos anexos da seção — 685
