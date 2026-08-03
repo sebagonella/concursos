@@ -24,6 +24,11 @@ Para UMA matéria do edital, gerar um arquivo markdown completo que sirva como r
 - `banca`: nome da banca
 - `cargo`: cargo pretendido (para contexto)
 - `total_questoes_prova`: int (para estimar quantidade desta matéria)
+- `catalogo`: as entradas do catálogo de material do escopo, **inline**
+  (`[{ancora, titulo, autor, editora, cobre}]`) — é de onde saem os `Livro:` do
+  Passo 5. Vem da Etapa 5 (coleta de materiais), que roda ANTES desta.
+  Se não vier, **avise**: sem catálogo o mapa volta a redigitar obra de memória,
+  que é o que produziu 4 grafias do mesmo livro no vault.
 - `output_path`: onde salvar o markdown
 
 ## Workflow
@@ -66,9 +71,19 @@ Atenção ao nível: o material vai **dentro de cada tópico**, não da matéria
 se pede aqui é o que serve para estudar *aquele* item do edital.
 
 Para cada tópico:
-- **Livro** — reaproveite a bibliografia da matéria (`_COMUM/04-MATERIAIS/livros-recomendados.md`)
-  em vez de inventar outra, e aponte o capítulo/parte quando souber. Só título +
-  autor + editora, sem reprodução de conteúdo.
+- **Livro** — **cite o catálogo, não redigite a obra.** O `catalogo` que você
+  recebeu inline traz as entradas do escopo, cada uma com sua âncora. Escreva:
+
+      - Livro: [[livros-recomendados#^mat-pestana-gramatica|Pestana — A Gramática]] — cap. 4
+
+  O rótulo depois do `|` é para leitura e pode ser o que ficar melhor; o vínculo é
+  a âncora. Aponte o capítulo/parte quando souber.
+
+  **Obra que não está no catálogo não se inventa**: registre em `pendencias[]` no
+  retorno, com o tópico e por que ela faria falta. Foi redigitar por conta própria
+  que produziu, no vault, 4 grafias e 3 editoras contraditórias para o mesmo livro
+  do Pestana — e 473 itens de material nos mapas contra 62 no catálogo, com menos
+  de 16% de interseção.
 - **Fonte gratuita** — canal, playlist ou material oficial, específico do tópico.
 - **Questões** — plataforma com filtro pela banca E pelo tema do tópico.
 - **Norma oficial**, sempre que o tópico for jurídico: a lei/resolução em si, com
@@ -119,7 +134,7 @@ Estrutura final:
 ...
 
 ### Material recomendado
-- Livro: {LIVRO + AUTOR + EDITORA} — {capítulo/parte, se souber}
+- Livro: [[livros-recomendados#^{ANCORA_DO_CATALOGO}|{ROTULO}]] — {capítulo/parte, se souber}
 - YouTube: {CANAL + LINK}
 - Questões: {URL_FILTRADA_POR_BANCA_E_TEMA}
 - Norma: {LEI/RESOLUÇÃO Nº/ANO}   ← quando o tópico for jurídico
@@ -156,11 +171,19 @@ Estrutura final:
 - [ ] {ITEM}
 ```
 
+> **Só estes quatro prefixos** em `### Material recomendado`: `Livro:`, `YouTube:`,
+> `Questões:` e `Norma:`. O vault real acumulou **31 prefixos distintos** para 473
+> itens — sete rótulos concorrentes só para norma (`Norma-fonte`, `Lei fonte`,
+> `Fonte primária`, `Decreto`, `Leis`…) e 27 itens sem prefixo nenhum. Prefixo fora
+> do conjunto não é descartado pelo pipeline (isso apagaria conteúdo), mas vira
+> aviso na geração. Não crie um novo.
+
 ## Princípios obrigatórios
 
 ### Sobre direitos autorais
 - **NUNCA** reproduzir trechos de livros, leis comentadas, apostilas ou outros materiais
-- Apenas **listar referências** (título + autor + editora + ISBN quando disponível)
+- Apenas **referenciar**: no mapa, um ponteiro para a entrada do catálogo; é lá que
+  título, autor, editora, edição e ISBN vivem, uma vez só
 - Para tópicos do edital: preservar o texto **literal** do edital (é documento público) mas marcar como citação
 - Para subtópicos derivados: redigir com palavras próprias
 
@@ -185,6 +208,11 @@ Retornar para skill principal:
   "output_path": "/path/to/01-portugues.md",
   "qtd_topicos_principais": 6,
   "qtd_subtopicos_derivados": 47,
-  "qtd_buscas_realizadas": 2
+  "qtd_buscas_realizadas": 2,
+  "materiais_citados": ["mat-pestana-gramatica", "mat-rosenthal-gramatica"],
+  "pendencias": [
+    {"topico": "3. Reescrita de frases",
+     "falta": "obra sobre reescrita; nenhuma entrada do catálogo cobre o tópico"}
+  ]
 }
 ```

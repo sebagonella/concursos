@@ -10,6 +10,8 @@ Checks executados:
 5. (modo oficial) Datas do cronograma nao ultrapassam a data da prova
 6. (modo previsto) Banner PROVISORIO presente + cronograma relativo               [item 2]
 7. PDFs baixados sao validos (header %PDF-)
+8. Coerencia do material: escopo com mapa tem catalogo; `Livro:` do mapa resolve
+   para ancora existente; entrada sem autor esta marcada como pendencia         [03/08]
 
 Metadata lida de .meta.json (JSON nativo, preferido). Fallback legado: .meta.yml.  [item 11]
 
@@ -102,7 +104,8 @@ def check_structure(root: Path) -> list[str]:
     cargos = [d for d in root.iterdir()
               if d.is_dir() and not d.name.startswith((".", "_"))]
     # Multi-cargo sem 03-MAPAS-COMUNS significa materia comum mapeada uma vez
-    # por cargo — o defeito que a 1.4.0 corrigiu na Etapa 5 e que nada checava.
+    # por cargo — o defeito que a 1.4.0 corrigiu no roteamento dos mapas (hoje
+    # Etapa 6) e que nada checava.
     if len(cargos) >= 2 and not (root / "_COMUM" / "03-MAPAS-COMUNS").exists():
         issues.append("FALTA: _COMUM/03-MAPAS-COMUNS (concurso com "
                       f"{len(cargos)} cargos deveria ter materias comuns)")
@@ -157,7 +160,7 @@ def tokens_uteis(slug: str) -> set[str]:
 def check_cobertura_mapas(root: Path, meta: dict) -> list[str]:
     """Toda matéria do edital tem mapa de estudo?
 
-    Este check não existia, e é por isso que o buraco passou: a Etapa 5 gera um
+    Este check não existia, e é por isso que o buraco passou: a etapa dos mapas gera um
     mapa por matéria, mas se um subagent falha (2 retries e segue) nada depois
     confere. Pior: `check_soma_questoes` é estruturalmente cego a isso — ele
     soma os mapas que EXISTEM, e aborta com INFO quando não acha nenhum, de modo
@@ -341,6 +344,107 @@ def check_wikilinks(root: Path, vault_root: Path | None = None) -> list[str]:
     return issues
 
 
+def check_material(root: Path, meta: dict) -> list[str]:
+    """Coerência entre o catálogo de material e o que os mapas citam.
+
+    Nada disto era conferido, e o resultado medido nos dois concursos do vault em
+    03/08/2026 foi: 473 itens de material nos mapas contra 62 nos catálogos, com
+    15,6% (BB) e 5,9% (SEDES) de interseção; 5 dos 7 escopos sem catálogo nenhum;
+    25 livros sem autor; 31 prefixos distintos.
+
+    O que se checa aqui:
+      - todo escopo com matéria própria tem catálogo;
+      - todo `Livro:` de mapa resolve para uma âncora que existe;
+      - entrada de catálogo sem autor tem de estar marcada como pendência;
+      - prefixo fora do conjunto canônico é AVISO, nunca erro — descartar item
+        apagaria conteúdo escrito à mão, e essa é a falha que o repo mais teme.
+    """
+    issues: list[str] = []
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import material_id as mid
+    except ImportError:                       # degradação: sem o módulo, só avisa
+        return ["INFO: material_id.py indisponível — coerência de material não checada"]
+
+    ancoras: set[str] = set()
+    catalogos: dict[str, Path] = {}
+    for cat in sorted(root.glob("*/04-MATERIAIS/livros-recomendados.md")):
+        escopo = cat.parents[1].name
+        catalogos[escopo] = cat
+        entradas = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))
+        if not entradas:
+            # O catálogo legado é uma lista de bullets sob `## Matéria`, sem
+            # entrada por obra e sem âncora. Sem este aviso ele passaria como
+            # catálogo válido — o arquivo existe, e o parser simplesmente não
+            # acha nada nele. Silêncio aqui é o mesmo defeito do
+            # `fix_notebooklm_packs.py`, que varria zero pacotes e saía com sucesso.
+            issues.append(f"MATERIAL: {escopo}/livros-recomendados.md sem nenhuma "
+                          "entrada reconhecível (formato legado? rode migrar_materiais.py)")
+        for e in entradas:
+            if e["ancora"]:
+                ancoras.add(e["ancora"])
+            else:
+                issues.append(f"MATERIAL: entrada sem âncora em {escopo}: {e['titulo']!r}")
+            if not e.get("autor") and not e.get("pendencia"):
+                issues.append(
+                    f"MATERIAL: {escopo}/{e['titulo']!r} sem autor e sem pendência "
+                    "declarada — não dá para saber se foi procurado")
+
+    # escopo que tem mapa próprio precisa de catálogo próprio
+    for mapas in sorted(root.glob("*/03-MAPAS-*")):
+        escopo = mapas.parent.name
+        proprios = [m for m in mapas.glob("*.md") if not m.name.startswith("00-INDICE")]
+        if proprios and escopo not in catalogos:
+            issues.append(f"FALTA: {escopo}/04-MATERIAIS/livros-recomendados.md "
+                          f"({len(proprios)} mapa(s) sem catálogo de material)")
+
+    prefixos_estranhos: dict[str, int] = {}
+    orfaos = 0
+    for mapa in sorted(root.glob("*/03-MAPAS-*/*.md")):
+        if mapa.name.startswith("00-INDICE"):
+            continue
+        for item in _itens_de_material(mapa):
+            if not item["canonico"] and item["prefixo"]:
+                prefixos_estranhos[item["prefixo"]] = \
+                    prefixos_estranhos.get(item["prefixo"], 0) + 1
+            if item["ancora"] and item["ancora"] not in ancoras:
+                orfaos += 1
+                issues.append(f"MATERIAL: {mapa.name} cita âncora inexistente "
+                              f"'{item['ancora']}'")
+    for prefixo, n in sorted(prefixos_estranhos.items(), key=lambda x: -x[1]):
+        issues.append(f"INFO: prefixo de material fora do conjunto canônico: "
+                      f"{prefixo!r} ({n}x)")
+    return issues
+
+
+_H3_MATERIAL = re.compile(r"^###\s+.*material recomendado", re.I)
+_QUALQUER_H = re.compile(r"^#{1,6}\s")
+
+
+def _itens_de_material(mapa: Path) -> list[dict]:
+    """Os itens de todos os blocos `### Material recomendado` de um mapa."""
+    import material_id as mid
+    itens, dentro, buf = [], False, []
+    try:
+        linhas = mapa.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for linha in linhas:
+        if _H3_MATERIAL.match(linha):
+            dentro, buf = True, []
+            continue
+        if dentro and _QUALQUER_H.match(linha):
+            dentro = False
+            itens += mid.itens_do_bloco("\n".join(buf))
+            buf = []
+            continue
+        if dentro:
+            buf.append(linha)
+    if dentro:
+        itens += mid.itens_do_bloco("\n".join(buf))
+    return itens
+
+
 def check_pdfs(root: Path) -> list[str]:
     issues = []
     for pdf in root.rglob("*.pdf"):
@@ -501,6 +605,7 @@ def main():
         "cobertura_mapas": check_cobertura_mapas(args.path, meta),
         "titulos": check_titulos(args.path, meta),
         "pdfs": check_pdfs(args.path),
+        "material": check_material(args.path, meta),
     }
     if meta.get("_erro"):
         results["meta"] = [f"ERRO: {meta['_erro']}"]

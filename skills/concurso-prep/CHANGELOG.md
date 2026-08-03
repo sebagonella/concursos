@@ -5,6 +5,55 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.10.0] - 2026-08-03
+
+### Corrigido
+- **O consumidor da bibliografia rodava ANTES do produtor.** A Etapa 5 (mapas) vinha
+  antes da Etapa 6 (materiais), e o `materia-mapper` recebia a instrução de
+  "reaproveitar `04-MATERIAIS/livros-recomendados.md`" — arquivo que ainda não tinha
+  sido escrito. Ele então redigitava a obra de memória. As duas etapas trocaram de
+  lugar: materiais é a 5, mapas é a 6, e o catálogo vai **inline** para o mapper.
+- **O catálogo era gravado sempre em `_COMUM`, por caminho escrito à mão.** Agora
+  vale a mesma regra de `cargos_ids[]` dos mapas: matéria de um cargo só tem catálogo
+  no cargo. Media-se, no vault, 5 dos 7 escopos sem catálogo nenhum — e o do BB
+  intitulado "Agente de Tecnologia", sem seção para as 3 matérias exclusivas do
+  Agente Comercial (99 itens de material sem bibliografia correspondente).
+- **O `material-collector` não tinha passo de pesquisa.** Tinha `WebSearch` no
+  frontmatter e uma instrução de "identificar 1-3 livros consagrados" — sem query,
+  sem fonte, sem critério. Passa a exigir no mínimo 2 buscas por matéria e
+  confirmação de autor/editora/edição/ISBN em fonte primária (site da editora, Open
+  Library/Google Books, biblioteca), com **piso de autor**: sem ele a entrada vai
+  marcada como pendência dizendo o que se procurou. Era impossível distinguir "não
+  encontrei" de "não procurei".
+- **O retorno do collector eram só contagens.** `"livros_listados": 28` não permitia
+  a nenhuma etapa posterior citar ou conferir a bibliografia — a raiz mecânica da
+  divergência. Agora devolve `catalogos[].entradas[]` inteiras.
+- Três contratos conflitantes sobre a mesma coisa: ISBN exigido em 3 lugares com 3
+  redações; o `SKILL.md` afirmando que o `materia-mapper` não lê arquivo quando o
+  frontmatter já dizia o contrário desde a 1.6.0; e `edital-resumo.md.tpl` com
+  `04-Materiais` em CamelCase, wikilink que não resolve em filesystem case-sensitive.
+
+### Adicionado
+- **`scripts/material_id.py`** — fonte de verdade da identidade de um material: a
+  âncora do catálogo (`^mat-pestana-gramatica`, block id do Obsidian), o conjunto
+  canônico de prefixos e o casamento **exato ou nada** entre item de mapa e entrada.
+  65 testes, todos com linhas literais do vault.
+- **`assets/templates/livros-recomendados.md.tpl`** — o catálogo nunca teve template;
+  nascia da prosa dentro do agent, sem contrato de formato versionado.
+- **`check_material` no `validate_output.py`** — escopo com mapa tem catálogo, `Livro:`
+  de mapa resolve para âncora existente, entrada sem autor está marcada como
+  pendência, e prefixo fora do conjunto vira aviso (nunca erro: descartar item
+  apagaria conteúdo escrito à mão). Rodado contra o vault, acusa exatamente os 7
+  problemas que a auditoria mediu.
+
+### Notas
+- A auditoria de 03/08/2026 nos dois concursos: 473 itens de material nos mapas contra
+  62 nos catálogos; interseção de 15,6% (BB) e 5,9% (SEDES); Pestana com 4 grafias e 3
+  editoras contraditórias; 25 livros sem autor; 31 prefixos distintos; 2 dos 473 itens
+  linkando para algo baixado.
+- Testes: 62 -> 62 + **65** (`test_material_id.py`). O `test-all.sh` passou a rodar
+  toda `test_*.py` da skill, não só `test_smoke.py`.
+
 ## [1.9.0] - 2026-08-01
 
 ### Adicionado

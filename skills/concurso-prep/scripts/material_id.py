@@ -408,7 +408,13 @@ def parsear_catalogo(md: str) -> list[dict]:
             campo = _CAMPO_POR_ROTULO.get(normalizar(c.group(1)))
             if campo:
                 atual[campo] = c.group(2).strip()
-    return entradas
+    # H3 sem NENHUM campo e sem âncora não é entrada: é subseção temática, que é
+    # como o catálogo legado do BB organiza a matéria de TI ("### Machine
+    # Learning / IA", "### Big Data"). Contá-las como obra gerava 8 falsos
+    # positivos de "entrada sem autor" — e um validador que grita no lugar
+    # errado ensina a ignorar o validador.
+    return [e for e in entradas
+            if e["ancora"] or any(e.get(c) for c in CAMPOS)]
 
 
 def render_entrada(entrada: dict) -> str:

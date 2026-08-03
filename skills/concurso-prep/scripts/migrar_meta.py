@@ -176,7 +176,7 @@ def escopo_pelo_vault(pasta: Path) -> dict[str, set[str]]:
                 mid = m.group(1).strip() if m else None
             mid = mid or re.sub(r"^\d{2}[-_ ]+", "", md.stem)
             escopo = md.relative_to(pasta).parts[0]
-            # `_COMUM` significa "mais de um cargo", NÃO "todos": a Etapa 5 manda
+            # `_COMUM` significa "mais de um cargo", NÃO "todos": a etapa dos mapas manda
             # gravar ali também a matéria que vale para 2 de 3 cargos, declarando a
             # aplicabilidade no índice. Tratar como "todos" fazia o cross-check
             # acusar falso alarme no `fundamentos-suas` do SEDES, que é só do TDAS.

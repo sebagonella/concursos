@@ -80,7 +80,7 @@ def test_diff_estrutural():
 # --------------------------------------------------------------------------- #
 def _montar_vault(base: Path, total_q=100, est1=40, est2=60):
     b = base / "SEDES_2026"
-    for sub in ["_COMUM/01-EDITAL", "_COMUM/04-MATERIAIS",
+    for sub in ["_COMUM/01-EDITAL", "_COMUM/04-MATERIAIS", "EDAS/04-MATERIAIS",
                 "_COMUM/05-HISTORICO-CONCURSO", "_COMUM/06-SINERGIA",
                 "EDAS/02-CRONOGRAMA", "EDAS/03-MAPAS-MATERIAS"]:
         (b / sub).mkdir(parents=True, exist_ok=True)
@@ -94,6 +94,19 @@ def _montar_vault(base: Path, total_q=100, est1=40, est2=60):
     # real da skill — sem eles o fixture testava um vault que a skill nao produz.
     (b / "EDAS/03-MAPAS-MATERIAS/00-INDICE.md").write_text("# Mapas\n", encoding="utf-8")
     (b / "_COMUM/04-MATERIAIS/00-INDICE.md").write_text("# Materiais\n", encoding="utf-8")
+    (b / "EDAS/04-MATERIAIS/00-INDICE.md").write_text("# Materiais\n", encoding="utf-8")
+    # Catálogo no formato novo, com block id. O escopo que tem mapa próprio tem
+    # de ter catálogo próprio — o fixture espelha o que a skill passou a gerar na
+    # Etapa 5, senão o teste afirma um mundo que o gerador não produz.
+    _catalogo = ("---\ntipo: material\n---\n# Catálogo\n\n## A\n\n"
+                 "### A Gramática para Concursos\n\n"
+                 "- **Autor:** Fernando Pestana\n"
+                 "- **Editora:** Método\n"
+                 "- **Cobre:** lingua-portuguesa\n\n"
+                 "^mat-pestana-gramatica\n")
+    for escopo in ("_COMUM", "EDAS"):
+        (b / escopo / "04-MATERIAIS/livros-recomendados.md").write_text(
+            _catalogo, encoding="utf-8")
     (b / "EDAS/03-MAPAS-MATERIAS/01.md").write_text(f"# A\n**Estimativa**: {est1} questoes\n", encoding="utf-8")
     (b / "EDAS/03-MAPAS-MATERIAS/02.md").write_text(f"# B\nEstimativa: {est2} questoes\n", encoding="utf-8")
     (b / "EDAS/02-CRONOGRAMA/cronograma-oficial.md").write_text("# crono\n", encoding="utf-8")
@@ -850,7 +863,7 @@ def test_cargos_ids_do_formato_do_sedes_e_do_bb():
 
 def test_comum_significa_mais_de_um_nao_todos():
     """`fundamentos-suas` vale para 2 dos 3 cargos do SEDES e mora em _COMUM — a
-    Etapa 5 manda gravar ali mesmo. Tratar _COMUM como 'todos' dava falso alarme."""
+    etapa dos mapas manda gravar ali mesmo. Tratar _COMUM como 'todos' dava falso alarme."""
     with tempfile.TemporaryDirectory() as d:
         p = Path(d)
         for c in ("A", "B", "C"):
