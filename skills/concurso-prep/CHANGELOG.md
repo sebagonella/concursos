@@ -5,6 +5,41 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.11.0] - 2026-08-03
+
+### Adicionado
+- **`migrar_materiais.py --so-mapas`** — a segunda fase da migração: o tópico do mapa
+  aponta para a entrada do catálogo em vez de redigitar título e autor. 120 itens
+  migrados nos dois concursos, com **zero ambíguos**. O catálogo é a AUTORIDADE e não
+  é reconstruído: reconstruir depois que a pesquisa corrigiu uma autoria cria
+  duplicata em vez de resolvê-la (medido: +23 entradas).
+- Casamento em três degraus, todos exatos: título normalizado de forma estrita; as
+  grafias registradas nas fusões (procedência gravada quando se DECIDIU que duas
+  entradas eram a mesma obra); e o sobrenome, quando o título é ambíguo e o mapa traz
+  o autor. Foi o terceiro degrau que levou os ambíguos de 6 a zero.
+- **Normas ligadas ao PDF baixado** — 28 itens, casando por número e ano da norma.
+  Antes eram 2 de 473 itens do vault linkando para algo efetivamente baixado.
+- **`--cobertura`** — matéria com mapa e nenhuma obra vira lacuna DECLARADA no
+  catálogo, que o site publica. O validador cobra que a ausência esteja escrita, não
+  que a bibliografia exista.
+- **`--fundir MANTER=REMOVER`** e **`--enriquecimento --aplicar`** — edição do catálogo
+  existente, para consolidar duplicatas e absorver metadado pesquisado sem passar pela
+  consolidação.
+
+### Corrigido
+- **Frase de qualificação caía no campo do autor** (`apenas consulta`, `foco em
+  CESGRANRIO`, `coletâneas de referência`). A lista de palavras nunca daria conta; o
+  sinal estrutural é a maiúscula, o mesmo que já separa editora de prosa.
+- **A pasta do catálogo era usada como prova de escopo**, e o catálogo do BB mora em
+  `_COMUM` trazendo 25 livros de TI — matéria de um cargo só. Quem manda é a matéria.
+- **Tags do YAML viravam obras** (o frontmatter não era pulado) e **`--json` escrevia
+  texto no stdout**, quebrando quem consumia com `json.load`.
+
+### Notas
+- Conferido em cópia isolada antes de aplicar no vault: mesma contagem de itens (158)
+  e de linhas (2.816), e zero alterações fora dos blocos de material.
+- Testes: 62 + **82** (`test_material_id`) + **81** (`test_migrar_materiais`).
+
 ## [1.10.0] - 2026-08-03
 
 ### Corrigido

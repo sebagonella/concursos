@@ -24,7 +24,7 @@ edital) e **Estudo** (os assuntos aprofundados). No Plano, cada tópico traz o l
 do edital e o checklist derivado à vista, e a um clique o material recomendado, as
 pegadinhas da banca, a meta de questões e o que mais o mapa tiver escrito.
 
-Versão atual: **0.15.0** (a página de Materiais passa a existir em cada cargo, herdando por referência a bibliografia do comum, e a página de matéria ganha link até ela — antes a seção sumia em silêncio no galho do cargo e a frase apontava para um menu inexistente). Na 0.14.0: (o manifesto de cada concurso guarda a pasta de origem no vault,
+Versão atual: **0.16.0** (o wikilink com âncora resolve pela ÂNCORA e não pelo nome do arquivo — há um `livros-recomendados.md` por escopo, e o basename mandava 160 links para a página homônima errada; o block id do Obsidian vira âncora HTML de verdade; e backups `.md.bak` deixam de ser publicados como anexo). Na 0.15.0: (a página de Materiais passa a existir em cada cargo, herdando por referência a bibliografia do comum, e a página de matéria ganha link até ela — antes a seção sumia em silêncio no galho do cargo e a frase apontava para um menu inexistente). Na 0.14.0: (o manifesto de cada concurso guarda a pasta de origem no vault,
 que é o que permite ao `deploy.sh` reconstruir todo o build antes de enviar — sem isso,
 concurso construído numa sessão anterior era republicado com o conteúdo daquela data).
 Na 0.13.0: a ficha do aprofundamento mostra onde **cada** fonte foi
