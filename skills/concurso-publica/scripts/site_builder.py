@@ -1906,11 +1906,19 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
         alvo.write_text(html_pag, encoding="utf-8")
         n_paginas += 1
 
-    # manifesto deste concurso (alimenta o índice raiz)
+    # manifesto deste concurso (alimenta o índice raiz e o deploy)
+    #
+    # `origem` é o que permite RECONSTRUIR este concurso sem que ninguém precise
+    # lembrar de onde ele veio. O deploy envia o `out/site/` inteiro com
+    # `rsync --delete`, mas só constrói o concurso que recebeu por argumento — sem
+    # este campo, um concurso construído numa sessão anterior é republicado com o
+    # conteúdo daquela data, sem aviso. Foi o que aconteceu com o BB_2027_PREVISTO
+    # enquanto se publicava o SEDES_2026.
     meta = modelo.get("meta", {})
     (base / ".concurso.json").write_text(json.dumps({
         "concurso": concurso,
         "slug": slug_conc,
+        "origem": modelo.get("dir"),
         "orgao": meta.get("orgao") or re.split(r"[_-]", concurso)[0],
         "banca": meta.get("banca"),
         "prova_data": (meta.get("datas_chave") or {}).get("prova_data"),
