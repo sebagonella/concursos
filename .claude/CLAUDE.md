@@ -83,8 +83,9 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
   introduzir passos de build no deploy. **Defeito conhecido:** o `deploy.sh` constroi
   so o concurso de `--concurso-dir` mas envia o `out/site/` inteiro com `--delete`, e
   esse diretorio acumula — concurso construido numa sessao anterior e republicado com
-  o conteudo daquela data, **sem aviso**. Rode o deploy uma vez por concurso presente
-  em `out/site/`, ou apague o diretorio antes. Ver `deploy/README.md`.
+  o conteudo daquela data, **sem aviso**. Rode o deploy **uma vez por concurso** presente
+  em `out/site/`, e **nao** apague o diretorio para forcar um so: o envio e `rsync --delete`
+  do build inteiro, entao um build com um concurso **remove os outros do servidor**. Ver `deploy/README.md`.
 - **Acrescentar fonte a um aprofundamento e renomear**: o id *e* o conjunto de fontes e
   o id *e* o path, entao `padrao--pestana` vira `padrao--pestana+rosenthal`. Quem faz e
   `ampliar_aprofundamento.py` (modos `ampliar`/`derivar`), que move primeiro e regenera
