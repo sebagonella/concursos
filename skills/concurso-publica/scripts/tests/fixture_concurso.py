@@ -80,12 +80,18 @@ def _pack_como_a_aprofunda_gera(slug: str, concurso: str = "TESTE_2026",
 # --------------------------------------------------------------------------- #
 # fixtures
 # --------------------------------------------------------------------------- #
-def _montar_concurso(base: Path, com_midias=True, com_url_nb=False):
-    """Monta um concurso mínimo: 1 cargo, 1 matéria, 2 assuntos."""
+def _montar_concurso(base: Path, com_midias=True, com_url_nb=False, meta=None):
+    """Monta um concurso mínimo: 1 cargo, 1 matéria, 2 assuntos.
+
+    `meta` sobrescreve o `.meta.json`. Existe para o `site-model-exemplo.json`
+    poder ser regerado daqui com um metadado realista, continuando a ser saída
+    de verdade do coletor — exemplo escrito à mão é exemplo que diverge.
+    """
     base.mkdir(parents=True, exist_ok=True)
     mat = _mat_vault(base)
     (base / ".meta.json").write_text(json.dumps(
-        {"orgao": "TESTE", "ano": 2026, "banca": "Banca X"}), encoding="utf-8")
+        meta or {"orgao": "TESTE", "ano": 2026, "banca": "Banca X"}),
+        encoding="utf-8")
 
     # assunto completo: crase
     crase = mat / "assuntos" / "crase"

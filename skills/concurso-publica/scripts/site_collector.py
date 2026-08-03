@@ -96,6 +96,72 @@ def cobertura_da_materia(materia: dict, assuntos=None) -> dict:
     }
 
 
+def cobertura_do_escopo(materias: list[dict]) -> dict:
+    """Cobertura do escopo: a soma dos tópicos das suas matérias.
+
+    Somar em vez de contar "matérias aprofundadas" é o que faz a barra do escopo
+    ser exatamente a soma das barras das matérias — matéria com 1 assunto de 60
+    não pode pesar igual a uma completa.
+
+    As duas exclusões do denominador são a mesma regra do falso zero:
+    matéria sem mapa não tem tópico para cobrir, e matéria com `vinculo_ausente`
+    tem cobertura DESCONHECIDA. Jogar qualquer uma das duas no denominador como
+    zero afirmaria "não aprofundado" sobre trabalho que pode estar feito. As sem
+    vínculo saem contadas em `n_sem_vinculo`, para a página ressalvar por escrito
+    em vez de silenciar.
+    """
+    n_top = n_cob = n_com_mapa = n_sem_vinculo = 0
+    for m in materias:
+        cb = m.get("cobertura") or {}
+        if cb.get("vinculo_ausente"):
+            n_sem_vinculo += 1
+            continue
+        if not cb.get("n_topicos"):
+            continue
+        n_com_mapa += 1
+        n_top += cb["n_topicos"]
+        n_cob += cb["n_cobertos"]
+    return {
+        "n_topicos": n_top,
+        "n_cobertos": n_cob,
+        # `None`, nunca 0: sem denominador não há o que afirmar
+        "pct": round(100 * n_cob / n_top) if n_top else None,
+        "n_materias": len(materias),
+        "n_com_mapa": n_com_mapa,
+        "n_sem_vinculo": n_sem_vinculo,
+    }
+
+
+def somar_progressos(*partes: dict) -> dict:
+    """Soma `{total, feitos}`. As partes são contadas em lugares diferentes do
+    escopo e nunca se sobrepõem — ver `coletar_escopo`."""
+    return {
+        "total": sum((p or {}).get("total", 0) for p in partes),
+        "feitos": sum((p or {}).get("feitos", 0) for p in partes),
+    }
+
+
+def progresso_da_materia(materia: dict) -> dict:
+    """Tarefas de estudo da matéria: os assuntos MAIS os itens do plano.
+
+    Os checkboxes do mapa do edital ("Ler as páginas", "Resolver 30 questões",
+    os subtópicos derivados) são tarefa de estudo do mesmo tipo das do
+    aprofundamento — a aba Plano já os mostra como "N/M itens do plano". Ficaram
+    de fora até a 0.17.0 com o argumento de que 1.998 itens nunca marcados
+    afogariam as ~200 do aprofundamento; o uso mostrou o contrário: **12 das 22
+    matérias do vault não mostravam barra nenhuma** por causa dessa exclusão.
+
+    O mapa EMPRESTADO não entra. `cruzar_materias_comuns` anexa o mapa do cargo
+    à matéria irmã do `_COMUM`, e a mesma regra que já vale para tarefa vale
+    aqui: conta quem guarda o arquivo. Somar dos dois lados contaria 237 itens
+    em dobro só no `_COMUM` do SEDES.
+    """
+    partes = [a["progresso"] for a in materia.get("assuntos") or []]
+    if materia.get("mapa") and not materia.get("mapa_em"):
+        partes.append(materia["mapa"]["progresso"])
+    return somar_progressos(*partes)
+
+
 def sinais_do_assunto(aprofs: list[dict], principal: dict) -> dict:
     """O que EXISTE neste assunto — tudo verificável no disco.
 
@@ -699,10 +765,17 @@ def coletar_assunto(subdir: Path, mapa_prio: dict | None = None) -> dict | None:
         "midias": uniao_midias(aprofs),
         "flashcards": uniao_flashcards(aprofs, principal),
         "sinais": sinais_do_assunto(aprofs, principal),
+        # Tarefas do assunto: a UNIÃO dos aprofundamentos, não as do principal.
+        # Cada aprofundamento traz o seu checklist ("ler as páginas X do
+        # Pestana"), e o da versão detalhada é trabalho tão real quanto o da
+        # padrão. Contando só `aprofs[0]` o vault perdia 181 checkboxes em 29
+        # assuntos — dois de português apareciam zerados tendo 8 e 7 tarefas.
+        # (A lateral da página segue mostrando o do aprofundamento aberto, que
+        # é o que aquela aba representa.)
+        "progresso": somar_progressos(*[a["progresso"] for a in aprofs]),
         # atalhos do principal
         "resumo_md": principal["resumo_md"],
         "notebooklm_url": principal.get("notebooklm_url"),
-        "progresso": principal["progresso"],
     }
 
 
@@ -774,6 +847,10 @@ def coletar_materia(materia_dir: Path) -> dict | None:
         "mapa_localizacao": mapa_loc.name if mapa_loc.exists() else None,
         "aliases_mapa": aliases,
         "assuntos": assuntos,
+        # Valor inicial: aqui o mapa ainda não foi anexado. `atualizar_progresso`
+        # recalcula com `progresso_da_materia`, que soma os itens do plano —
+        # e que documenta por que só os assuntos PRÓPRIOS entram.
+        "progresso": somar_progressos(*[a["progresso"] for a in assuntos]),
         "n_assuntos": len(assuntos),
         "n_com_podcast": sum(1 for a in assuntos if a["midias"]["podcast"]),
         "n_com_flashcards": sum(1 for a in assuntos if a["flashcards"]["obsidian"]),
@@ -815,7 +892,8 @@ SECOES = {
 
 # Artefatos que existem para navegar no Obsidian, não para ler na web: a navegação
 # do site É o índice, e republicá-lo cria uma segunda lista que envelhece. O
-# 99-Status continua sendo LIDO (alimenta o progresso do escopo), só não vira página.
+# 99-Status continua sendo LIDO — é uma das três parcelas de `progresso_tarefas`,
+# ao lado dos assuntos e dos documentos de seção —, só não vira página.
 DOCS_NAO_PUBLICAVEIS = re.compile(r"^(00-INDICE|99-Status)", re.IGNORECASE)
 
 # Template não preenchido: `{ASSUNTO}`, `{MATERIA}`… Publicar isso seria mostrar
@@ -1209,6 +1287,9 @@ def coletar_escopo(escopo_dir: Path) -> dict:
                 "materia_id": mapa["materia_id"],
                 "doc_banca": None, "docs_apoio": [], "mapa_localizacao": None,
                 "assuntos": [], "n_assuntos": 0,
+                # nada de zero fixo aqui: `atualizar_progresso` conta o mapa, que
+                # nestas matérias tem de 35 a 176 itens — era o zero à mão que
+                # apagava o único trabalho que elas têm
                 "n_com_podcast": 0, "n_com_flashcards": 0,
                 "por_prioridade": {p: 0 for p in PRIORIDADES},
                 "mapa": mapa,
@@ -1216,18 +1297,7 @@ def coletar_escopo(escopo_dir: Path) -> dict:
     materias.sort(key=lambda m: m["slug"])
 
     secoes.sort(key=lambda s: (s["ordinal"], s["slug"]))
-    prog_docs = {"total": 0, "feitos": 0}
-    for s in secoes:
-        for d in s["documentos"]:
-            prog_docs["total"] += d["progresso"]["total"]
-            prog_docs["feitos"] += d["progresso"]["feitos"]
-    prog_assuntos = {"total": 0, "feitos": 0}
-    for m in materias:
-        for a in m["assuntos"]:
-            prog_assuntos["total"] += a["progresso"]["total"]
-            prog_assuntos["feitos"] += a["progresso"]["feitos"]
-
-    return {
+    escopo = {
         "tipo": "comum" if nome.upper() in ("_COMUM", "COMUM") else "cargo",
         "nome": nome,
         "slug": re.sub(r"[^a-z0-9-]+", "-", norm(nome).strip("_")).strip("-") or "escopo",
@@ -1235,10 +1305,33 @@ def coletar_escopo(escopo_dir: Path) -> dict:
         "materias": materias,
         "n_materias": len(materias),
         "n_assuntos": sum(m["n_assuntos"] for m in materias),
-        "progresso": prog_assuntos,
-        "progresso_documentos": prog_docs,
+        "progresso_documentos": somar_progressos(
+            *[d["progresso"] for s in secoes for d in s["documentos"]]),
         "progresso_status": progresso_do_status(escopo_dir),
     }
+    atualizar_progresso(escopo)
+    return escopo
+
+
+def atualizar_progresso(escopo: dict) -> None:
+    """Recalcula as tarefas do escopo e das suas matérias.
+
+    Roda duas vezes: em `coletar_escopo`, para o escopo isolado fazer sentido, e
+    de novo depois de `cruzar_materias_comuns`, que é quando `mapa_em` passa a
+    existir e revela qual mapa é emprestado. É idempotente de propósito.
+
+    As parcelas não se sobrepõem, e por construção: o `99-Status.md` fica na RAIZ
+    do escopo (fora das pastas de `SECOES`) e é barrado por
+    `DOCS_NAO_PUBLICAVEIS`; e a seção herdada do `_COMUM` é um PONTEIRO com
+    `documentos: []`, então a bibliografia comum nunca conta no cargo.
+    """
+    for m in escopo["materias"]:
+        m["progresso"] = progresso_da_materia(m)
+    escopo["progresso"] = somar_progressos(*[m["progresso"]
+                                             for m in escopo["materias"]])
+    escopo["progresso_tarefas"] = somar_progressos(
+        escopo["progresso"], escopo["progresso_documentos"],
+        escopo["progresso_status"])
 
 
 # Seções do `_COMUM` que valem para quem estuda por um cargo. `04-MATERIAIS` é a
@@ -1336,6 +1429,12 @@ def cruzar_materias_comuns(escopos: list[dict]) -> None:
                     "escopo_slug": comum["slug"], "escopo_nome": comum["nome"],
                     "materia_slug": irma["slug"], "n_assuntos": irma["n_assuntos"],
                 }
+                # Os assuntos da irmã ficam numa chave PRÓPRIA, nunca em
+                # `assuntos`. É o que permite à aba Estudo do cargo existir
+                # (senão a matéria fica só com o Plano, que era o defeito) sem
+                # que os mesmos checkboxes contem no cargo E no comum — a
+                # agregação de progresso lê `assuntos`, e só ela.
+                mat["assuntos_herdados"] = irma["assuntos"]
             if not irma.get("mapa") and mat.get("mapa"):
                 # ANEXAR o mapa, não só apontar para ele. `mapa_em` sozinho era
                 # dado morto: gravado e nunca lido, então a matéria do comum
@@ -1423,6 +1522,10 @@ def calcular_cobertura(escopos: list[dict]) -> None:
             irma = por_id.get(m.get("materia_id") or m["slug"])
             m["cobertura"] = cobertura_da_materia(
                 m, m["assuntos"] if m["assuntos"] else irma)
+        # o agregado só existe depois que TODAS as matérias do escopo têm a sua.
+        # A matéria emprestada entra no denominador do cargo de propósito: o
+        # tópico é do edital daquele cargo, ainda que o material more no comum.
+        e["cobertura"] = cobertura_do_escopo(e["materias"])
 
 
 def avisar_rotulos_extras(escopos: list[dict]) -> list[str]:
@@ -1460,19 +1563,28 @@ def coletar_concurso(base: Path) -> dict:
     soltas = [m for m in (coletar_materia(d) for d in achar_materias(base)
                           if cargo_de(d, base) == "_GERAL") if m]
     if soltas:
-        escopos.append({
+        # O progresso é somado de verdade: zerar à mão aqui deixava o escopo com
+        # matérias reais exibindo barra vazia. Documentos e status ficam em zero
+        # porque neste layout não existe pasta de escopo para varrer — não há
+        # `SECOES` nem `99-Status.md` fora de um escopo.
+        geral = {
             "tipo": "geral", "nome": "_GERAL", "slug": "geral",
             "secoes": [], "materias": soltas,
             "n_materias": len(soltas),
             "n_assuntos": sum(m["n_assuntos"] for m in soltas),
-            "progresso": {"total": 0, "feitos": 0},
             "progresso_documentos": {"total": 0, "feitos": 0},
             "progresso_status": {"total": 0, "feitos": 0},
-        })
+        }
+        atualizar_progresso(geral)
+        escopos.append(geral)
 
     # `_COMUM` primeiro (é o que vale para todos), cargos em ordem alfabética
     escopos.sort(key=lambda e: (e["tipo"] != "comum", e["nome"]))
     cruzar_materias_comuns(escopos)
+    # de novo, agora que `mapa_em` existe: só depois do cruzamento se sabe qual
+    # mapa é emprestado e, portanto, qual não deve entrar na soma deste escopo
+    for e in escopos:
+        atualizar_progresso(e)
     herdar_secoes_comuns(escopos)
     calcular_cobertura(escopos)
     avisar_rotulos_extras(escopos)

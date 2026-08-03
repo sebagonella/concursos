@@ -1426,6 +1426,16 @@ def test_exemplo_do_modelo_constroi_de_verdade():
     modelo = json.loads(exemplo.read_text(encoding="utf-8"))
     materia = _materias(modelo)[0]
     assert materia["mapa"], "o exemplo precisa representar o mapa, não `null`"
+    # o exemplo já esteve defasado em silêncio: faltavam `materia_id`, `cobertura`
+    # e `sinais`, que o coletor grava há versões. Estes asserts teriam pego.
+    assert materia["materia_id"] and materia["progresso"]
+    assert materia["cobertura"]["n_topicos"]
+    assert materia["assuntos"][0]["sinais"]
+    for e in _escopos(modelo):
+        assert e["progresso_tarefas"]["total"] == sum(
+            e[k]["total"] for k in
+            ("progresso", "progresso_documentos", "progresso_status")), e["nome"]
+        assert "n_sem_vinculo" in e["cobertura"], e["nome"]
 
     # os caminhos do exemplo são `<vault>/…` de propósito (nada de path pessoal em
     # repo público), então o site inteiro não sai daqui — o que se exercita é a aba
@@ -1453,8 +1463,8 @@ def test_exemplo_do_modelo_constroi_de_verdade():
     assert "Pegadinhas da Quadrix neste tópico" in h
     assert "Leis-chave" in h                     # H3 fora do template
     assert 'class="livre"' in h                  # bullet sem checkbox
-    assert 'href="https://www.qconcursos.com/"' in h
-    assert 'class="grupo-sub">TEORIA · Princípios<' in h
+    assert 'href="https://qconcursos.com/crase"' in h     # URL do material vira link
+    assert 'class="grupo-sub">TEORIA · Detalhe do bloco<' in h   # grupo · subgrupo
     for t in h.split('<li class="topico">')[1:]:
         m = re.search(r'>(\d+)/(\d+) itens do plano<', t)
         if not m:
@@ -1715,6 +1725,433 @@ def test_pagina_sem_topico_nao_afirma_falta_de_aprofundamento():
         h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
         for frase in ("sem aprofundamento", "não aprofundado", "nao aprofundado"):
             assert frase not in h.lower(), frase
+
+
+# --------------------------------------------------------------------------- #
+# as duas barras: tarefas de estudo e cobertura do edital
+# --------------------------------------------------------------------------- #
+def _cargo(m: dict, nome: str = "CARGO-X") -> dict:
+    return next(e for e in _escopos(m) if e["nome"] == nome)
+
+
+def test_tarefas_do_escopo_somam_as_tres_partes():
+    """A barra de tarefas conta TUDO o que há para marcar no escopo.
+
+    Contando só os assuntos, cargo cujo trabalho está nos documentos de seção e
+    no `99-Status` aparecia sem barra nenhuma — é o caso real dos três cargos do
+    SEDES (21, 17 e 8 tarefas em documentos, zero assunto). `progresso_documentos`
+    e `progresso_status` eram coletados e jogados fora.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        e = _cargo(sc.coletar_concurso(base))
+        # 3 do assunto + 10 do mapa da matéria = 13 na parcela dos assuntos
+        assert e["progresso"] == {"total": 13, "feitos": 2}
+        assert e["progresso_documentos"] == {"total": 2, "feitos": 0}
+        assert e["progresso_status"] == {"total": 2, "feitos": 1}
+        assert e["progresso_tarefas"] == {"total": 17, "feitos": 3}
+        # o invariante: o composto é exatamente a soma declarada das partes
+        assert e["progresso_tarefas"]["total"] == sum(
+            e[k]["total"] for k in
+            ("progresso", "progresso_documentos", "progresso_status"))
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "index.html").read_text(encoding="utf-8")
+        assert "Tarefas de estudo" in h and "3/17" in h
+
+
+def test_tarefas_incluem_os_itens_do_plano():
+    """Os checkboxes do mapa do edital SÃO tarefa de estudo.
+
+    Até a 0.17.0 ficavam de fora, com o argumento de que 1.998 itens nunca
+    marcados afogariam as ~200 do aprofundamento. O uso desmentiu: **12 das 22
+    matérias do vault não mostravam barra nenhuma** por causa disso, e "Ler as
+    páginas" / "Resolver 30 questões" são a mesma espécie de trabalho que as
+    tarefas do aprofundamento — a aba Plano já as exibia como "itens do plano".
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        antes = _cargo(sc.coletar_concurso(base))["progresso_tarefas"]["total"]
+        # um segundo mapa, farto de checkboxes, como os do vault real
+        (base / "CARGO-X" / "03-MAPAS-MATERIAS" / "02-matematica.md").write_text(
+            '---\ntipo: mapa-materia\nmateria: "Matemática"\n---\n# Mapa\n\n'
+            '## 1. Porcentagens\n\n### Subtópicos derivados\n\n'
+            + "".join(f"- [ ] Item {i}\n" for i in range(50)),
+            encoding="utf-8")
+        e = _cargo(sc.coletar_concurso(base))
+        assert e["progresso_tarefas"]["total"] == antes + 50, "o mapa novo tem de entrar"
+        mat = next(mt for mt in e["materias"] if mt["slug"] == "matematica")
+        assert mat["progresso"]["total"] == 50, \
+            "matéria só com mapa deixa de nascer zerada à mão"
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "index.html").read_text(encoding="utf-8")
+        assert "Tarefas de estudo" in h and "0/50" in h
+
+
+def test_mapa_emprestado_nao_conta_duas_vezes():
+    """`cruzar_materias_comuns` ANEXA o mapa do cargo à matéria irmã do comum.
+
+    Somar dos dois lados contaria os mesmos itens em dobro — 237 só no `_COMUM`
+    do SEDES. Conta quem guarda o arquivo, a mesma regra já vigente para tarefa.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # aprofundamento migra para o comum; o mapa fica no cargo e é emprestado
+        (base / "_COMUM" / "03-APROFUNDAMENTO").parent.mkdir(parents=True, exist_ok=True)
+        (base / "CARGO-X" / "03-APROFUNDAMENTO").rename(
+            base / "_COMUM" / "03-APROFUNDAMENTO")
+        m = sc.coletar_concurso(base)
+        comum, cargo = _cargo(m, "_COMUM"), _cargo(m)
+        irma = next(mt for mt in comum["materias"] if mt.get("mapa_em"))
+        dona = next(mt for mt in cargo["materias"] if mt.get("mapa"))
+        assert irma["mapa"] is dona["mapa"], "o fixture precisa do mapa compartilhado"
+        itens = dona["mapa"]["progresso"]["total"]
+        assert itens > 0
+        assert dona["progresso"]["total"] == itens, "quem guarda o arquivo conta"
+        assert irma["progresso"]["total"] == 3, "a irmã conta só os próprios assuntos"
+
+
+def test_secao_herdada_do_comum_nao_infla_as_tarefas_do_cargo():
+    """A bibliografia mora no `_COMUM` e o cargo a enxerga por PONTEIRO.
+
+    Se o ponteiro carregasse os documentos, os mesmos checkboxes contariam no
+    comum e em cada cargo — quatro vezes no SEDES. A garantia é estrutural
+    (`documentos: []` no ponteiro), não de ordem de chamada.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = base / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        alvo.write_text('---\ntipo: materiais\n---\n# Livros\n\n'
+                        '- [ ] Comprar o Pestana\n- [x] Baixar a Lei 8.742\n',
+                        encoding="utf-8")
+        m = sc.coletar_concurso(base)
+        comum = _cargo(m, "_COMUM")
+        cargo = _cargo(m)
+        assert comum["progresso_documentos"] == {"total": 2, "feitos": 1}
+        herdada = next((s for s in cargo["secoes"] if s["slug"] == "materiais"), None)
+        assert herdada is not None, "o cargo precisa ENXERGAR a bibliografia"
+        assert herdada["documentos"] == [], "herda por ponteiro, nunca por cópia"
+        assert cargo["progresso_documentos"] == {"total": 2, "feitos": 0}, \
+            "os 2 do comum não podem se somar aos 2 próprios do cargo"
+
+
+def test_materia_tem_progresso_agregado_dos_assuntos():
+    """`coletar_materia()` não tinha campo de progresso nenhum — só os assuntos,
+    individualmente —, então o card da matéria não tinha o que mostrar."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mat = _materias(sc.coletar_concurso(base))[0]
+        dos_assuntos = sum(a["progresso"]["total"] for a in mat["assuntos"])
+        do_plano = mat["mapa"]["progresso"]["total"]
+        assert dos_assuntos == 3 and do_plano == 10
+        assert mat["progresso"] == {"total": 13, "feitos": 2}
+
+
+def test_tarefas_da_materia_nao_contam_a_irma_do_comum():
+    """Tarefa pertence a quem guarda o arquivo.
+
+    A cobertura empresta os assuntos da matéria irmã (mapa no cargo,
+    aprofundamento no `_COMUM`) — e deve. Emprestar TAREFA faria os mesmos
+    checkboxes contarem no cargo e no comum, e nenhum total fecharia.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # o aprofundamento migra para o _COMUM; o mapa fica no cargo
+        origem = base / "CARGO-X" / "03-APROFUNDAMENTO"
+        destino = base / "_COMUM" / "03-APROFUNDAMENTO"
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        origem.rename(destino)
+        m = sc.coletar_concurso(base)
+        do_cargo = next(mt for mt in _cargo(m)["materias"] if mt.get("mapa"))
+        do_comum = next(mt for mt in _cargo(m, "_COMUM")["materias"]
+                        if mt["assuntos"])
+        # o cargo conta o SEU mapa, nunca os assuntos que estão no comum
+        assert do_cargo["progresso"]["total"] == do_cargo["mapa"]["progresso"]["total"]
+        assert do_comum["progresso"] == {"total": 3, "feitos": 1}
+        # os 3 checkboxes de assunto aparecem UMA vez na soma de todos os escopos
+        assert sum(a["progresso"]["total"]
+                   for e in _escopos(m) for mt in e["materias"]
+                   for a in mt["assuntos"]) == 3
+        # mas a cobertura do cargo continua enxergando o material emprestado
+        assert do_cargo["cobertura"]["n_cobertos"] == 1
+
+
+def test_cobertura_do_escopo_soma_as_materias():
+    """A barra do escopo tem de ser a soma exata das barras das matérias — é o
+    que a torna comparável entre cargos. Contar "matérias aprofundadas" faria
+    matéria com 1 assunto de 60 pesar igual a uma completa."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        m = sc.coletar_concurso(base)
+        cb = _cargo(m)["cobertura"]
+        assert (cb["n_topicos"], cb["n_cobertos"], cb["pct"]) == (2, 1, 50)
+        assert cb["n_sem_vinculo"] == 0 and cb["n_com_mapa"] == 1
+        assert cb["n_topicos"] == sum(
+            (mt.get("cobertura") or {}).get("n_topicos", 0)
+            for mt in _cargo(m)["materias"])
+
+
+def test_cobertura_do_escopo_ressalva_materia_sem_vinculo():
+    """Matéria com vínculo ausente NUNCA entra no denominador do escopo.
+
+    Somá-la com 0 no numerador é o falso negativo já proibido no link
+    tópico→assunto, agora em escala de escopo: uma matéria não vinculada
+    arrastaria a barra de um cargo inteiro para baixo. Ela sai da conta e é
+    declarada por escrito.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        for md in (base / "CARGO-X" / "03-APROFUNDAMENTO").rglob("*.md"):
+            txt = md.read_text(encoding="utf-8")
+            if "topico_id:" in txt:
+                md.write_text("\n".join(l for l in txt.split("\n")
+                                        if not l.startswith("topico_id:")),
+                              encoding="utf-8")
+        m = sc.coletar_concurso(base)
+        cb = _cargo(m)["cobertura"]
+        assert cb["n_sem_vinculo"] == 1
+        assert cb["n_topicos"] == 0, "a matéria sem vínculo saiu do denominador"
+        assert cb["pct"] is None, "sem denominador não se afirma percentual"
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "index.html").read_text(encoding="utf-8")
+        assert "1 matéria(s) sem vínculo" in h, "a ressalva tem de estar escrita"
+        assert "0%" not in h, "desconhecido nunca vira zero por cento"
+
+
+def test_card_da_materia_sem_vinculo_diz_desconhecida():
+    """No card, cobertura desconhecida sai hachurada e escrita — não como trilho
+    vazio, que se lê como zero, e é justamente o zero que não se sabe."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        for md in (base / "CARGO-X" / "03-APROFUNDAMENTO").rglob("*.md"):
+            txt = md.read_text(encoding="utf-8")
+            if "topico_id:" in txt:
+                md.write_text("\n".join(l for l in txt.split("\n")
+                                        if not l.startswith("topico_id:")),
+                              encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "index.html").read_text(encoding="utf-8")
+        assert "indefinida" in h and "cobertura desconhecida" in h
+        for frase in ("sem aprofundamento", "não aprofundado", "nao aprofundado"):
+            assert frase not in h.lower(), frase
+
+
+def test_medidor_mostra_o_zero_e_omite_o_ausente():
+    """As três coisas são diferentes: barra vazia (existe e está em zero), barra
+    ausente (não há o que medir) e barra desconhecida (§ teste acima).
+
+    Esconder o zero faria a lacuna sumir justamente onde ela é maior — é a mesma
+    regra de `test_cobertura_zero_aparece_em_vez_de_sumir`, agora no medidor.
+    """
+    zero = sb.medidor([{"rotulo": "Tarefas de estudo", "classe": "tarefa",
+                        "total": 48, "feitos": 0}])
+    assert 'width:0%' in zero and "0/48" in zero
+    assert 'class="barra-cobertura' in zero, "o trilho aparece mesmo vazio"
+    # sem denominador não há o que afirmar: a linha some inteira
+    ausente = sb.medidor([{"rotulo": "Tópicos do edital", "total": 0, "feitos": 0}])
+    assert ausente == ""
+    assert "0/0" not in sb.medidor([
+        {"rotulo": "Tarefas de estudo", "classe": "tarefa", "total": 0, "feitos": 0},
+        {"rotulo": "Tópicos do edital", "total": 5, "feitos": 2}])
+
+
+def test_progresso_usa_barra_e_nunca_bolha():
+    """Um idioma só para progresso, no site inteiro.
+
+    As bolhas do cartão-resposta mediam progresso em duas telas vizinhas (card e
+    página do assunto) enquanto a matéria já usava barra — o mesmo número com
+    duas aparências. A bolha continua viva onde diz OUTRA coisa: o selo de nível
+    e o marcador das listas de tarefa; migração pela metade é o defeito.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        rotas = ("teste_2026/index.html", "teste_2026/cargo-x/index.html",
+                 f'{_dir_materia(out, "teste_2026").relative_to(out)}/index.html',
+                 f'{_dir_assunto(out, "teste_2026", "crase").relative_to(out)}/index.html')
+        for rota in rotas:
+            h = (out / rota).read_text(encoding="utf-8")
+            # a CLASSE, não a palavra: "gabarito preliminar" e nomes de provas
+            # baixadas aparecem no conteúdo do vault e não são o componente
+            assert 'class="gabarito"' not in h, f"bolha medindo progresso em {rota}"
+            assert 'class="medidor"' in h, rota
+        # o selo de nível segue usando a bolha, que ali não é progresso
+        h = (out / rotas[-1]).read_text(encoding="utf-8")
+        assert 'class="bolha' in h and "selo-aprof" in h
+    css = (ROOT.parent / "assets" / "site.css").read_text(encoding="utf-8")
+    assert ".gabarito" not in css, "CSS órfão do componente removido"
+
+
+def _mover_aprofundamento_para_o_comum(base: Path) -> None:
+    """A forma real de 3 matérias do SEDES: mapa no cargo, material no comum."""
+    (base / "_COMUM").mkdir(parents=True, exist_ok=True)
+    (base / "CARGO-X" / "03-APROFUNDAMENTO").rename(
+        base / "_COMUM" / "03-APROFUNDAMENTO")
+
+
+def test_materia_aprofundada_no_comum_tem_aba_estudo():
+    """Matéria COM aprofundamento não pode ficar só com o Plano.
+
+    `tem_estudo` olhava apenas `materia["assuntos"]`, e a matéria do cargo tem a
+    lista vazia porque o material mora no `_COMUM`. Resultado: três matérias do
+    SEDES sem a aba Estudo, apesar de a cobertura já afirmar 40%, 60% e 25% de
+    aprofundamento — o caminho até o material existia só numa frase solta.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        _mover_aprofundamento_para_o_comum(base)
+        m = sc.coletar_concurso(base)
+        do_cargo = next(mt for mt in _cargo(m)["materias"] if mt.get("mapa"))
+        assert do_cargo["assuntos"] == [] and do_cargo["aprofundamento_em"]
+        assert do_cargo["assuntos_herdados"], "os assuntos da irmã ficam à parte"
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "materias" / do_cargo["slug"]
+             / "index.html").read_text(encoding="utf-8")
+        assert 'data-visao-alvo="plano"' in h and 'data-visao-alvo="estudo"' in h
+        assert 'data-visao="estudo"' in h, "o painel, não só o botão"
+        assert "Crase" in h, "os assuntos da irmã aparecem como cards"
+        assert "0 assuntos aprofundados" not in h, "não afirmar ausência do que existe"
+        assert not _auditar_links(out)[0], "os cards apontam para o comum e resolvem"
+
+
+def test_aba_estudo_herdada_nao_dobra_o_progresso():
+    """Os assuntos da irmã são exibidos, nunca somados.
+
+    Copiá-los para `assuntos` faria os mesmos checkboxes contarem no cargo e no
+    comum — e o total do escopo deixaria de ser o total de alguma coisa.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        _mover_aprofundamento_para_o_comum(base)
+        m = sc.coletar_concurso(base)
+        assert sum(a["progresso"]["total"] for e in _escopos(m)
+                   for mt in e["materias"] for a in mt["assuntos"]) == 3
+        do_cargo = next(mt for mt in _cargo(m)["materias"] if mt.get("mapa"))
+        # o cargo conta o próprio mapa e nada dos assuntos do comum
+        assert do_cargo["progresso"]["total"] == do_cargo["mapa"]["progresso"]["total"]
+
+
+def test_materia_so_com_mapa_e_sem_irma_segue_sem_estudo():
+    """O caso legítimo: 9 matérias do vault têm plano e nenhum aprofundamento.
+    Oferecer uma aba Estudo vazia ali seria pior que não oferecer."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        (base / "CARGO-X" / "03-MAPAS-MATERIAS" / "02-matematica.md").write_text(
+            '---\ntipo: mapa-materia\nmateria: "Matemática"\n---\n# Mapa\n\n'
+            '## 1. Porcentagens\n\n### Subtópicos derivados\n\n- [ ] Regra de três\n',
+            encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "materias" / "matematica"
+             / "index.html").read_text(encoding="utf-8")
+        assert 'data-visao-alvo="estudo"' not in h
+        # mas o plano dela é tarefa, e o card no hub mostra a barra
+        hub = (out / "teste_2026" / "cargo-x" / "index.html").read_text(encoding="utf-8")
+        card = hub.split("Matemática")[1]
+        assert "Tarefas de estudo" in card and "0/1" in card
+
+
+def test_asset_leva_versao_do_conteudo():
+    """HTML novo com CSS velho é indetectável: a página RENDERIZA, só renderiza
+    errado. Aconteceu no ar — o nginx manda `expires 1h` e o telefone
+    reaproveitou a folha antiga, então os rótulos das barras saíram no tipo do
+    corpo e a barra de cobertura saiu verde, a cor da versão anterior."""
+    css = ROOT.parent / "assets" / "site.css"
+    original = css.read_text(encoding="utf-8")
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            base = _montar_concurso(Path(d) / "TESTE_2026")
+            out = Path(d) / "site"
+            _construir(base, out)
+            h = (out / "teste_2026" / "index.html").read_text(encoding="utf-8")
+            v1 = re.search(r'site\.css\?v=([0-9a-f]{8})', h)
+            assert v1, "o link do CSS precisa carregar a versão do conteúdo"
+            assert re.search(r'site\.js\?v=[0-9a-f]{8}', h), "o mesmo para o js"
+            # toda página do site, não só a capa
+            for p in out.rglob("index.html"):
+                t = p.read_text(encoding="utf-8")
+                assert 'assets/site.css?v=' in t, p
+
+            css.write_text(original + "\n/* muda o conteúdo */\n", encoding="utf-8")
+            out2 = Path(d) / "site2"
+            _construir(base, out2)
+            h2 = (out2 / "teste_2026" / "index.html").read_text(encoding="utf-8")
+            v2 = re.search(r'site\.css\?v=([0-9a-f]{8})', h2)
+            assert v2.group(1) != v1.group(1), "CSS mudou e a URL não"
+    finally:
+        css.write_text(original, encoding="utf-8")
+
+
+def test_ordem_das_barras_e_a_mesma_em_todo_o_site():
+    """Pilha cujo significado por linha muda de card para card é ilegível — e a
+    incomparabilidade entre caixas foi a queixa que originou a mudança."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+        conferidos = 0
+        for rota in ("teste_2026/index.html", "teste_2026/cargo-x/index.html"):
+            h = (out / rota).read_text(encoding="utf-8")
+            # cada pedaço vai de um medidor até o começo do próximo
+            for bloco in h.split('<div class="medidor">')[1:]:
+                rotulos = re.findall(r'class="medidor-rotulo">(.*?)</span>', bloco)[:2]
+                if len(rotulos) == 2:
+                    assert rotulos == ["Tarefas de estudo", "Tópicos do edital"], \
+                        f"{rota}: {rotulos}"
+                    conferidos += 1
+        # sem isto o teste passa vazio contra o código antigo, que não tem medidor
+        assert conferidos >= 2, f"nada foi conferido ({conferidos} blocos)"
+
+
+def test_barras_usam_cores_distintas_e_de_tema():
+    """Verde `--confere` = o que EU fiz; azul `--tinta` = o material que existe.
+    Hex fixo aqui quebraria o tema escuro, e as duas iguais tornariam a pilha
+    ilegível."""
+    css = (ROOT.parent / "assets" / "site.css").read_text(encoding="utf-8")
+    regras = re.findall(r"\.barra-cobertura[^{]*\{[^}]*\}", css)
+    assert regras, "as regras da barra sumiram"
+    assert not re.search(r"#[0-9A-Fa-f]{3,8}", "".join(regras)), \
+        "cor fixa nas regras da barra quebra o tema escuro"
+    assert re.search(r"\.barra-cobertura\s*>\s*span\s*\{[^}]*var\(--tinta\)", css), \
+        "o preenchimento padrão (material) é a caneta azul"
+    assert re.search(r"\.barra-cobertura\.tarefa\s*>\s*span\s*\{[^}]*var\(--confere\)",
+                     css), "tarefa é o visto verde"
+    claro = re.search(r":root\s*\{(.*?)\n\}", css, re.DOTALL).group(1)
+    escuro = re.search(r':root\[data-tema="escuro"\]\s*\{(.*?)\n\}',
+                       css, re.DOTALL).group(1)
+    for var in ("--confere", "--tinta", "--pauta"):
+        assert var in claro and var in escuro, f"{var} falta em algum tema"
+
+
+def test_geral_calcula_progresso_em_vez_de_zerar():
+    """O escopo sintético do layout achatado zerava os três progressos à mão,
+    então concurso com matéria na raiz mostrava barra vazia tendo trabalho real."""
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d) / "TESTE_2026"
+        # layout achatado: a matéria mora na raiz do concurso, sem escopo
+        p = base / "portugues" / "assuntos" / "crase" / "padrao--pestana"
+        p.mkdir(parents=True)
+        (p / "crase--padrao--pestana--TESTE_2026.md").write_text(
+            '---\ntitle: "Crase"\naprofundamento: "padrao--pestana"\n'
+            'nivel: padrao\nfontes: "Pestana"\nstatus: revisar\n---\n'
+            'Resumo.\n- [x] Ler\n- [ ] Revisar\n- [ ] Questões\n', encoding="utf-8")
+        m = sc.coletar_concurso(base)
+        geral = next(e for e in _escopos(m) if e["nome"] == "_GERAL")
+        assert geral["n_assuntos"] > 0, "o fixture precisa ter assunto"
+        assert geral["progresso_tarefas"]["total"] > 0, \
+            "o _GERAL somava zero tendo matéria real"
+        assert geral["progresso_tarefas"] == geral["progresso"]
+
 
 def test_materia_so_com_mapa_nao_e_descartada():
     """`coletar_materia()` devolvia None sem `assuntos/`, então matéria que só tem

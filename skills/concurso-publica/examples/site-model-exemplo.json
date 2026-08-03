@@ -1,5 +1,7 @@
 {
-  "concurso": "SEDES_2026",
+  "_nota": "GERADO do fixture da suíte (scripts/tests/fixture_concurso.py), nunca escrito à mão — exemplo à mão diverge do coletor em silêncio. cargos[] é alias de escopos[] para compatibilidade de --modelo; topicos[].blocos[] substituiu o dict topicos[].secoes da 0.7.x, que o builder ainda aceita.",
+  "concurso": "TESTE_2026",
+  "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026",
   "meta": {
     "orgao": "Secretaria de Estado de Desenvolvimento Social do Distrito Federal",
     "ano": 2026,
@@ -51,23 +53,11 @@
       }
     }
   },
-  "resumo": {
-    "n_escopos": 4,
-    "n_cargos": 3,
-    "n_materias": 12,
-    "n_assuntos": 32,
-    "n_documentos": 16,
-    "n_anexos": 47
-  },
   "escopos": [
     {
       "tipo": "comum",
       "nome": "_COMUM",
       "slug": "comum",
-      "progresso": {
-        "total": 68,
-        "feitos": 0
-      },
       "secoes": [
         {
           "ordinal": "01",
@@ -75,107 +65,357 @@
           "slug": "edital",
           "registro": "consulta",
           "modo": "documentos",
-          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/01-EDITAL",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/01-EDITAL",
           "documentos": [
             {
               "arquivo": "analise-banca.md",
-              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/01-EDITAL/analise-banca.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/01-EDITAL/analise-banca.md",
               "slug": "analise-banca",
-              "titulo": "🎯 Análise da Banca — Instituto Quadrix",
-              "resumo": "O Instituto Quadrix atua em concursos desde 1997 (como Quadrix Tecnologia) e, desde 2005, como organização sem fins lucrativos. É banca recorrente em conselhos …",
+              "titulo": "Análise da banca",
+              "resumo": "",
               "progresso": {
                 "total": 0,
                 "feitos": 0
               },
-              "n_secoes": 8
+              "n_secoes": 1
+            },
+            {
+              "arquivo": "edital-resumo.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/01-EDITAL/edital-resumo.md",
+              "slug": "edital-resumo",
+              "titulo": "Resumo do edital",
+              "resumo": "Ver _COMUM/04-MATERIAIS/livros-recomendados.",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 2
             }
           ],
           "anexos": [
             {
               "arquivo": "edital-original.pdf",
-              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/01-EDITAL/edital-original.pdf",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/01-EDITAL/edital-original.pdf",
               "extensao": "pdf",
-              "bytes": 912745,
+              "bytes": 10,
               "subpasta": ""
             }
           ],
-          "n_documentos": 3,
+          "n_documentos": 2,
           "n_anexos": 1,
-          "bytes_anexos": 912745
+          "bytes_anexos": 10
+        },
+        {
+          "ordinal": "04",
+          "rotulo": "Materiais",
+          "slug": "materiais",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/04-MATERIAIS",
+          "documentos": [
+            {
+              "arquivo": "livros-recomendados.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/04-MATERIAIS/livros-recomendados.md",
+              "slug": "livros-recomendados",
+              "titulo": "Livros",
+              "resumo": "",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [
+            {
+              "arquivo": "lei-1234-1990.pdf",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/04-MATERIAIS/leis-baixadas/lei-1234-1990.pdf",
+              "extensao": "pdf",
+              "bytes": 12,
+              "subpasta": "leis-baixadas"
+            }
+          ],
+          "n_documentos": 1,
+          "n_anexos": 1,
+          "bytes_anexos": 12,
+          "herdada_por": [
+            "CARGO-X"
+          ]
+        },
+        {
+          "ordinal": "05",
+          "rotulo": "Histórico do concurso",
+          "slug": "historico",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/05-HISTORICO-CONCURSO",
+          "documentos": [
+            {
+              "arquivo": "concursos-anteriores.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/05-HISTORICO-CONCURSO/concursos-anteriores.md",
+              "slug": "concursos-anteriores",
+              "titulo": "Edições anteriores",
+              "resumo": "Texto.",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [
+            {
+              "arquivo": "prova-2019.pdf",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/05-HISTORICO-CONCURSO/provas-anteriores/prova-2019.pdf",
+              "extensao": "pdf",
+              "bytes": 14,
+              "subpasta": "provas-anteriores"
+            }
+          ],
+          "n_documentos": 1,
+          "n_anexos": 1,
+          "bytes_anexos": 14
+        },
+        {
+          "ordinal": "06",
+          "rotulo": "Sinergia",
+          "slug": "sinergia",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/06-SINERGIA",
+          "documentos": [
+            {
+              "arquivo": "concursos-similares.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/06-SINERGIA/concursos-similares.md",
+              "slug": "concursos-similares",
+              "titulo": "Sinergia",
+              "resumo": "Texto.",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [],
+          "n_documentos": 1,
+          "n_anexos": 0,
+          "bytes_anexos": 0
+        }
+      ],
+      "materias": [],
+      "n_materias": 0,
+      "n_assuntos": 0,
+      "progresso": {
+        "total": 0,
+        "feitos": 0
+      },
+      "progresso_documentos": {
+        "total": 0,
+        "feitos": 0
+      },
+      "progresso_status": {
+        "total": 0,
+        "feitos": 0
+      },
+      "progresso_tarefas": {
+        "total": 0,
+        "feitos": 0
+      },
+      "cobertura": {
+        "n_topicos": 0,
+        "n_cobertos": 0,
+        "pct": null,
+        "n_materias": 0,
+        "n_com_mapa": 0,
+        "n_sem_vinculo": 0
+      }
+    },
+    {
+      "tipo": "cargo",
+      "nome": "CARGO-X",
+      "slug": "cargo-x",
+      "secoes": [
+        {
+          "ordinal": "02",
+          "rotulo": "Cronograma",
+          "slug": "cronograma",
+          "registro": "estudo",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/02-CRONOGRAMA",
+          "documentos": [
+            {
+              "arquivo": "cronograma-macro.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/02-CRONOGRAMA/cronograma-macro.md",
+              "slug": "cronograma-macro",
+              "titulo": "Cronograma",
+              "resumo": "",
+              "progresso": {
+                "total": 1,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [],
+          "n_documentos": 1,
+          "n_anexos": 0,
+          "bytes_anexos": 0
+        },
+        {
+          "ordinal": "04",
+          "rotulo": "Materiais",
+          "slug": "materiais",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "",
+          "documentos": [],
+          "anexos": [],
+          "n_documentos": 0,
+          "n_anexos": 0,
+          "bytes_anexos": 0,
+          "herdado_de": {
+            "escopo": "_COMUM",
+            "escopo_slug": "comum",
+            "secao_slug": "materiais",
+            "rotulo": "Materiais",
+            "n_documentos": 1,
+            "n_anexos": 1
+          }
+        },
+        {
+          "ordinal": "07",
+          "rotulo": "Discursiva",
+          "slug": "discursiva",
+          "registro": "estudo",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/07-DISCURSIVA",
+          "documentos": [
+            {
+              "arquivo": "guia-discursiva.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/07-DISCURSIVA/guia-discursiva.md",
+              "slug": "guia-discursiva",
+              "titulo": "Discursiva",
+              "resumo": "",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [],
+          "n_documentos": 1,
+          "n_anexos": 0,
+          "bytes_anexos": 0
+        },
+        {
+          "ordinal": "08",
+          "rotulo": "Títulos",
+          "slug": "titulos",
+          "registro": "estudo",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/08-TITULOS.md",
+          "documentos": [
+            {
+              "arquivo": "08-TITULOS.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/08-TITULOS.md",
+              "slug": "titulos",
+              "titulo": "Títulos",
+              "resumo": "",
+              "progresso": {
+                "total": 1,
+                "feitos": 0
+              },
+              "n_secoes": 0
+            }
+          ],
+          "anexos": [],
+          "n_documentos": 1,
+          "n_anexos": 0,
+          "bytes_anexos": 0
         }
       ],
       "materias": [
         {
-          "nome": "Direitos e Violações (EDAS)",
+          "nome": "Portugues",
+          "materia_id": "portugues",
           "doc_banca": null,
-          "slug": "direitos-violacoes",
-          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes",
-          "docs_apoio": [
-            "00-INDICE-DIREITOS-VIOLACOES.md"
-          ],
+          "slug": "portugues",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues",
+          "docs_apoio": [],
           "mapa_localizacao": null,
           "aliases_mapa": {},
           "assuntos": [
             {
-              "slug": "crimes-preconceito-raca-cor",
-              "titulo": "Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF)",
+              "slug": "crase",
+              "titulo": "Crase",
               "prioridade": null,
-              "paginas_livro": null,
+              "paginas_livro": "10–20",
               "n_aprofundamentos": 1,
               "niveis": [
                 "padrao"
               ],
-              "fontes": [
-                "Lei nº 7.716/1989",
-                "STF ADO 26/MI 4733"
-              ],
-              "n_fontes": 2,
+              "fontes": [],
+              "n_fontes": 0,
               "aprofundamentos": [
                 {
-                  "slug": "crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026",
-                  "slug_assunto": "crimes-preconceito-raca-cor",
-                  "aprofundamento": "padrao--lei-7716+stf-ado-26",
-                  "rotulo": "Padrão — lei-7716 + stf-ado-26",
+                  "slug": "crase",
+                  "slug_assunto": "crase",
+                  "aprofundamento": "unico",
+                  "rotulo": "Original",
                   "nivel": "padrao",
-                  "n_fontes_id": 2,
-                  "fontes_id": [
-                    "lei-7716",
-                    "stf-ado-26"
-                  ],
-                  "fontes": "Lei nº 7.716/1989, STF ADO 26/MI 4733",
-                  "titulo": "Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF)",
+                  "n_fontes_id": null,
+                  "fontes_id": [],
+                  "fontes": "",
+                  "titulo": "Crase",
                   "prioridade": null,
-                  "status": "revisar",
-                  "paginas_livro": null,
-                  "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes/assuntos/crimes-preconceito-raca-cor/padrao--lei-7716+stf-ado-26/crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md",
+                  "materia_id": "portugues",
+                  "topico_id": [
+                    "emprego-do-acento-indicativo-de-crase"
+                  ],
+                  "topico": [
+                    "1. Emprego do acento indicativo de crase"
+                  ],
+                  "status": "concluido",
+                  "paginas_livro": "10–20",
+                  "localizacoes": [
+                    {
+                      "fonte": "",
+                      "texto": "Livro.pdf — págs. 10–20"
+                    }
+                  ],
+                  "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/crase/crase.md",
                   "midias": {
-                    "podcast": null,
+                    "podcast": "podcast-crase.m4a",
                     "video": null,
                     "slides": null,
-                    "mapa_mental": null,
+                    "mapa_mental": "mapa-mental-crase.png",
                     "infografico": null,
                     "report": null,
                     "teste": null,
                     "tabela": null
                   },
                   "flashcards": {
-                    "obsidian": "flashcards-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md",
-                    "anki": "flashcards-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.csv",
-                    "n_cards": 16
+                    "obsidian": "flashcards-crase.md",
+                    "anki": "flashcards-crase.csv",
+                    "n_cards": 2
                   },
-                  "notebooklm_url": null,
+                  "notebooklm_url": "https://notebooklm.google.com/notebook/x",
                   "progresso": {
-                    "total": 0,
-                    "feitos": 0
+                    "total": 3,
+                    "feitos": 1
                   },
+                  "tem_ancoras": false,
+                  "palavras": 12,
                   "tem_pack_notebooklm": true,
                   "pack_notebooklm": {
-                    "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes/assuntos/crimes-preconceito-raca-cor/padrao--lei-7716+stf-ado-26/_fonte-notebooklm.md",
+                    "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/crase/_fonte-notebooklm.md",
                     "status": "nao-criado",
-                    "url": null,
-                    "nome_notebook": "SEDES_2026 — Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) — padrao--lei-7716+stf-ado-26",
+                    "url": "https://notebooklm.google.com/notebook/x",
+                    "nome_notebook": "TESTE_2026 — Crase",
                     "fontes": [
-                      "`crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md` — o resumo curado deste assunto (fonte principal)."
+                      "`crase.md` — o resumo curado."
                     ],
                     "prompts": [
                       {
@@ -183,63 +423,60 @@
                         "icone": "🎧",
                         "rotulo": "Podcast",
                         "titulo_secao": "🎧 Podcast (Audio Overview)",
-                        "prompt": "Foque em Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para um concurso público. Explique as regras principais de forma didática, com exemplos práticos, e destaque as pegadinhas e os erros mais comuns que bancas exploram. Priorize o que mais cai em prova objetiva. Use linguagem clara, como uma aula de revisao para quem ja estudou o basico. Evite enrolacao e frases de efeito; va direto ao ponto.",
+                        "prompt": "Foque em Crase para concurso.",
                         "roteiro": [
                           "Studio → Audio Overview → clique em Customize.",
                           "Formato: Deep Dive (completo) · alternativas: Brief (revisão rápida), Critique, Debate.",
                           "Duração: Longer (mais completo) · ou Default/Shorter para revisão.",
                           "Idioma: Português (Brasil).",
                           "Generate → ao terminar, ⋮ → Download. O NotebookLM gera .m4a.",
-                          "Salve nesta pasta como podcast-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.m4a."
+                          "Salve nesta pasta como podcast-crase.m4a."
                         ],
-                        "arquivo_saida": "podcast-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.m4a"
+                        "arquivo_saida": "podcast-crase.m4a"
                       },
                       {
                         "chave": "mapa_mental",
                         "icone": "🧠",
                         "rotulo": "Mapa mental",
                         "titulo_secao": "🧠 Mapa Mental (Mind Map)",
-                        "prompt": "Construa o mapa mental de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) com estes ramos centrais: (1) CONCEITO/definicao; (2) REGRAS gerais; (3) CASOS ESPECIAIS e excecoes; (4) PEGADINHAS de prova; (5) CONEXOES com outros assuntos. Sob cada ramo, agrupe os subtopicos como nos-filhos, do mais cobrado ao menos. Priorize o que cai em concurso e mantenha os rotulos curtos.",
+                        "prompt": "Construa o mapa mental.",
                         "roteiro": [
-                          "Studio → Mind Map → Customize (disponível no Plus desde mai/2026 — o prompt é lido como especificação de estrutura).",
+                          "Studio → Mind Map → Customize (disponível no Plus desde mai/2026 — o prompt é lido como *especificação de estrutura*).",
                           "Generate → explore os nós (cada nó abre um chat). Download (⋮ → Download) como imagem.",
-                          "Salve como mapa-mental-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.png."
+                          "Salve como mapa-mental-crase.png."
                         ],
-                        "arquivo_saida": "mapa-mental-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.png"
+                        "arquivo_saida": "mapa-mental-crase.png"
                       },
                       {
                         "chave": "video",
                         "icone": "🎬",
                         "rotulo": "Vídeo",
                         "titulo_secao": "🎬 Vídeo (Video Overview)",
-                        "prompt": "Faca um video-aula explicativo sobre Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para quem estuda para concurso. Enfatize as regras que mais caem e mostre 2-3 exemplos resolvidos passo a passo. Dedique um trecho as pegadinhas classicas da banca. Publico: candidato que ja viu o basico e quer fixar e evitar erros.",
+                        "prompt": "Faca um video-aula.",
                         "roteiro": [
                           "Studio → Video Overview → Customize.",
                           "Formato: Explainer (aula) · alternativa: Brief.",
                           "Estilo visual: escolha um limpo/didático (ex.: \"Whiteboard\" ou \"Clean\").",
                           "Generate (leva ~10–15 min). Download.",
-                          "Salve como video-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.mp4."
+                          "Salve como video-crase.mp4."
                         ],
-                        "arquivo_saida": "video-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.mp4"
+                        "arquivo_saida": "video-crase.mp4"
                       },
                       {
                         "chave": "report",
                         "icone": "📄",
                         "rotulo": "Relatório",
                         "titulo_secao": "📄 Report (Relatório / Guia de estudos)",
-                        "prompt": "Gere um guia de estudos de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para concurso, com esta estrutura: 1) Resumo das regras essenciais; 2) Quadro de casos (obrigatorio/proibido/facultativo, quando aplicavel); 3) Lista de pegadinhas com exemplo de cada; 4) 5 dicas rapidas de memorizacao. Seja objetivo e use exemplos curtos.",
+                        "prompt": "Gere um guia de estudos.",
                         "roteiro": [
-                          "Studio → Reports → Create your own (ou escolha o template Study guide).",
-                          "Generate → o report é salvo como nota no notebook. Copie o conteúdo e salve nesta pasta como report-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md."
+                          "Studio → Reports → Create your own (ou escolha o template *Study guide*).",
+                          "Generate → o report é salvo como nota no notebook. Copie o conteúdo e salve nesta pasta como report-crase.md."
                         ],
-                        "arquivo_saida": "report-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md"
+                        "arquivo_saida": "report-crase.md"
                       }
                     ],
                     "perguntas": [
-                      "Quais são as 5 regras mais importantes de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) para concurso?",
-                      "Quais as pegadinhas mais comuns de Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF) em provas?",
-                      "Me dê 10 exemplos comentados sobre Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF).",
-                      "Qual a diferença entre os casos que mais confundem em Crimes de Preconceito de Raça ou Cor (Lei 7.716/1989) e homotransfobia (STF)?"
+                      "O que mais cai?"
                     ],
                     "checklist": [
                       {
@@ -271,9 +508,104 @@
                       "total": 6,
                       "feitos": 0
                     }
-                  }
+                  },
+                  "legado": true
                 }
               ],
+              "materia_id": "portugues",
+              "topico_id": [
+                "emprego-do-acento-indicativo-de-crase"
+              ],
+              "topico": [
+                "1. Emprego do acento indicativo de crase"
+              ],
+              "midias": {
+                "podcast": "podcast-crase.m4a",
+                "video": null,
+                "slides": null,
+                "mapa_mental": "mapa-mental-crase.png",
+                "infografico": null,
+                "report": null,
+                "teste": null,
+                "tabela": null
+              },
+              "flashcards": {
+                "obsidian": "flashcards-crase.md",
+                "anki": "flashcards-crase.csv",
+                "n_cards": 2
+              },
+              "sinais": {
+                "n_cards": 2,
+                "tem_ancoras": false,
+                "palavras": 12
+              },
+              "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/crase/crase.md",
+              "notebooklm_url": "https://notebooklm.google.com/notebook/x",
+              "progresso": {
+                "total": 3,
+                "feitos": 1
+              }
+            },
+            {
+              "slug": "regencia-verbal-e-nominal",
+              "titulo": "Regência",
+              "prioridade": null,
+              "paginas_livro": null,
+              "n_aprofundamentos": 1,
+              "niveis": [
+                "padrao"
+              ],
+              "fontes": [],
+              "n_fontes": 0,
+              "aprofundamentos": [
+                {
+                  "slug": "regencia-verbal-e-nominal",
+                  "slug_assunto": "regencia-verbal-e-nominal",
+                  "aprofundamento": "unico",
+                  "rotulo": "Original",
+                  "nivel": "padrao",
+                  "n_fontes_id": null,
+                  "fontes_id": [],
+                  "fontes": "",
+                  "titulo": "Regência",
+                  "prioridade": null,
+                  "materia_id": "",
+                  "topico_id": [],
+                  "topico": [],
+                  "status": "concluido",
+                  "paginas_livro": null,
+                  "localizacoes": [],
+                  "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/regencia-verbal-e-nominal/regencia-verbal-e-nominal.md",
+                  "midias": {
+                    "podcast": null,
+                    "video": null,
+                    "slides": null,
+                    "mapa_mental": null,
+                    "infografico": null,
+                    "report": null,
+                    "teste": null,
+                    "tabela": null
+                  },
+                  "flashcards": {
+                    "obsidian": "flashcards-regencia.md",
+                    "anki": null,
+                    "n_cards": 1
+                  },
+                  "notebooklm_url": null,
+                  "progresso": {
+                    "total": 0,
+                    "feitos": 0
+                  },
+                  "tem_ancoras": false,
+                  "palavras": 1,
+                  "tem_pack_notebooklm": false,
+                  "pack_notebooklm": null,
+                  "legado": true
+                }
+              ],
+              "materia_id": "",
+              "topico_id": [],
+              "topico": [],
               "midias": {
                 "podcast": null,
                 "video": null,
@@ -285,11 +617,16 @@
                 "tabela": null
               },
               "flashcards": {
-                "obsidian": "flashcards-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md",
-                "anki": "flashcards-crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.csv",
-                "n_cards": 16
+                "obsidian": "flashcards-regencia.md",
+                "anki": null,
+                "n_cards": 1
               },
-              "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-APROFUNDAMENTO/direitos-violacoes/assuntos/crimes-preconceito-raca-cor/padrao--lei-7716+stf-ado-26/crimes-preconceito-raca-cor--padrao--lei-7716+stf-ado-26--SEDES_2026.md",
+              "sinais": {
+                "n_cards": 1,
+                "tem_ancoras": false,
+                "palavras": 1
+              },
+              "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/regencia-verbal-e-nominal/regencia-verbal-e-nominal.md",
               "notebooklm_url": null,
               "progresso": {
                 "total": 0,
@@ -297,66 +634,59 @@
               }
             }
           ],
-          "n_assuntos": 6,
-          "n_com_podcast": 0,
-          "n_com_flashcards": 6,
+          "progresso": {
+            "total": 3,
+            "feitos": 1
+          },
+          "n_assuntos": 2,
+          "n_com_podcast": 1,
+          "n_com_flashcards": 2,
           "por_prioridade": {
             "alta": 0,
             "media": 0,
             "base": 0
           },
           "mapa": {
-            "arquivo": "04-direitos-violacoes-vulnerabilidades.md",
-            "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026/_COMUM/03-MAPAS-MATERIAS/04-direitos-violacoes-vulnerabilidades.md",
-            "titulo": "Direitos e Violações (EDAS)",
-            "n_topicos": 1,
-            "progresso": {
-              "total": 5,
-              "feitos": 1
-            },
-            "rotulos_extras": [
-              "Leis-chave"
-            ],
-            "auxiliares": [
-              {
-                "titulo": "✅ Checklist Final",
-                "corpo": "- [ ] Revisar ECA\n"
-              }
-            ],
+            "arquivo": "01-portugues.md",
+            "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-MAPAS-MATERIAS/01-portugues.md",
+            "materia_id": "portugues",
+            "titulo": "Português",
             "topicos": [
               {
                 "numero": 1,
-                "titulo": "Crianças, adolescentes e juventude",
-                "slug": "criancas-adolescentes-e-juventude",
+                "titulo": "Emprego do acento indicativo de crase",
+                "slug": "emprego-do-acento-indicativo-de-crase",
                 "prioridade": "alta",
-                "progresso": {
-                  "total": 4,
-                  "feitos": 1
-                },
                 "subtopicos": [
                   {
-                    "texto": "Conceitos-base do ECA",
+                    "texto": "Regra geral",
                     "feito": true,
                     "subgrupo": "",
                     "grupo": "TEORIA"
                   },
                   {
-                    "texto": "Prioridade absoluta",
-                    "feito": false,
-                    "subgrupo": "Princípios",
-                    "grupo": "TEORIA · Princípios"
-                  },
-                  {
-                    "texto": "Guarda × tutela × adoção",
+                    "texto": "Casos proibidos",
                     "feito": false,
                     "subgrupo": "",
-                    "grupo": "LEI 8.069/1990"
+                    "grupo": "TEORIA"
+                  },
+                  {
+                    "texto": "Antes de masculino",
+                    "feito": false,
+                    "subgrupo": "Detalhe do bloco",
+                    "grupo": "TEORIA · Detalhe do bloco"
+                  },
+                  {
+                    "texto": "Artigo 4º",
+                    "feito": false,
+                    "subgrupo": "",
+                    "grupo": "LEI 8.662/1993 (DECORAR ARTIGOS)"
                   },
                   {
                     "texto": "Observação sem checkbox",
                     "feito": null,
                     "subgrupo": "",
-                    "grupo": "LEI 8.069/1990"
+                    "grupo": "LEI 8.662/1993 (DECORAR ARTIGOS)"
                   }
                 ],
                 "blocos": [
@@ -364,7 +694,7 @@
                     "chave": "topicos_edital",
                     "rotulo": "Tópicos do edital (literais)",
                     "sufixo": "(literais)",
-                    "markdown": "> \"Crianças, adolescentes e juventude: ECA, SINASE…\"",
+                    "markdown": "> Crase.",
                     "itens": [],
                     "n_itens": 0
                   },
@@ -372,43 +702,53 @@
                     "chave": "extra",
                     "rotulo": "Leis-chave",
                     "sufixo": "",
-                    "markdown": "- **Lei 8.069/1990** — ECA\n",
+                    "markdown": "- Acordo Ortográfico de 1990.\n\n#### Fontes\n\n- Manual da banca.",
                     "itens": [
                       {
-                        "texto": "Lei 8.069/1990 — ECA",
+                        "texto": "Acordo Ortográfico de 1990.",
                         "feito": null,
-                        "subgrupo": ""
-                      }
-                    ],
-                    "n_itens": 1
-                  },
-                  {
-                    "chave": "subtopicos",
-                    "rotulo": "Subtópicos derivados — TEORIA",
-                    "sufixo": "TEORIA",
-                    "markdown": "- [x] Conceitos-base do ECA\n\n#### Princípios\n\n- [ ] Prioridade absoluta\n",
-                    "itens": [
-                      {
-                        "texto": "Conceitos-base do ECA",
-                        "feito": true,
                         "subgrupo": ""
                       },
                       {
-                        "texto": "Prioridade absoluta",
-                        "feito": false,
-                        "subgrupo": "Princípios"
+                        "texto": "Manual da banca.",
+                        "feito": null,
+                        "subgrupo": "Fontes"
                       }
                     ],
                     "n_itens": 2
                   },
                   {
                     "chave": "subtopicos",
-                    "rotulo": "Subtópicos derivados — LEI 8.069/1990",
-                    "sufixo": "LEI 8.069/1990",
-                    "markdown": "- [ ] Guarda × tutela × adoção\n- Observação sem checkbox\n",
+                    "rotulo": "Subtópicos derivados — TEORIA",
+                    "sufixo": "TEORIA",
+                    "markdown": "- [x] Regra geral\n- [ ] Casos proibidos\n\n#### Detalhe do bloco\n\n- [ ] Antes de masculino",
                     "itens": [
                       {
-                        "texto": "Guarda × tutela × adoção",
+                        "texto": "Regra geral",
+                        "feito": true,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Casos proibidos",
+                        "feito": false,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Antes de masculino",
+                        "feito": false,
+                        "subgrupo": "Detalhe do bloco"
+                      }
+                    ],
+                    "n_itens": 3
+                  },
+                  {
+                    "chave": "subtopicos",
+                    "rotulo": "Subtópicos derivados — LEI 8.662/1993 (DECORAR ARTIGOS)",
+                    "sufixo": "LEI 8.662/1993 (DECORAR ARTIGOS)",
+                    "markdown": "- [ ] Artigo 4º\n- Observação sem checkbox",
+                    "itens": [
+                      {
+                        "texto": "Artigo 4º",
                         "feito": false,
                         "subgrupo": ""
                       },
@@ -424,17 +764,108 @@
                     "chave": "material",
                     "rotulo": "Material recomendado",
                     "sufixo": "",
-                    "markdown": "- Livro/lei: ECA — texto atualizado.\n- Questões: https://www.qconcursos.com/\n",
+                    "markdown": "- Livro: *Gramática* — Pestana (Método).\n- Questões: https://qconcursos.com/crase\n- Lei: [[lei-1234-1990.pdf]]",
                     "itens": [
                       {
-                        "texto": "Livro/lei: ECA — texto atualizado.",
+                        "texto": "Livro: *Gramática* — Pestana (Método).",
                         "feito": null,
                         "subgrupo": ""
                       },
                       {
-                        "texto": "Questões: https://www.qconcursos.com/",
+                        "texto": "Questões: https://qconcursos.com/crase",
                         "feito": null,
                         "subgrupo": ""
+                      },
+                      {
+                        "texto": "Lei: [[lei-1234-1990.pdf]]",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 3
+                  },
+                  {
+                    "chave": "pegadinhas",
+                    "rotulo": "⚠️ Pegadinhas da banca neste tópico",
+                    "sufixo": "da banca neste tópico",
+                    "markdown": "- Antes de verbo.\n- Antes de pronome.",
+                    "itens": [
+                      {
+                        "texto": "Antes de verbo.",
+                        "feito": null,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Antes de pronome.",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 2
+                  },
+                  {
+                    "chave": "meta",
+                    "rotulo": "Meta",
+                    "sufixo": "",
+                    "markdown": "- [ ] 30 questões resolvidas",
+                    "itens": [
+                      {
+                        "texto": "30 questões resolvidas",
+                        "feito": false,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 1
+                  }
+                ],
+                "progresso": {
+                  "total": 5,
+                  "feitos": 1
+                }
+              },
+              {
+                "numero": 2,
+                "titulo": "Reconhecimento de tipos textuais",
+                "slug": "reconhecimento-de-tipos-textuais",
+                "prioridade": null,
+                "subtopicos": [
+                  {
+                    "texto": "Narração",
+                    "feito": false,
+                    "subgrupo": "",
+                    "grupo": "TEORIA"
+                  },
+                  {
+                    "texto": "Dissertação",
+                    "feito": false,
+                    "subgrupo": "Detalhe do bloco",
+                    "grupo": "TEORIA · Detalhe do bloco"
+                  }
+                ],
+                "blocos": [
+                  {
+                    "chave": "topicos_edital",
+                    "rotulo": "Tópicos do edital (literais)",
+                    "sufixo": "(literais)",
+                    "markdown": "> Tipos textuais.",
+                    "itens": [],
+                    "n_itens": 0
+                  },
+                  {
+                    "chave": "subtopicos",
+                    "rotulo": "Subtópicos derivados — TEORIA",
+                    "sufixo": "TEORIA",
+                    "markdown": "- [ ] Narração\n\n#### Detalhe do bloco\n\n- [ ] Dissertação",
+                    "itens": [
+                      {
+                        "texto": "Narração",
+                        "feito": false,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Dissertação",
+                        "feito": false,
+                        "subgrupo": "Detalhe do bloco"
                       }
                     ],
                     "n_itens": 2
@@ -443,12 +874,26 @@
                     "chave": "pegadinhas",
                     "rotulo": "Pegadinhas da Quadrix neste tópico",
                     "sufixo": "da Quadrix neste tópico",
-                    "markdown": "- Trocar idade de criança/adolescente.\n",
+                    "markdown": "- Trocar tipo por gênero.",
                     "itens": [
                       {
-                        "texto": "Trocar idade de criança/adolescente.",
+                        "texto": "Trocar tipo por gênero.",
                         "feito": null,
                         "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 1
+                  },
+                  {
+                    "chave": "extra",
+                    "rotulo": "🧠 Quem faz o quê — tabela de ouro",
+                    "sufixo": "",
+                    "markdown": "| Tipo | Marca |\n|---|---|\n| Narração | Tempo |\n\n#### Fontes\n\n- Caderno de questões.",
+                    "itens": [
+                      {
+                        "texto": "Caderno de questões.",
+                        "feito": null,
+                        "subgrupo": "Fontes"
                       }
                     ],
                     "n_itens": 1
@@ -457,25 +902,1013 @@
                     "chave": "meta",
                     "rotulo": "Meta",
                     "sufixo": "",
-                    "markdown": "- [ ] ___ questões resolvidas de ECA/SINASE\n",
+                    "markdown": "- [ ] 10 questões resolvidas",
                     "itens": [
                       {
-                        "texto": "___ questões resolvidas de ECA/SINASE",
+                        "texto": "10 questões resolvidas",
                         "feito": false,
                         "subgrupo": ""
                       }
                     ],
                     "n_itens": 1
                   }
-                ]
+                ],
+                "progresso": {
+                  "total": 3,
+                  "feitos": 0
+                }
               }
+            ],
+            "auxiliares": [
+              {
+                "titulo": "✅ Checklist Final",
+                "corpo": "- [ ] Revisar crase\n- [ ] Simulado"
+              }
+            ],
+            "n_topicos": 2,
+            "progresso": {
+              "total": 10,
+              "feitos": 1
+            },
+            "rotulos_extras": [
+              "Leis-chave",
+              "🧠 Quem faz o quê — tabela de ouro"
             ]
+          },
+          "cobertura": {
+            "n_topicos": 2,
+            "n_cobertos": 1,
+            "pct": 50,
+            "topicos_sem": [
+              {
+                "numero": 2,
+                "titulo": "Reconhecimento de tipos textuais"
+              }
+            ],
+            "n_detalhado": 0,
+            "n_com_midia": 1
           }
         }
       ],
       "n_materias": 1,
-      "n_assuntos": 6
+      "n_assuntos": 2,
+      "progresso": {
+        "total": 3,
+        "feitos": 1
+      },
+      "progresso_documentos": {
+        "total": 2,
+        "feitos": 0
+      },
+      "progresso_status": {
+        "total": 2,
+        "feitos": 1
+      },
+      "progresso_tarefas": {
+        "total": 7,
+        "feitos": 2
+      },
+      "cobertura": {
+        "n_topicos": 2,
+        "n_cobertos": 1,
+        "pct": 50,
+        "n_materias": 1,
+        "n_com_mapa": 1,
+        "n_sem_vinculo": 0
+      }
     }
   ],
-  "_nota": "cargos[] existe como alias de escopos[] para compatibilidade de --modelo; topicos[].blocos[] substituiu o dict topicos[].secoes da 0.7.x, que o builder ainda aceita"
+  "cargos": [
+    {
+      "tipo": "comum",
+      "nome": "_COMUM",
+      "slug": "comum",
+      "secoes": [
+        {
+          "ordinal": "01",
+          "rotulo": "Edital",
+          "slug": "edital",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/01-EDITAL",
+          "documentos": [
+            {
+              "arquivo": "analise-banca.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/01-EDITAL/analise-banca.md",
+              "slug": "analise-banca",
+              "titulo": "Análise da banca",
+              "resumo": "",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            },
+            {
+              "arquivo": "edital-resumo.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/01-EDITAL/edital-resumo.md",
+              "slug": "edital-resumo",
+              "titulo": "Resumo do edital",
+              "resumo": "Ver _COMUM/04-MATERIAIS/livros-recomendados.",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 2
+            }
+          ],
+          "anexos": [
+            {
+              "arquivo": "edital-original.pdf",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/01-EDITAL/edital-original.pdf",
+              "extensao": "pdf",
+              "bytes": 10,
+              "subpasta": ""
+            }
+          ],
+          "n_documentos": 2,
+          "n_anexos": 1,
+          "bytes_anexos": 10
+        },
+        {
+          "ordinal": "04",
+          "rotulo": "Materiais",
+          "slug": "materiais",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/04-MATERIAIS",
+          "documentos": [
+            {
+              "arquivo": "livros-recomendados.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/04-MATERIAIS/livros-recomendados.md",
+              "slug": "livros-recomendados",
+              "titulo": "Livros",
+              "resumo": "",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [
+            {
+              "arquivo": "lei-1234-1990.pdf",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/04-MATERIAIS/leis-baixadas/lei-1234-1990.pdf",
+              "extensao": "pdf",
+              "bytes": 12,
+              "subpasta": "leis-baixadas"
+            }
+          ],
+          "n_documentos": 1,
+          "n_anexos": 1,
+          "bytes_anexos": 12,
+          "herdada_por": [
+            "CARGO-X"
+          ]
+        },
+        {
+          "ordinal": "05",
+          "rotulo": "Histórico do concurso",
+          "slug": "historico",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/05-HISTORICO-CONCURSO",
+          "documentos": [
+            {
+              "arquivo": "concursos-anteriores.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/05-HISTORICO-CONCURSO/concursos-anteriores.md",
+              "slug": "concursos-anteriores",
+              "titulo": "Edições anteriores",
+              "resumo": "Texto.",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [
+            {
+              "arquivo": "prova-2019.pdf",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/05-HISTORICO-CONCURSO/provas-anteriores/prova-2019.pdf",
+              "extensao": "pdf",
+              "bytes": 14,
+              "subpasta": "provas-anteriores"
+            }
+          ],
+          "n_documentos": 1,
+          "n_anexos": 1,
+          "bytes_anexos": 14
+        },
+        {
+          "ordinal": "06",
+          "rotulo": "Sinergia",
+          "slug": "sinergia",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/06-SINERGIA",
+          "documentos": [
+            {
+              "arquivo": "concursos-similares.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/_COMUM/06-SINERGIA/concursos-similares.md",
+              "slug": "concursos-similares",
+              "titulo": "Sinergia",
+              "resumo": "Texto.",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [],
+          "n_documentos": 1,
+          "n_anexos": 0,
+          "bytes_anexos": 0
+        }
+      ],
+      "materias": [],
+      "n_materias": 0,
+      "n_assuntos": 0,
+      "progresso": {
+        "total": 0,
+        "feitos": 0
+      },
+      "progresso_documentos": {
+        "total": 0,
+        "feitos": 0
+      },
+      "progresso_status": {
+        "total": 0,
+        "feitos": 0
+      },
+      "progresso_tarefas": {
+        "total": 0,
+        "feitos": 0
+      },
+      "cobertura": {
+        "n_topicos": 0,
+        "n_cobertos": 0,
+        "pct": null,
+        "n_materias": 0,
+        "n_com_mapa": 0,
+        "n_sem_vinculo": 0
+      }
+    },
+    {
+      "tipo": "cargo",
+      "nome": "CARGO-X",
+      "slug": "cargo-x",
+      "secoes": [
+        {
+          "ordinal": "02",
+          "rotulo": "Cronograma",
+          "slug": "cronograma",
+          "registro": "estudo",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/02-CRONOGRAMA",
+          "documentos": [
+            {
+              "arquivo": "cronograma-macro.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/02-CRONOGRAMA/cronograma-macro.md",
+              "slug": "cronograma-macro",
+              "titulo": "Cronograma",
+              "resumo": "",
+              "progresso": {
+                "total": 1,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [],
+          "n_documentos": 1,
+          "n_anexos": 0,
+          "bytes_anexos": 0
+        },
+        {
+          "ordinal": "04",
+          "rotulo": "Materiais",
+          "slug": "materiais",
+          "registro": "consulta",
+          "modo": "documentos",
+          "dir": "",
+          "documentos": [],
+          "anexos": [],
+          "n_documentos": 0,
+          "n_anexos": 0,
+          "bytes_anexos": 0,
+          "herdado_de": {
+            "escopo": "_COMUM",
+            "escopo_slug": "comum",
+            "secao_slug": "materiais",
+            "rotulo": "Materiais",
+            "n_documentos": 1,
+            "n_anexos": 1
+          }
+        },
+        {
+          "ordinal": "07",
+          "rotulo": "Discursiva",
+          "slug": "discursiva",
+          "registro": "estudo",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/07-DISCURSIVA",
+          "documentos": [
+            {
+              "arquivo": "guia-discursiva.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/07-DISCURSIVA/guia-discursiva.md",
+              "slug": "guia-discursiva",
+              "titulo": "Discursiva",
+              "resumo": "",
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              },
+              "n_secoes": 1
+            }
+          ],
+          "anexos": [],
+          "n_documentos": 1,
+          "n_anexos": 0,
+          "bytes_anexos": 0
+        },
+        {
+          "ordinal": "08",
+          "rotulo": "Títulos",
+          "slug": "titulos",
+          "registro": "estudo",
+          "modo": "documentos",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/08-TITULOS.md",
+          "documentos": [
+            {
+              "arquivo": "08-TITULOS.md",
+              "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/08-TITULOS.md",
+              "slug": "titulos",
+              "titulo": "Títulos",
+              "resumo": "",
+              "progresso": {
+                "total": 1,
+                "feitos": 0
+              },
+              "n_secoes": 0
+            }
+          ],
+          "anexos": [],
+          "n_documentos": 1,
+          "n_anexos": 0,
+          "bytes_anexos": 0
+        }
+      ],
+      "materias": [
+        {
+          "nome": "Portugues",
+          "materia_id": "portugues",
+          "doc_banca": null,
+          "slug": "portugues",
+          "dir": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues",
+          "docs_apoio": [],
+          "mapa_localizacao": null,
+          "aliases_mapa": {},
+          "assuntos": [
+            {
+              "slug": "crase",
+              "titulo": "Crase",
+              "prioridade": null,
+              "paginas_livro": "10–20",
+              "n_aprofundamentos": 1,
+              "niveis": [
+                "padrao"
+              ],
+              "fontes": [],
+              "n_fontes": 0,
+              "aprofundamentos": [
+                {
+                  "slug": "crase",
+                  "slug_assunto": "crase",
+                  "aprofundamento": "unico",
+                  "rotulo": "Original",
+                  "nivel": "padrao",
+                  "n_fontes_id": null,
+                  "fontes_id": [],
+                  "fontes": "",
+                  "titulo": "Crase",
+                  "prioridade": null,
+                  "materia_id": "portugues",
+                  "topico_id": [
+                    "emprego-do-acento-indicativo-de-crase"
+                  ],
+                  "topico": [
+                    "1. Emprego do acento indicativo de crase"
+                  ],
+                  "status": "concluido",
+                  "paginas_livro": "10–20",
+                  "localizacoes": [
+                    {
+                      "fonte": "",
+                      "texto": "Livro.pdf — págs. 10–20"
+                    }
+                  ],
+                  "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/crase/crase.md",
+                  "midias": {
+                    "podcast": "podcast-crase.m4a",
+                    "video": null,
+                    "slides": null,
+                    "mapa_mental": "mapa-mental-crase.png",
+                    "infografico": null,
+                    "report": null,
+                    "teste": null,
+                    "tabela": null
+                  },
+                  "flashcards": {
+                    "obsidian": "flashcards-crase.md",
+                    "anki": "flashcards-crase.csv",
+                    "n_cards": 2
+                  },
+                  "notebooklm_url": "https://notebooklm.google.com/notebook/x",
+                  "progresso": {
+                    "total": 3,
+                    "feitos": 1
+                  },
+                  "tem_ancoras": false,
+                  "palavras": 12,
+                  "tem_pack_notebooklm": true,
+                  "pack_notebooklm": {
+                    "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/crase/_fonte-notebooklm.md",
+                    "status": "nao-criado",
+                    "url": "https://notebooklm.google.com/notebook/x",
+                    "nome_notebook": "TESTE_2026 — Crase",
+                    "fontes": [
+                      "`crase.md` — o resumo curado."
+                    ],
+                    "prompts": [
+                      {
+                        "chave": "podcast",
+                        "icone": "🎧",
+                        "rotulo": "Podcast",
+                        "titulo_secao": "🎧 Podcast (Audio Overview)",
+                        "prompt": "Foque em Crase para concurso.",
+                        "roteiro": [
+                          "Studio → Audio Overview → clique em Customize.",
+                          "Formato: Deep Dive (completo) · alternativas: Brief (revisão rápida), Critique, Debate.",
+                          "Duração: Longer (mais completo) · ou Default/Shorter para revisão.",
+                          "Idioma: Português (Brasil).",
+                          "Generate → ao terminar, ⋮ → Download. O NotebookLM gera .m4a.",
+                          "Salve nesta pasta como podcast-crase.m4a."
+                        ],
+                        "arquivo_saida": "podcast-crase.m4a"
+                      },
+                      {
+                        "chave": "mapa_mental",
+                        "icone": "🧠",
+                        "rotulo": "Mapa mental",
+                        "titulo_secao": "🧠 Mapa Mental (Mind Map)",
+                        "prompt": "Construa o mapa mental.",
+                        "roteiro": [
+                          "Studio → Mind Map → Customize (disponível no Plus desde mai/2026 — o prompt é lido como *especificação de estrutura*).",
+                          "Generate → explore os nós (cada nó abre um chat). Download (⋮ → Download) como imagem.",
+                          "Salve como mapa-mental-crase.png."
+                        ],
+                        "arquivo_saida": "mapa-mental-crase.png"
+                      },
+                      {
+                        "chave": "video",
+                        "icone": "🎬",
+                        "rotulo": "Vídeo",
+                        "titulo_secao": "🎬 Vídeo (Video Overview)",
+                        "prompt": "Faca um video-aula.",
+                        "roteiro": [
+                          "Studio → Video Overview → Customize.",
+                          "Formato: Explainer (aula) · alternativa: Brief.",
+                          "Estilo visual: escolha um limpo/didático (ex.: \"Whiteboard\" ou \"Clean\").",
+                          "Generate (leva ~10–15 min). Download.",
+                          "Salve como video-crase.mp4."
+                        ],
+                        "arquivo_saida": "video-crase.mp4"
+                      },
+                      {
+                        "chave": "report",
+                        "icone": "📄",
+                        "rotulo": "Relatório",
+                        "titulo_secao": "📄 Report (Relatório / Guia de estudos)",
+                        "prompt": "Gere um guia de estudos.",
+                        "roteiro": [
+                          "Studio → Reports → Create your own (ou escolha o template *Study guide*).",
+                          "Generate → o report é salvo como nota no notebook. Copie o conteúdo e salve nesta pasta como report-crase.md."
+                        ],
+                        "arquivo_saida": "report-crase.md"
+                      }
+                    ],
+                    "perguntas": [
+                      "O que mais cai?"
+                    ],
+                    "checklist": [
+                      {
+                        "feito": false,
+                        "texto": "Notebook criado com as fontes"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "🎧 Podcast gerado e salvo"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "🧠 Mapa mental gerado e salvo"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "🎬 Vídeo gerado e salvo (opcional)"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "📄 Report gerado e salvo (opcional)"
+                      },
+                      {
+                        "feito": false,
+                        "texto": "Atualizar `notebooklm_status: criado` no topo deste arquivo"
+                      }
+                    ],
+                    "progresso": {
+                      "total": 6,
+                      "feitos": 0
+                    }
+                  },
+                  "legado": true
+                }
+              ],
+              "materia_id": "portugues",
+              "topico_id": [
+                "emprego-do-acento-indicativo-de-crase"
+              ],
+              "topico": [
+                "1. Emprego do acento indicativo de crase"
+              ],
+              "midias": {
+                "podcast": "podcast-crase.m4a",
+                "video": null,
+                "slides": null,
+                "mapa_mental": "mapa-mental-crase.png",
+                "infografico": null,
+                "report": null,
+                "teste": null,
+                "tabela": null
+              },
+              "flashcards": {
+                "obsidian": "flashcards-crase.md",
+                "anki": "flashcards-crase.csv",
+                "n_cards": 2
+              },
+              "sinais": {
+                "n_cards": 2,
+                "tem_ancoras": false,
+                "palavras": 12
+              },
+              "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/crase/crase.md",
+              "notebooklm_url": "https://notebooklm.google.com/notebook/x",
+              "progresso": {
+                "total": 3,
+                "feitos": 1
+              }
+            },
+            {
+              "slug": "regencia-verbal-e-nominal",
+              "titulo": "Regência",
+              "prioridade": null,
+              "paginas_livro": null,
+              "n_aprofundamentos": 1,
+              "niveis": [
+                "padrao"
+              ],
+              "fontes": [],
+              "n_fontes": 0,
+              "aprofundamentos": [
+                {
+                  "slug": "regencia-verbal-e-nominal",
+                  "slug_assunto": "regencia-verbal-e-nominal",
+                  "aprofundamento": "unico",
+                  "rotulo": "Original",
+                  "nivel": "padrao",
+                  "n_fontes_id": null,
+                  "fontes_id": [],
+                  "fontes": "",
+                  "titulo": "Regência",
+                  "prioridade": null,
+                  "materia_id": "",
+                  "topico_id": [],
+                  "topico": [],
+                  "status": "concluido",
+                  "paginas_livro": null,
+                  "localizacoes": [],
+                  "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/regencia-verbal-e-nominal/regencia-verbal-e-nominal.md",
+                  "midias": {
+                    "podcast": null,
+                    "video": null,
+                    "slides": null,
+                    "mapa_mental": null,
+                    "infografico": null,
+                    "report": null,
+                    "teste": null,
+                    "tabela": null
+                  },
+                  "flashcards": {
+                    "obsidian": "flashcards-regencia.md",
+                    "anki": null,
+                    "n_cards": 1
+                  },
+                  "notebooklm_url": null,
+                  "progresso": {
+                    "total": 0,
+                    "feitos": 0
+                  },
+                  "tem_ancoras": false,
+                  "palavras": 1,
+                  "tem_pack_notebooklm": false,
+                  "pack_notebooklm": null,
+                  "legado": true
+                }
+              ],
+              "materia_id": "",
+              "topico_id": [],
+              "topico": [],
+              "midias": {
+                "podcast": null,
+                "video": null,
+                "slides": null,
+                "mapa_mental": null,
+                "infografico": null,
+                "report": null,
+                "teste": null,
+                "tabela": null
+              },
+              "flashcards": {
+                "obsidian": "flashcards-regencia.md",
+                "anki": null,
+                "n_cards": 1
+              },
+              "sinais": {
+                "n_cards": 1,
+                "tem_ancoras": false,
+                "palavras": 1
+              },
+              "resumo_md": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-APROFUNDAMENTO/portugues/assuntos/regencia-verbal-e-nominal/regencia-verbal-e-nominal.md",
+              "notebooklm_url": null,
+              "progresso": {
+                "total": 0,
+                "feitos": 0
+              }
+            }
+          ],
+          "progresso": {
+            "total": 3,
+            "feitos": 1
+          },
+          "n_assuntos": 2,
+          "n_com_podcast": 1,
+          "n_com_flashcards": 2,
+          "por_prioridade": {
+            "alta": 0,
+            "media": 0,
+            "base": 0
+          },
+          "mapa": {
+            "arquivo": "01-portugues.md",
+            "caminho": "<vault>/30_AREAS/CARREIRA/CONCURSOS/TESTE_2026/CARGO-X/03-MAPAS-MATERIAS/01-portugues.md",
+            "materia_id": "portugues",
+            "titulo": "Português",
+            "topicos": [
+              {
+                "numero": 1,
+                "titulo": "Emprego do acento indicativo de crase",
+                "slug": "emprego-do-acento-indicativo-de-crase",
+                "prioridade": "alta",
+                "subtopicos": [
+                  {
+                    "texto": "Regra geral",
+                    "feito": true,
+                    "subgrupo": "",
+                    "grupo": "TEORIA"
+                  },
+                  {
+                    "texto": "Casos proibidos",
+                    "feito": false,
+                    "subgrupo": "",
+                    "grupo": "TEORIA"
+                  },
+                  {
+                    "texto": "Antes de masculino",
+                    "feito": false,
+                    "subgrupo": "Detalhe do bloco",
+                    "grupo": "TEORIA · Detalhe do bloco"
+                  },
+                  {
+                    "texto": "Artigo 4º",
+                    "feito": false,
+                    "subgrupo": "",
+                    "grupo": "LEI 8.662/1993 (DECORAR ARTIGOS)"
+                  },
+                  {
+                    "texto": "Observação sem checkbox",
+                    "feito": null,
+                    "subgrupo": "",
+                    "grupo": "LEI 8.662/1993 (DECORAR ARTIGOS)"
+                  }
+                ],
+                "blocos": [
+                  {
+                    "chave": "topicos_edital",
+                    "rotulo": "Tópicos do edital (literais)",
+                    "sufixo": "(literais)",
+                    "markdown": "> Crase.",
+                    "itens": [],
+                    "n_itens": 0
+                  },
+                  {
+                    "chave": "extra",
+                    "rotulo": "Leis-chave",
+                    "sufixo": "",
+                    "markdown": "- Acordo Ortográfico de 1990.\n\n#### Fontes\n\n- Manual da banca.",
+                    "itens": [
+                      {
+                        "texto": "Acordo Ortográfico de 1990.",
+                        "feito": null,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Manual da banca.",
+                        "feito": null,
+                        "subgrupo": "Fontes"
+                      }
+                    ],
+                    "n_itens": 2
+                  },
+                  {
+                    "chave": "subtopicos",
+                    "rotulo": "Subtópicos derivados — TEORIA",
+                    "sufixo": "TEORIA",
+                    "markdown": "- [x] Regra geral\n- [ ] Casos proibidos\n\n#### Detalhe do bloco\n\n- [ ] Antes de masculino",
+                    "itens": [
+                      {
+                        "texto": "Regra geral",
+                        "feito": true,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Casos proibidos",
+                        "feito": false,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Antes de masculino",
+                        "feito": false,
+                        "subgrupo": "Detalhe do bloco"
+                      }
+                    ],
+                    "n_itens": 3
+                  },
+                  {
+                    "chave": "subtopicos",
+                    "rotulo": "Subtópicos derivados — LEI 8.662/1993 (DECORAR ARTIGOS)",
+                    "sufixo": "LEI 8.662/1993 (DECORAR ARTIGOS)",
+                    "markdown": "- [ ] Artigo 4º\n- Observação sem checkbox",
+                    "itens": [
+                      {
+                        "texto": "Artigo 4º",
+                        "feito": false,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Observação sem checkbox",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 2
+                  },
+                  {
+                    "chave": "material",
+                    "rotulo": "Material recomendado",
+                    "sufixo": "",
+                    "markdown": "- Livro: *Gramática* — Pestana (Método).\n- Questões: https://qconcursos.com/crase\n- Lei: [[lei-1234-1990.pdf]]",
+                    "itens": [
+                      {
+                        "texto": "Livro: *Gramática* — Pestana (Método).",
+                        "feito": null,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Questões: https://qconcursos.com/crase",
+                        "feito": null,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Lei: [[lei-1234-1990.pdf]]",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 3
+                  },
+                  {
+                    "chave": "pegadinhas",
+                    "rotulo": "⚠️ Pegadinhas da banca neste tópico",
+                    "sufixo": "da banca neste tópico",
+                    "markdown": "- Antes de verbo.\n- Antes de pronome.",
+                    "itens": [
+                      {
+                        "texto": "Antes de verbo.",
+                        "feito": null,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Antes de pronome.",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 2
+                  },
+                  {
+                    "chave": "meta",
+                    "rotulo": "Meta",
+                    "sufixo": "",
+                    "markdown": "- [ ] 30 questões resolvidas",
+                    "itens": [
+                      {
+                        "texto": "30 questões resolvidas",
+                        "feito": false,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 1
+                  }
+                ],
+                "progresso": {
+                  "total": 5,
+                  "feitos": 1
+                }
+              },
+              {
+                "numero": 2,
+                "titulo": "Reconhecimento de tipos textuais",
+                "slug": "reconhecimento-de-tipos-textuais",
+                "prioridade": null,
+                "subtopicos": [
+                  {
+                    "texto": "Narração",
+                    "feito": false,
+                    "subgrupo": "",
+                    "grupo": "TEORIA"
+                  },
+                  {
+                    "texto": "Dissertação",
+                    "feito": false,
+                    "subgrupo": "Detalhe do bloco",
+                    "grupo": "TEORIA · Detalhe do bloco"
+                  }
+                ],
+                "blocos": [
+                  {
+                    "chave": "topicos_edital",
+                    "rotulo": "Tópicos do edital (literais)",
+                    "sufixo": "(literais)",
+                    "markdown": "> Tipos textuais.",
+                    "itens": [],
+                    "n_itens": 0
+                  },
+                  {
+                    "chave": "subtopicos",
+                    "rotulo": "Subtópicos derivados — TEORIA",
+                    "sufixo": "TEORIA",
+                    "markdown": "- [ ] Narração\n\n#### Detalhe do bloco\n\n- [ ] Dissertação",
+                    "itens": [
+                      {
+                        "texto": "Narração",
+                        "feito": false,
+                        "subgrupo": ""
+                      },
+                      {
+                        "texto": "Dissertação",
+                        "feito": false,
+                        "subgrupo": "Detalhe do bloco"
+                      }
+                    ],
+                    "n_itens": 2
+                  },
+                  {
+                    "chave": "pegadinhas",
+                    "rotulo": "Pegadinhas da Quadrix neste tópico",
+                    "sufixo": "da Quadrix neste tópico",
+                    "markdown": "- Trocar tipo por gênero.",
+                    "itens": [
+                      {
+                        "texto": "Trocar tipo por gênero.",
+                        "feito": null,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 1
+                  },
+                  {
+                    "chave": "extra",
+                    "rotulo": "🧠 Quem faz o quê — tabela de ouro",
+                    "sufixo": "",
+                    "markdown": "| Tipo | Marca |\n|---|---|\n| Narração | Tempo |\n\n#### Fontes\n\n- Caderno de questões.",
+                    "itens": [
+                      {
+                        "texto": "Caderno de questões.",
+                        "feito": null,
+                        "subgrupo": "Fontes"
+                      }
+                    ],
+                    "n_itens": 1
+                  },
+                  {
+                    "chave": "meta",
+                    "rotulo": "Meta",
+                    "sufixo": "",
+                    "markdown": "- [ ] 10 questões resolvidas",
+                    "itens": [
+                      {
+                        "texto": "10 questões resolvidas",
+                        "feito": false,
+                        "subgrupo": ""
+                      }
+                    ],
+                    "n_itens": 1
+                  }
+                ],
+                "progresso": {
+                  "total": 3,
+                  "feitos": 0
+                }
+              }
+            ],
+            "auxiliares": [
+              {
+                "titulo": "✅ Checklist Final",
+                "corpo": "- [ ] Revisar crase\n- [ ] Simulado"
+              }
+            ],
+            "n_topicos": 2,
+            "progresso": {
+              "total": 10,
+              "feitos": 1
+            },
+            "rotulos_extras": [
+              "Leis-chave",
+              "🧠 Quem faz o quê — tabela de ouro"
+            ]
+          },
+          "cobertura": {
+            "n_topicos": 2,
+            "n_cobertos": 1,
+            "pct": 50,
+            "topicos_sem": [
+              {
+                "numero": 2,
+                "titulo": "Reconhecimento de tipos textuais"
+              }
+            ],
+            "n_detalhado": 0,
+            "n_com_midia": 1
+          }
+        }
+      ],
+      "n_materias": 1,
+      "n_assuntos": 2,
+      "progresso": {
+        "total": 3,
+        "feitos": 1
+      },
+      "progresso_documentos": {
+        "total": 2,
+        "feitos": 0
+      },
+      "progresso_status": {
+        "total": 2,
+        "feitos": 1
+      },
+      "progresso_tarefas": {
+        "total": 7,
+        "feitos": 2
+      },
+      "cobertura": {
+        "n_topicos": 2,
+        "n_cobertos": 1,
+        "pct": 50,
+        "n_materias": 1,
+        "n_com_mapa": 1,
+        "n_sem_vinculo": 0
+      }
+    }
+  ],
+  "resumo": {
+    "n_escopos": 2,
+    "n_cargos": 1,
+    "n_materias": 1,
+    "n_assuntos": 2,
+    "n_documentos": 8,
+    "n_anexos": 3
+  }
 }
