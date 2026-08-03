@@ -552,11 +552,15 @@ def main() -> int:
     if a.aplicar:
         escritos = aplicar(a.concurso_dir, por_escopo, casados,
                            not a.sem_reescrever_mapas)
+        # em `--json` a nota vai para stderr: stdout tem de ser JSON puro, senão
+        # quem consome com `json.load` quebra — e foi o que aconteceu
+        saida = sys.stderr if a.json else sys.stdout
         print(f"\n✅ {len(escritos['catalogos'])} catálogo(s) e "
               f"{len(escritos['mapas'])} mapa(s) escritos · "
-              f"{len(escritos['backups'])} backup(s)")
+              f"{len(escritos['backups'])} backup(s)", file=saida)
     else:
-        print("\n(dry-run — nada foi escrito. Use --aplicar.)")
+        print("\n(dry-run — nada foi escrito. Use --aplicar.)",
+              file=sys.stderr if a.json else sys.stdout)
     return 0
 
 
