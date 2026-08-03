@@ -398,6 +398,27 @@ def check_material(root: Path, meta: dict) -> list[str]:
             issues.append(f"FALTA: {escopo}/04-MATERIAIS/livros-recomendados.md "
                           f"({len(proprios)} mapa(s) sem catálogo de material)")
 
+    # Matéria com mapa e nenhuma obra: lacuna de preparação que precisa estar
+    # escrita, não descoberta por auditoria. O catálogo declara a lacuna numa
+    # seção própria; aqui se cobra que ela esteja declarada.
+    try:
+        import migrar_materiais as mig
+        faltando = mig.materias_sem_material(root)
+        for escopo, ms in sorted(faltando.items()):
+            cat = root / escopo / "04-MATERIAIS" / "livros-recomendados.md"
+            declarado = (cat.exists()
+                         and mig.MARCA_COBERTURA in cat.read_text(encoding="utf-8"))
+            for m in sorted(ms):
+                if declarado:
+                    issues.append(f"INFO: {escopo}/{m} sem material no catálogo "
+                                  "(declarado na seção de cobertura)")
+                else:
+                    issues.append(f"MATERIAL: {escopo}/{m} tem mapa e nenhuma obra no "
+                                  "catálogo, e a lacuna não está declarada "
+                                  "(rode migrar_materiais.py --cobertura)")
+    except ImportError:
+        issues.append("INFO: migrar_materiais.py indisponível — cobertura não checada")
+
     prefixos_estranhos: dict[str, int] = {}
     orfaos = 0
     for mapa in sorted(root.glob("*/03-MAPAS-*/*.md")):

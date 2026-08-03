@@ -424,6 +424,59 @@ def _render_catalogo(escopo: str, entradas: list) -> str:
     return "\n".join(cabeca) + "\n".join(corpo)
 
 
+MARCA_COBERTURA = "## ⚠️ Matérias sem material no catálogo"
+
+
+def materias_sem_material(concurso_dir: Path) -> dict[str, list]:
+    """Matérias que têm mapa e NENHUMA obra no catálogo do seu escopo.
+
+    Precisa estar escrito no vault e aparecer no site: matéria sem bibliografia
+    é lacuna de preparação, e lacuna que só existe na cabeça de quem auditou
+    volta a existir na próxima execução. É a mesma regra do resto do projeto —
+    o que falta se declara, não se descobre.
+    """
+    materias = materias_do_concurso(concurso_dir)
+    cobertas = set()
+    for cat in concurso_dir.glob("*/04-MATERIAIS/livros-recomendados.md"):
+        for e in mid.parsear_catalogo(cat.read_text(encoding="utf-8")):
+            m = resolver_materia(e.get("cobre", ""), materias)
+            if m:
+                cobertas.add((m["escopo"], m["rotulo"]))
+    faltando: dict[str, list] = defaultdict(list)
+    for m in materias:
+        if (m["escopo"], m["rotulo"]) not in cobertas:
+            faltando[m["escopo"]].append(m["rotulo"])
+    return dict(faltando)
+
+
+def atualizar_cobertura(concurso_dir: Path) -> dict:
+    """(Re)escreve, em cada catálogo, a seção das matérias sem material.
+
+    A seção é sempre reescrita do zero: deixá-la desatualizada seria pior do que
+    não tê-la, porque uma lacuna já resolvida continuaria assustando.
+    """
+    faltando = materias_sem_material(concurso_dir)
+    tocados = {}
+    for cat in sorted(concurso_dir.glob("*/04-MATERIAIS/livros-recomendados.md")):
+        escopo = cat.parents[1].name
+        texto = cat.read_text(encoding="utf-8")
+        corte = texto.find(MARCA_COBERTURA)
+        base = (texto[:corte] if corte >= 0 else texto).rstrip("\n")
+        sem = faltando.get(escopo, [])
+        if sem:
+            linhas = [f"\n\n{MARCA_COBERTURA}\n",
+                      "Estas matérias deste escopo têm mapa de estudo e **nenhuma obra**",
+                      "no catálogo. Não é ausência de conteúdo — é bibliografia por levantar.\n"]
+            linhas += [f"- {m}" for m in sorted(sem)]
+            novo = base + "\n".join(linhas) + "\n"
+        else:
+            novo = base + "\n"
+        if novo != texto:
+            cat.write_text(novo, encoding="utf-8")
+            tocados[escopo] = sem
+    return tocados
+
+
 def fundir_entradas(catalogo: Path, manter: str, remover: str) -> dict:
     """Funde duas entradas do MESMO catálogo: `remover` some, `manter` fica.
 
@@ -576,12 +629,25 @@ def main() -> int:
                     help="cria o catálogo mas não toca nos mapas")
     ap.add_argument("--fundir", action="append", metavar="MANTER=REMOVER",
                     help="funde duas entradas do mesmo catálogo (repetível)")
+    ap.add_argument("--cobertura", action="store_true",
+                    help="(re)escreve a seção de matérias sem material nos catálogos")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
 
     if not a.concurso_dir.is_dir():
         sys.stderr.write(f"ERRO: não é diretório: {a.concurso_dir}\n")
         return 1
+
+    if a.cobertura:
+        tocados = atualizar_cobertura(a.concurso_dir)
+        if not tocados:
+            print("  nenhum catálogo alterado (cobertura já estava correta)")
+        for escopo, sem in sorted(tocados.items()):
+            print(f"  {escopo}: {len(sem)} matéria(s) sem material" if sem
+                  else f"  {escopo}: seção removida (todas cobertas)")
+            for m in sem:
+                print(f"      · {m}")
+        return 0
 
     if a.fundir:
         for par in a.fundir:

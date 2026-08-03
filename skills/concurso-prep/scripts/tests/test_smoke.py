@@ -102,13 +102,25 @@ def _montar_vault(base: Path, total_q=100, est1=40, est2=60):
                  "### A Gramática para Concursos\n\n"
                  "- **Autor:** Fernando Pestana\n"
                  "- **Editora:** Método\n"
-                 "- **Cobre:** lingua-portuguesa\n\n"
-                 "^mat-pestana-gramatica\n")
+                 "- **Cobre:** Língua Portuguesa\n\n"
+                 "^mat-pestana-gramatica\n\n"
+                 "## Matemática\n\n"
+                 "### Matemática para Concursos\n\n"
+                 "- **Autor:** Fulano de Tal\n"
+                 "- **Cobre:** Matemática\n\n"
+                 "^mat-tal-matematica\n")
     for escopo in ("_COMUM", "EDAS"):
         (b / escopo / "04-MATERIAIS/livros-recomendados.md").write_text(
             _catalogo, encoding="utf-8")
-    (b / "EDAS/03-MAPAS-MATERIAS/01.md").write_text(f"# A\n**Estimativa**: {est1} questoes\n", encoding="utf-8")
-    (b / "EDAS/03-MAPAS-MATERIAS/02.md").write_text(f"# B\nEstimativa: {est2} questoes\n", encoding="utf-8")
+    # Nome de mapa como a skill gera (`{NN}-{materia-slug}.md`), não `01.md`:
+    # nome que o gerador nunca produz faz o teste afirmar um mundo que não existe,
+    # e foi o que escondeu a checagem de cobertura de material.
+    (b / "EDAS/03-MAPAS-MATERIAS/01-lingua-portuguesa.md").write_text(
+        f'---\nmateria: "Língua Portuguesa"\n---\n# A\n**Estimativa**: {est1} questoes\n',
+        encoding="utf-8")
+    (b / "EDAS/03-MAPAS-MATERIAS/02-matematica.md").write_text(
+        f'---\nmateria: "Matemática"\n---\n# B\nEstimativa: {est2} questoes\n',
+        encoding="utf-8")
     (b / "EDAS/02-CRONOGRAMA/cronograma-oficial.md").write_text("# crono\n", encoding="utf-8")
     return b
 
@@ -139,7 +151,7 @@ def _montar_vault_com_materias(base: Path, com_mapa=True, materia_id=True):
     # Os mapas genericos do fixture base nao correspondem a materia nenhuma — a
     # skill nunca produz isso, e mante-los aqui fazia o teste de cobertura
     # conviver com dois mapas orfaos sem reclamar.
-    for generico in ("01.md", "02.md"):
+    for generico in ("01-lingua-portuguesa.md", "02-matematica.md"):
         (b / "EDAS/03-MAPAS-MATERIAS" / generico).unlink(missing_ok=True)
     fm_id = "materia_id: lingua-portuguesa\n" if materia_id else ""
     (b / "EDAS/03-MAPAS-MATERIAS/01-lingua-portuguesa.md").write_text(

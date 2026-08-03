@@ -126,6 +126,46 @@ def _montar_multicargo(base: Path) -> Path:
     return conc
 
 
+def test_materia_sem_material_e_declarada_no_catalogo():
+    """Matéria com mapa e nenhuma obra é lacuna de PREPARAÇÃO, e precisa estar
+    escrita — no vault e, por consequência, no site. Lacuna que só existe na
+    cabeça de quem auditou volta a existir na execução seguinte."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        # matéria nova, com mapa e sem nenhuma obra
+        (conc / "TECNOLOGIA" / "03-MAPAS-MATERIAS" / "09-redes.md").write_text(
+            '---\nmateria: "Redes de Computadores"\n---\n# Mapa\n', encoding="utf-8")
+        (conc / "TECNOLOGIA" / "04-MATERIAIS").mkdir(parents=True, exist_ok=True)
+        (conc / "TECNOLOGIA" / "04-MATERIAIS" / "livros-recomendados.md").write_text(
+            "# Catálogo\n\n### Obra\n\n- **Autor:** Fulano\n- **Cobre:** Tecnologia da Informação\n\n^mat-x\n",
+            encoding="utf-8")
+        sem = mig.materias_sem_material(conc)
+        checar("detecta_materia_sem_material",
+               "Redes de Computadores" in sem.get("TECNOLOGIA", []), str(sem))
+        checar("materia_com_obra_nao_e_listada",
+               "Tecnologia da Informação" not in sem.get("TECNOLOGIA", []), str(sem))
+
+        mig.atualizar_cobertura(conc)
+        texto = (conc / "TECNOLOGIA" / "04-MATERIAIS" / "livros-recomendados.md").read_text(
+            encoding="utf-8")
+        checar("secao_escrita_no_catalogo", mig.MARCA_COBERTURA in texto, texto[-200:])
+        checar("secao_nomeia_a_materia", "Redes de Computadores" in texto, texto[-200:])
+
+
+def test_cobertura_e_reescrita_quando_a_lacuna_some():
+    """Seção desatualizada é pior do que seção ausente: uma lacuna já resolvida
+    continuaria assustando quem lê."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.write_text(cat.read_text(encoding="utf-8")
+                       + f"\n\n{mig.MARCA_COBERTURA}\n\n- Matéria Fantasma\n",
+                       encoding="utf-8")
+        mig.atualizar_cobertura(conc)
+        texto = cat.read_text(encoding="utf-8")
+        checar("secao_obsoleta_removida", "Matéria Fantasma" not in texto, texto[-160:])
+
+
 def test_fusao_mantem_a_entrada_mais_completa():
     """Re-executar a migração não resolve duplicata — CRIA duplicata, porque a
     autoria corrigida diverge do texto do mapa. A fusão edita o catálogo, que é
