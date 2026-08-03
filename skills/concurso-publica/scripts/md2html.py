@@ -130,7 +130,10 @@ def _inline(texto: str, wikilink_resolver=None) -> str:
         # o caminho inteiro como texto visível é ruído — e vaza convenção de pasta
         rotulo = (m.group(3) or "").strip() or alvo.rstrip("/").split("/")[-1]
         if wikilink_resolver:
-            href = wikilink_resolver(alvo)
+            try:
+                href = wikilink_resolver(alvo, ancora)
+            except TypeError:            # resolvedor antigo, de um argumento só
+                href = wikilink_resolver(alvo)
             if href:
                 if ancora:
                     href = f"{href}#{slug_ancora(ancora)}"

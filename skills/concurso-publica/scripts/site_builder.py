@@ -109,6 +109,13 @@ class Rotas:
         # nomes repetem entre escopos, e usar o índice de nomes para navegar foi
         # o que fez o hub do cargo apontar para a matéria do comum.
         self._paginas: set[str] = set()
+        # Âncora de bloco -> rota da página que a CONTÉM. Existe porque o nome do
+        # arquivo não desambigua: há um `livros-recomendados.md` por escopo, e
+        # `Rotas.chave` reduz tudo ao basename — um `[[livros-recomendados#^mat-x]]`
+        # caía sempre na primeira página registrada, e 160 links de material
+        # apontaram para uma âncora que não existia naquela página. A âncora, essa,
+        # é única dentro do concurso.
+        self._por_ancora: dict[str, str] = {}
 
     @classmethod
     def chave(cls, nome: str) -> str:
@@ -120,6 +127,12 @@ class Rotas:
         """
         base = (nome or "").strip().rstrip("/").split("/")[-1]
         return cls.EXTENSOES.sub("", base).lower()
+
+    def registrar_ancora(self, ancora: str, rota: str) -> None:
+        self._por_ancora.setdefault(ancora.lstrip("^").lower(), rota)
+
+    def rota_da_ancora(self, ancora: str) -> str | None:
+        return self._por_ancora.get((ancora or "").lstrip("^").lower())
 
     def marcar(self, rota: str) -> None:
         """Registra que esta rota vira página, sem associá-la a nome nenhum."""
@@ -142,11 +155,31 @@ class Rotas:
         return self._por_nome.get(self.chave(nome))
 
     def resolvedor(self, rota_atual: str):
-        """Closure no formato que o `md2html` espera: `alvo → href | None`."""
-        def resolver(alvo: str) -> str | None:
-            destino = self._por_nome.get(self.chave(alvo))
+        """Closure no formato que o `md2html` espera: `(alvo, âncora) → href`.
+
+        A âncora VENCE o nome quando ela existe: é o único dos dois que
+        desambigua entre os sete `livros-recomendados.md` do concurso.
+        """
+        def resolver(alvo: str, ancora: str = "") -> str | None:
+            destino = self.rota_da_ancora(ancora) if ancora else None
+            if not destino:
+                destino = self._por_nome.get(self.chave(alvo))
             return relativo(destino, rota_atual) if destino else None
         return resolver
+
+
+_ANCORA_BLOCO = re.compile(r"^\s*\^([A-Za-z0-9][A-Za-z0-9-]*)\s*$", re.M)
+
+
+def _registrar_ancoras(rotas: "Rotas", doc: dict, rota: str) -> None:
+    """Indexa os block ids do documento, para o wikilink com âncora resolver
+    para a página que REALMENTE a contém — e não para a primeira homônima."""
+    try:
+        texto = Path(doc["caminho"]).read_text(encoding="utf-8")
+    except OSError:
+        return
+    for m in _ANCORA_BLOCO.finditer(texto):
+        rotas.registrar_ancora(m.group(1), rota)
 
 
 def rota_irma(rota: str, *segmentos: str) -> str:
@@ -1821,6 +1854,7 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
             if len(secao["documentos"]) == 1 and not secao["anexos"]:
                 doc = secao["documentos"][0]
                 rotas.registrar(rota_sec, doc["arquivo"], doc["slug"], secao["slug"])
+                _registrar_ancoras(rotas, doc, rota_sec)
                 plano.append({"rota": rota_sec, "tipo": "documento", "doc": doc,
                               "secao": secao, "escopo": escopo,
                               "trilha_meio": (rota_esc, rotulo_esc),
@@ -1838,6 +1872,7 @@ def montar_rotas(modelo: dict, slug_conc: str) -> tuple[Rotas, list[dict]]:
             for doc in secao["documentos"]:
                 rota_doc = (f'{slug_conc}/{esc_slug}/{secao["slug"]}'
                             f'/{doc["slug"]}/index.html')
+                _registrar_ancoras(rotas, doc, rota_doc)
                 # o documento é citado pelo nome do arquivo (com e sem prefixo
                 # numérico) — as duas formas aparecem nos wikilinks do vault
                 rotas.registrar(rota_doc, doc["arquivo"], doc["slug"])

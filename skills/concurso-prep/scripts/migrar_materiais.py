@@ -340,7 +340,8 @@ _PONTEIRO = re.compile(
     re.I)
 
 
-def reescrever_item(texto: str, entrada: dict) -> str:
+def reescrever_item(texto: str, entrada: dict,
+                    arquivo: str = "livros-recomendados") -> str:
     """`Livro: *X* — Autor (Ed) — cap. 4` vira `Livro: [[...#^ancora|...]] — cap. 4`.
 
     O ponteiro de leitura é PRESERVADO: é a única parte do item que o catálogo não
@@ -354,7 +355,7 @@ def reescrever_item(texto: str, entrada: dict) -> str:
     p = _PONTEIRO.search(texto)
     if p:
         ponteiro = f" — {p.group(1).strip()}"
-    return f"{prefixo}{mid.wikilink(entrada)}{ponteiro}"
+    return f"{prefixo}{mid.wikilink(entrada, arquivo)}{ponteiro}"
 
 
 def aplicar(concurso_dir: Path, por_escopo: dict, casados: list,
@@ -689,6 +690,11 @@ def main() -> int:
                     help="cria o catálogo mas não toca nos mapas")
     ap.add_argument("--fundir", action="append", metavar="MANTER=REMOVER",
                     help="funde duas entradas do mesmo catálogo (repetível)")
+    ap.add_argument("--so-mapas", action="store_true",
+                    help="reescreve os mapas apontando para o catálogo (dry-run "
+                         "sem --aplicar). NÃO reconstrói o catálogo: ele é a autoridade")
+    ap.add_argument("--sem-canonizar-prefixos", action="store_true")
+    ap.add_argument("--sem-ligar-normas", action="store_true")
     ap.add_argument("--cobertura", action="store_true",
                     help="(re)escreve a seção de matérias sem material nos catálogos")
     ap.add_argument("--json", action="store_true")
@@ -697,6 +703,33 @@ def main() -> int:
     if not a.concurso_dir.is_dir():
         sys.stderr.write(f"ERRO: não é diretório: {a.concurso_dir}\n")
         return 1
+
+    if a.so_mapas:
+        r = reescrever_mapas(a.concurso_dir, aplicar=a.aplicar,
+                             canonizar=not a.sem_canonizar_prefixos,
+                             ligar_normas=not a.sem_ligar_normas)
+        if a.json:
+            print(json.dumps({k: (len(v) if isinstance(v, list) else v)
+                              for k, v in r.items()}, indent=2, ensure_ascii=False))
+        else:
+            print(f"# Reescrita dos mapas — {a.concurso_dir.name}\n")
+            print(f"**{len(r['apontados'])} itens** passam a apontar para o catálogo")
+            print(f"**{r['prefixos']} prefixos** canonizados")
+            print(f"**{r['normas_ligadas']} normas** ligadas ao PDF baixado")
+            print(f"**{len(r['mapas'])} mapas** alterados\n")
+            if r["ambiguos"]:
+                print("## Ambíguos — ficam como estão")
+                for x in r["ambiguos"]:
+                    print(f"  - [{x['escopo']}] {x['texto']}")
+                    print(f"      entre: {', '.join(x['entre'])}")
+            if r["sem_correspondencia"]:
+                print("\n## Sem correspondência no catálogo — ficam como estão")
+                for x in r["sem_correspondencia"]:
+                    print(f"  - [{x['escopo']}] {x['texto']}")
+        print("\n(dry-run — nada foi escrito. Use --aplicar.)"
+              if not a.aplicar else f"\n✅ {len(r['mapas'])} mapa(s) reescritos, com backup",
+              file=sys.stderr if a.json else sys.stdout)
+        return 0
 
     if a.enriquecimento and a.aplicar:
         dados = json.loads(a.enriquecimento.read_text(encoding="utf-8"))
@@ -784,6 +817,185 @@ def main() -> int:
               file=sys.stderr if a.json else sys.stdout)
     return 0
 
+
+
+# =========================================================================== #
+# Fase 2: reescrever os mapas para apontar ao catálogo
+# =========================================================================== #
+_ALIAS = re.compile(r"grafia(?:s)? consolidada[^:]*:\n((?:\s*·[^\n]*\n)+)")
+_LINHA_ALIAS = re.compile(r"·\s*(.+?)\s*(?:-->)?\s*$")
+
+
+def indice_do_catalogo(concurso_dir: Path) -> dict[str, dict[str, set]]:
+    """{escopo: {titulo normalizado: {âncoras}}}, incluindo as grafias fundidas.
+
+    A normalização é **estrita** (`normalizar`, não `tokens_titulo`): a do id
+    descarta "para concursos", e com ela `A Gramática para Concursos` e
+    `Gramática da Língua Portuguesa` colidiam no mesmo catálogo.
+
+    As grafias registradas nas fusões entram como alias — é procedência de
+    verdade, gravada no momento em que se decidiu que duas entradas eram a mesma
+    obra, e não semelhança calculada agora.
+    """
+    idx: dict[str, dict[str, set]] = defaultdict(lambda: defaultdict(set))
+    for cat in sorted(concurso_dir.glob("*/04-MATERIAIS/livros-recomendados.md")):
+        escopo = cat.parents[1].name
+        texto = cat.read_text(encoding="utf-8")
+        for e in mid.parsear_catalogo(texto):
+            if e["titulo"]:
+                idx[escopo][mid.normalizar(e["titulo"])].add(e["ancora"])
+        for bloco in _ALIAS.finditer(texto):
+            pos = texto.rfind("^", 0, bloco.start())
+            m = re.match(r"\^([A-Za-z0-9-]+)", texto[pos:]) if pos >= 0 else None
+            if not m:
+                continue
+            for linha in bloco.group(1).splitlines():
+                g = _LINHA_ALIAS.search(linha.strip())
+                if g:
+                    idx[escopo][mid.normalizar(g.group(1))].add(m.group(1))
+    return {k: dict(v) for k, v in idx.items()}
+
+
+# `Lei 8.742/1993`, `Lei nº 8.742/93`, `LC 105/2001`, `Decreto 7.053/2009`,
+# `Resolução CNAS nº 145/2004`. O ano de 2 dígitos aparece no vault.
+_CITA_NORMA = re.compile(
+    r"\b((?:lei\s+complementar|lei|decreto[- ]lei|decreto|resolu[çc][ãa]o|"
+    r"portaria|instru[çc][ãa]o\s+normativa|circular|s[úu]mula)"
+    r"(?:\s+(?:cmn|cnas|cfess|cfp|conjunta|bacen|normativa))*"
+    r"(?:\s*n?[ºo°.]*\s*)\s*)(\d{1,3}(?:\.\d{3})*|\d+)\s*[/-]\s*(\d{2,4})",
+    re.IGNORECASE)
+
+
+def indice_de_leis(concurso_dir: Path) -> dict[tuple, str]:
+    """{(numero, ano): nome do PDF} das leis efetivamente baixadas.
+
+    Casa por NÚMERO e ANO, que é exato. Sem isso, 2 dos 473 itens de material do
+    vault linkavam para algo baixado — os outros 471 eram texto morto, inclusive
+    os 26 que citam norma cujo PDF está a dois diretórios de distância.
+    """
+    idx: dict[tuple, str] = {}
+    for pdf in sorted(concurso_dir.glob("*/04-MATERIAIS/leis-baixadas/*.pdf")):
+        m = re.search(r"(\d+)-(\d{4})", pdf.stem)
+        if m:
+            idx.setdefault((m.group(1).lstrip("0"), m.group(2)), pdf.name)
+    return idx
+
+
+def _link_de_norma(texto: str, leis: dict) -> tuple[str, bool]:
+    """Troca a citação da norma por wikilink para o PDF baixado, se houver."""
+    if "[[" in texto:
+        return texto, False
+    achou = False
+
+    def trocar(m):
+        nonlocal achou
+        if achou:
+            return m.group(0)
+        numero = m.group(2).replace(".", "").lstrip("0")
+        ano = m.group(3)
+        if len(ano) == 2:
+            candidatos = [a for (n, a) in leis if n == numero and a.endswith(ano)]
+            ano = candidatos[0] if len(candidatos) == 1 else ano
+        arquivo = leis.get((numero, ano))
+        if not arquivo:
+            return m.group(0)
+        achou = True
+        return f"[[{arquivo}|{m.group(0).strip()}]]"
+
+    novo = _CITA_NORMA.sub(trocar, texto, count=1)
+    return novo, achou
+
+
+def reescrever_mapas(concurso_dir: Path, aplicar: bool = False,
+                     canonizar: bool = True, ligar_normas: bool = True) -> dict:
+    """Faz o item do mapa APONTAR para o catálogo, em vez de redigitar a obra.
+
+    O catálogo é a autoridade: esta função não o reconstrói. Reconstruir depois
+    que a pesquisa corrigiu uma autoria CRIA duplicata em vez de resolvê-la.
+
+    Casamento é exato ou nada, e ambiguidade não desempata: `Probabilidade e
+    Estatística` serve a Devore e a Morettin no mesmo escopo, e escolher um
+    mandaria o estudante ao livro errado.
+    """
+    idx = indice_do_catalogo(concurso_dir)
+    leis = indice_de_leis(concurso_dir)
+    autores, arquivo_da_ancora = {}, {}
+    for cat in concurso_dir.glob("*/04-MATERIAIS/livros-recomendados.md"):
+        rel = f'{cat.parents[1].name}/04-MATERIAIS/{cat.stem}'
+        for e in mid.parsear_catalogo(cat.read_text(encoding="utf-8")):
+            autores[e["ancora"]] = e.get("autor", "")
+            arquivo_da_ancora[e["ancora"]] = rel
+    r = {"apontados": [], "ambiguos": [], "sem_correspondencia": [],
+         "prefixos": 0, "normas_ligadas": 0, "mapas": []}
+
+    for escopo_dir in sorted(p for p in concurso_dir.iterdir() if p.is_dir()):
+        escopo = escopo_dir.name
+        cand: dict[str, set] = defaultdict(set)
+        for chave, ancoras in idx.get("_COMUM", {}).items():
+            cand[chave] |= ancoras
+        for chave, ancoras in idx.get(escopo, {}).items():
+            cand[chave] |= ancoras
+
+        for mapa in mapas_do_escopo(escopo_dir):
+            texto = mapa.read_text(encoding="utf-8")
+            linhas = texto.splitlines()
+            faixas = blocos_de_material(texto)
+            mudou = False
+            for ini, fim in faixas:
+                for i in range(ini, min(fim, len(linhas))):
+                    m = re.match(r"^(\s*[-*]\s+)(.*)$", linhas[i])
+                    if not m:
+                        continue
+                    corpo = m.group(2)
+                    item = mid.parsear_item(corpo)
+                    novo = corpo
+
+                    if item["tipo"] == "livro" and not item["ancora"] and item["titulo"]:
+                        alvo = cand.get(mid.normalizar(item["titulo"]), set())
+                        # Título ambíguo com autor escrito no mapa: o sobrenome
+                        # desempata. `Português para Concursos` serve a Pestana e a
+                        # Douglas, mas o item diz "— Fernando Pestana". Isso é
+                        # casamento EXATO num segundo campo, não similaridade.
+                        if len(alvo) > 1 and item["autor"]:
+                            s = mid.sobrenome(item["autor"])
+                            por_autor = {a for a in alvo
+                                         if s and s == mid.sobrenome(autores.get(a, ""))}
+                            if len(por_autor) == 1:
+                                alvo = por_autor
+                        ref = {"mapa": str(mapa), "escopo": escopo,
+                               "texto": item["texto"][:90]}
+                        if len(alvo) == 1:
+                            ancora = next(iter(alvo))
+                            novo = reescrever_item(
+                                corpo, {"titulo": item["titulo"],
+                                        "autor": item["autor"], "ancora": ancora},
+                                arquivo_da_ancora.get(ancora, "livros-recomendados"))
+                            r["apontados"].append({**ref, "ancora": ancora})
+                        elif len(alvo) > 1:
+                            r["ambiguos"].append({**ref, "entre": sorted(alvo)})
+                        else:
+                            r["sem_correspondencia"].append(ref)
+
+                    if ligar_normas and item["tipo"] in ("norma", "documento", "outro"):
+                        novo, ok = _link_de_norma(novo, leis)
+                        r["normas_ligadas"] += int(ok)
+
+                    if canonizar and item["prefixo"] and not item["canonico"] \
+                            and item["tipo"] != "outro":
+                        rotulo = mid.PREFIXOS[item["tipo"]][0]
+                        novo = re.sub(rf"^{re.escape(item['prefixo'])}\s*:",
+                                      f"{rotulo}:", novo, count=1)
+                        r["prefixos"] += 1
+
+                    if novo != corpo:
+                        linhas[i] = m.group(1) + novo
+                        mudou = True
+            if mudou:
+                r["mapas"].append(str(mapa))
+                if aplicar:
+                    mapa.with_suffix(".md.bak").write_text(texto, encoding="utf-8")
+                    mapa.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+    return r
 
 if __name__ == "__main__":
     sys.exit(main())

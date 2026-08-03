@@ -126,6 +126,171 @@ def _montar_multicargo(base: Path) -> Path:
     return conc
 
 
+MAPA_FASE2 = """---
+materia: "Língua Portuguesa"
+---
+# Mapa
+
+## 1. Crase
+
+### Material recomendado
+- Livro: *A Gramática para Concursos* — Fernando Pestana (Método) — cap. 4
+- Livro: *Português para Concursos* — Fernando Pestana (Método)
+- Norma-fonte: Lei nº 8.742/1993 (LOAS) — texto atualizado
+- Livro: *Obra Que Ninguem Catalogou* — Fulano (Ed)
+- Questões: https://qconcursos.com/x
+
+### Meta
+- [ ] 30 questões
+"""
+
+CATALOGO_FASE2 = """---
+tipo: material
+---
+# Catálogo
+
+## Língua Portuguesa
+
+### A Gramática para Concursos
+
+- **Autor:** Fernando Pestana
+- **Editora:** Método
+
+^mat-pestana-gramatica
+<!-- grafia consolidada nesta entrada:
+     · Português para Concursos -->
+
+### Gramática Normativa
+
+- **Autor:** Rocha Lima
+
+^mat-lima-gramatica-normativa
+"""
+
+
+def _montar_fase2(base: Path) -> Path:
+    conc = base / "TESTE_2026"
+    (conc / "_COMUM" / "03-MAPAS-COMUNS").mkdir(parents=True)
+    (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").write_text(
+        MAPA_FASE2, encoding="utf-8")
+    (conc / "_COMUM" / "04-MATERIAIS" / "leis-baixadas").mkdir(parents=True)
+    (conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md").write_text(
+        CATALOGO_FASE2, encoding="utf-8")
+    (conc / "_COMUM" / "04-MATERIAIS" / "leis-baixadas"
+     / "lei-8742-1993-loas.pdf").write_bytes(b"%PDF-1.4")
+    return conc
+
+
+def test_fase2_aponta_preserva_e_nao_inventa():
+    """A reescrita: aponta o que casa, preserva o que a pessoa escreveu, e não
+    adivinha o que não casa."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        r = mig.reescrever_mapas(conc, aplicar=True)
+        texto = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8")
+        checar("fase2_aponta_por_titulo",
+               "#^mat-pestana-gramatica|" in texto, texto[:400])
+        checar("fase2_link_traz_o_caminho_do_escopo",
+               "[[_COMUM/04-MATERIAIS/livros-recomendados#^" in texto,
+               "link sem caminho: há um livros-recomendados por escopo")
+        checar("fase2_preserva_ponteiro_de_leitura", "— cap. 4" in texto, texto[:400])
+        checar("fase2_alias_da_fusao_tambem_aponta",
+               texto.count("mat-pestana-gramatica") == 2,
+               f"{texto.count('mat-pestana-gramatica')} ocorrências")
+        checar("fase2_nao_inventa_para_o_que_nao_casa",
+               "*Obra Que Ninguem Catalogou* — Fulano" in texto, texto[:600])
+        checar("fase2_relata_o_nao_casado",
+               any("Ninguem Catalogou" in x["texto"] for x in r["sem_correspondencia"]),
+               str(r["sem_correspondencia"]))
+
+
+def test_fase2_liga_norma_ao_pdf_baixado():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        mig.reescrever_mapas(conc, aplicar=True)
+        texto = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8")
+        checar("fase2_norma_vira_link",
+               "[[lei-8742-1993-loas.pdf|Lei nº 8.742/1993]]" in texto, texto)
+        checar("fase2_norma_preserva_o_resto",
+               "(LOAS) — texto atualizado" in texto, texto)
+
+
+def test_fase2_canoniza_prefixo():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        mig.reescrever_mapas(conc, aplicar=True)
+        texto = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8")
+        checar("fase2_prefixo_canonico", "- Norma: " in texto, texto)
+        checar("fase2_prefixo_antigo_sumiu", "Norma-fonte:" not in texto, texto)
+
+
+def test_fase2_nao_altera_nada_fora_do_bloco():
+    """O mapa é texto do usuário. Fora de `### Material recomendado`, nada muda."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        antes = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8").splitlines()
+        mig.reescrever_mapas(conc, aplicar=True)
+        depois = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8").splitlines()
+        checar("fase2_mesmo_numero_de_linhas", len(antes) == len(depois),
+               f"{len(antes)} -> {len(depois)}")
+        for i, (a, b) in enumerate(zip(antes, depois)):
+            if a != b and not a.lstrip().startswith(("- Livro", "- Norma")):
+                checar("fase2_nao_toca_fora_do_bloco", False, f"linha {i}: {a!r} -> {b!r}")
+                return
+        checar("fase2_nao_toca_fora_do_bloco", True)
+
+
+def test_fase2_dry_run_nao_escreve():
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        mapa = conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md"
+        antes = mapa.read_bytes()
+        r = mig.reescrever_mapas(conc, aplicar=False)
+        checar("fase2_dry_run_intacto", mapa.read_bytes() == antes)
+        checar("fase2_dry_run_relata", len(r["apontados"]) >= 2, str(len(r["apontados"])))
+        checar("fase2_dry_run_sem_backup", not mapa.with_suffix(".md.bak").exists())
+
+
+def test_fase2_ambiguidade_nao_desempata_sem_autor():
+    """Dois títulos iguais e o mapa sem autor: fica como está."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.write_text(cat.read_text(encoding="utf-8")
+                       + "\n### A Gramática para Concursos\n\n- **Autor:** Outro Autor\n\n^mat-outro-gramatica\n",
+                       encoding="utf-8")
+        mapa = conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md"
+        mapa.write_text(MAPA_FASE2.replace(
+            "- Livro: *A Gramática para Concursos* — Fernando Pestana (Método) — cap. 4",
+            "- Livro: *A Gramática para Concursos*"), encoding="utf-8")
+        r = mig.reescrever_mapas(conc, aplicar=True)
+        checar("fase2_ambiguo_reportado", len(r["ambiguos"]) >= 1, str(r["ambiguos"]))
+        checar("fase2_ambiguo_intacto",
+               "- Livro: *A Gramática para Concursos*\n" in mapa.read_text(encoding="utf-8"))
+
+
+def test_fase2_desempata_por_sobrenome_exato():
+    """Título ambíguo COM autor escrito no mapa: o sobrenome desempata. É
+    casamento exato num segundo campo, não similaridade."""
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_fase2(Path(d))
+        cat = conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.write_text(cat.read_text(encoding="utf-8")
+                       + "\n### A Gramática para Concursos\n\n- **Autor:** Outro Autor\n\n^mat-outro-gramatica\n",
+                       encoding="utf-8")
+        mig.reescrever_mapas(conc, aplicar=True)
+        texto = (conc / "_COMUM" / "03-MAPAS-COMUNS" / "01-portugues.md").read_text(
+            encoding="utf-8")
+        checar("fase2_desempate_por_sobrenome",
+               "mat-pestana-gramatica" in texto and "mat-outro-gramatica" not in texto,
+               texto[:400])
+
+
 def test_enriquecimento_limpa_pendencia_resolvida_mas_nao_apaga_dado():
     """`pendencia` é o único campo em que vazio SIGNIFICA algo: a pesquisa
     dizendo "fechei, não há mais ressalva". Nos outros, vazio quer dizer "não

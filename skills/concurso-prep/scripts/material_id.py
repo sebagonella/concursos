@@ -498,7 +498,15 @@ def render_entrada(entrada: dict) -> str:
 
 
 def wikilink(entrada: dict, arquivo: str = "livros-recomendados") -> str:
-    """O wikilink que o mapa deve escrever para citar esta entrada."""
+    """O wikilink que o mapa deve escrever para citar esta entrada.
+
+    `arquivo` deve vir com o CAMINHO do escopo
+    (`ASSISTENTE-SOCIAL/04-MATERIAIS/livros-recomendados`), não só o nome: há um
+    catálogo por escopo, e sete arquivos com o mesmo nome no concurso. Com o nome
+    nu, o Obsidian escolhe um deles por proximidade e o site resolvia sempre para
+    o primeiro registrado — foram 160 links apontando para âncora que não existia
+    naquela página.
+    """
     rotulo = entrada["titulo"]
     s = sobrenome(entrada.get("autor", ""))
     if s:

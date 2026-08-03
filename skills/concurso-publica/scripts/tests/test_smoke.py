@@ -914,6 +914,43 @@ def test_tipo_do_material_nao_chuta_rotulo_desconhecido():
     assert icone, "item sem tipo ficou sem marcador — some da lista"
 
 
+def test_wikilink_com_ancora_resolve_pela_ancora_nao_pelo_nome():
+    """Há um `livros-recomendados.md` por escopo — sete no concurso real.
+
+    `Rotas.chave` reduz tudo ao basename, então `[[…/livros-recomendados#^mat-x]]`
+    caía sempre na PRIMEIRA página homônima registrada: 160 links de material
+    apontaram para uma âncora que não existia naquela página. A âncora é única
+    dentro do concurso e por isso vence o nome.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        # dois catálogos homônimos, cada um com a sua âncora
+        for escopo, ancora in (("_COMUM", "mat-do-comum"), ("CARGO-X", "mat-do-cargo")):
+            pasta = base / escopo / "04-MATERIAIS"
+            pasta.mkdir(parents=True, exist_ok=True)
+            (pasta / "livros-recomendados.md").write_text(
+                f"# Catálogo\n\n### Obra\n\n- **Autor:** Fulano\n\n^{ancora}\n",
+                encoding="utf-8")
+        # o mapa do CARGO cita a âncora que vive no catálogo do CARGO
+        mapa = base / "CARGO-X" / "03-MAPAS-MATERIAS" / "01-portugues.md"
+        texto = mapa.read_text(encoding="utf-8").replace(
+            "- Livro: *Gramática* — Pestana (Método).",
+            "- Livro: [[CARGO-X/04-MATERIAIS/livros-recomendados#^mat-do-cargo|Obra]]")
+        mapa.write_text(texto, encoding="utf-8")
+
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (out / "teste_2026" / "cargo-x" / "materias" / "portugues"
+             / "index.html").read_text(encoding="utf-8")
+        m = re.search(r'<a href="([^"]*#mat-do-cargo)"', h)
+        assert m, f"o link com âncora não virou href: {h[:400]}"
+        arq, _, anc = m.group(1).partition("#")
+        alvo = (out / "teste_2026" / "cargo-x" / "materias" / "portugues" / arq).resolve()
+        assert alvo.exists(), f"aponta para página inexistente: {m.group(1)}"
+        assert f'id="{anc}"' in alvo.read_text(encoding="utf-8"), \
+            f"a página não contém a âncora {anc} — resolveu pela homônima errada"
+
+
 def test_backup_nao_vira_anexo_publicado():
     """Os scripts que reescrevem material deixam `.md.bak` ao lado do arquivo.
 
