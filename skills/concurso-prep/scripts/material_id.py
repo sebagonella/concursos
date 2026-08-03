@@ -368,7 +368,24 @@ _NAO_AUTOR = re.compile(
 
 
 def _parece_autor(texto: str) -> bool:
-    return bool(texto) and not _NAO_AUTOR.match(texto.strip())
+    """Autor começa com MAIÚSCULA — pessoa ou instituição.
+
+    A lista de palavras acima nunca daria conta sozinha: o vault produziu
+    `apenas consulta`, `voltada a provas CESGRANRIO`, `foco em CESGRANRIO`,
+    `referência de trilha`, `coletâneas de referência` e `de cursinhos
+    atualizados para o edital vigente` — todas frases de qualificação que caíram
+    no campo do autor. Acrescentar cada uma seria correr atrás do vault.
+
+    O sinal estrutural é o mesmo que separa editora de prosa: nome próprio
+    começa em maiúscula (`Fernando Pestana`, `Ministério da Saúde`, `CFESS`),
+    qualificação começa em minúscula. Quando erra, erra para pendência — que é
+    o lado certo de errar.
+    """
+    t = (texto or "").strip()
+    if not t or _NAO_AUTOR.match(t):
+        return False
+    letras = [c for c in t if c.isalpha()]
+    return bool(letras) and letras[0].isupper()
 
 
 def _editora_de_cauda(texto: str) -> str:

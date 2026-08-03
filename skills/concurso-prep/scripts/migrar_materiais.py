@@ -424,6 +424,77 @@ def _render_catalogo(escopo: str, entradas: list) -> str:
     return "\n".join(cabeca) + "\n".join(corpo)
 
 
+def fundir_entradas(catalogo: Path, manter: str, remover: str) -> dict:
+    """Funde duas entradas do MESMO catálogo: `remover` some, `manter` fica.
+
+    Existe porque re-executar a migração não é idempotente depois que a pesquisa
+    corrige uma autoria — reconstruir o catálogo criaria duplicatas em vez de
+    resolvê-las. Aqui se edita o catálogo existente, que é a autoridade.
+
+    Os campos vazios de `manter` são preenchidos com os de `remover`: a entrada
+    que fica não pode sair mais pobre da fusão. E o título da removida vira
+    comentário, porque é a grafia que alguém usou e que ainda está nos mapas.
+    """
+    texto = catalogo.read_text(encoding="utf-8")
+    entradas = {e["ancora"]: e for e in mid.parsear_catalogo(texto)}
+    if manter not in entradas or remover not in entradas:
+        raise SystemExit(f"ERRO: âncora ausente em {catalogo.name}: "
+                         f"{manter if manter not in entradas else remover}")
+    a, b = entradas[manter], entradas[remover]
+    for campo in mid.CAMPOS:
+        if not (a.get(campo) or "").strip() and (b.get(campo) or "").strip():
+            a[campo] = b[campo]
+
+    linhas = texto.splitlines()
+    ini = fim = None
+    for i, linha in enumerate(linhas):
+        if linha.strip() == f"^{remover}":
+            fim = i + 1
+            for j in range(i, -1, -1):
+                if linhas[j].startswith("### "):
+                    ini = j
+                    break
+            break
+    if ini is None:
+        raise SystemExit(f"ERRO: bloco de {remover} não localizado")
+    while fim < len(linhas) and not linhas[fim].strip():
+        fim += 1
+    removidas = "\n".join(linhas[ini:fim])
+    novas = linhas[:ini] + linhas[fim:]
+
+    # regravar a entrada que fica, agora completa
+    saida, i = [], 0
+    while i < len(novas):
+        if novas[i].startswith("### ") and _ancora_do_bloco(novas, i) == manter:
+            j = i
+            while j < len(novas) and novas[j].strip() != f"^{manter}":
+                j += 1
+            saida.append(mid.render_entrada(a).rstrip("\n"))
+            saida.append(f"<!-- grafia consolidada nesta entrada:\n"
+                         f"     · {b['titulo']} -->")
+            i = j + 1
+            continue
+        saida.append(novas[i])
+        i += 1
+    catalogo.with_suffix(".md.bak").write_text(texto, encoding="utf-8")
+    catalogo.write_text("\n".join(saida).rstrip("\n") + "\n", encoding="utf-8")
+    return {"manteve": manter, "removeu": remover, "titulo_removido": b["titulo"],
+            "linhas_removidas": len(removidas.splitlines())}
+
+
+def _ancora_do_bloco(linhas: list, ini: int) -> str:
+    for k in range(ini, min(ini + 30, len(linhas))):
+        m = _BLOCO.match(linhas[k])
+        if m:
+            return m.group(1)
+        if k > ini and linhas[k].startswith("### "):
+            return ""
+    return ""
+
+
+_BLOCO = re.compile(r"^\s*\^([A-Za-z0-9-]+)\s*$")
+
+
 def relatorio(concurso: str, por_escopo: dict, casados: list, pendentes: list,
               sem_autor: list) -> str:
     linhas = [f"# Migração de materiais — {concurso}", ""]
@@ -503,12 +574,27 @@ def main() -> int:
                     help="escreve de verdade (padrão: dry-run)")
     ap.add_argument("--sem-reescrever-mapas", action="store_true",
                     help="cria o catálogo mas não toca nos mapas")
+    ap.add_argument("--fundir", action="append", metavar="MANTER=REMOVER",
+                    help="funde duas entradas do mesmo catálogo (repetível)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
 
     if not a.concurso_dir.is_dir():
         sys.stderr.write(f"ERRO: não é diretório: {a.concurso_dir}\n")
         return 1
+
+    if a.fundir:
+        for par in a.fundir:
+            manter, _, remover = par.partition("=")
+            alvo = next((c for c in a.concurso_dir.glob("*/04-MATERIAIS/livros-recomendados.md")
+                         if f"^{manter}" in c.read_text(encoding="utf-8")
+                         and f"^{remover}" in c.read_text(encoding="utf-8")), None)
+            if not alvo:
+                raise SystemExit(f"ERRO: {manter} e {remover} não estão no mesmo catálogo")
+            r = fundir_entradas(alvo, manter.strip(), remover.strip())
+            print(f"  fundido em {alvo.parents[1].name}: {r['removeu']} -> {r['manteve']} "
+                  f"({r['titulo_removido'][:40]!r})")
+        return 0
 
     itens, catalogos, materias = varrer(a.concurso_dir)
     if not itens and not catalogos:

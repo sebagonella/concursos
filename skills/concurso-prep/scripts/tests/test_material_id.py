@@ -75,6 +75,28 @@ def test_autor_com_parenteses_nao_perde_o_autor():
     checar("autor_com_parenteses_sobrenome", m.sobrenome(i["autor"]) == "cormen")
 
 
+def test_autor_precisa_comecar_com_maiuscula():
+    """Frase de qualificação caía no campo do autor. A lista de palavras nunca
+    daria conta — o vault produziu `apenas consulta`, `voltada a provas
+    CESGRANRIO`, `foco em CESGRANRIO`, `referência de trilha`, `coletâneas de
+    referência`. O sinal estrutural é a maiúscula."""
+    for linha in (
+        "- Livro: *LGPD Comentada* (referência de estudo) — apenas consulta",
+        "- Livro: *Matemática Financeira e Raciocínio Lógico* — foco em CESGRANRIO",
+        "- Coleção de *reading comprehension* voltada a provas CESGRANRIO",
+    ):
+        i = m.parsear_item(linha)
+        checar(f"qualificacao_nao_e_autor({linha[10:26]!r})", i["autor"] == "",
+               f"deu {i['autor']!r}")
+    for linha, autor in (
+        ("- Livro: *X* — Philip Kotler (Pearson)", "Philip Kotler"),
+        ("- Ministério da Saúde — *Caderno*.", "Ministério da Saúde"),
+        ("- Livro: *Y* — C. J. Date (Elsevier)", "C. J. Date"),
+    ):
+        i = m.parsear_item(linha)
+        checar(f"autor_legitimo({autor})", i["autor"] == autor, f"deu {i['autor']!r}")
+
+
 def test_sobrenome_de_casos_reais():
     casos = {
         "Fernando Pestana": "pestana",

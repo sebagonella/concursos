@@ -126,6 +126,45 @@ def _montar_multicargo(base: Path) -> Path:
     return conc
 
 
+def test_fusao_mantem_a_entrada_mais_completa():
+    """Re-executar a migração não resolve duplicata — CRIA duplicata, porque a
+    autoria corrigida diverge do texto do mapa. A fusão edita o catálogo, que é
+    a autoridade, e a entrada que fica não pode sair mais pobre."""
+    with tempfile.TemporaryDirectory() as d:
+        cat = Path(d) / "livros-recomendados.md"
+        cat.write_text(
+            "# Catálogo\n\n"
+            "### Python para Análise de Dados\n\n"
+            "- **Autor:** Wes McKinney\n\n"
+            "^mat-mckinney-python\n\n"
+            "### Python para Análise de Dados\n\n"
+            "- **Autor:** Wes McKinney\n"
+            "- **ISBN:** 9788575228418\n"
+            "- **Editora:** Novatec\n\n"
+            "^mat-pandas-python\n", encoding="utf-8")
+        r = mig.fundir_entradas(cat, "mat-mckinney-python", "mat-pandas-python")
+        ents = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))
+        checar("fusao_sobra_uma", len(ents) == 1, str([e["ancora"] for e in ents]))
+        checar("fusao_mantem_a_ancora_certa", ents[0]["ancora"] == "mat-mckinney-python",
+               ents[0]["ancora"])
+        checar("fusao_herda_campos_vazios", ents[0]["isbn"] == "9788575228418",
+               f"isbn={ents[0]['isbn']!r}")
+        checar("fusao_herda_editora", ents[0]["editora"] == "Novatec", ents[0]["editora"])
+        checar("fusao_faz_backup", cat.with_suffix(".md.bak").exists())
+        checar("fusao_relata_o_removido", r["removeu"] == "mat-pandas-python", str(r))
+
+
+def test_fusao_com_ancora_ausente_falha_alto():
+    with tempfile.TemporaryDirectory() as d:
+        cat = Path(d) / "livros-recomendados.md"
+        cat.write_text("### X\n\n- **Autor:** Y\n\n^mat-x\n", encoding="utf-8")
+        try:
+            mig.fundir_entradas(cat, "mat-x", "mat-que-nao-existe")
+            checar("fusao_ancora_ausente_falha", False, "não falhou")
+        except SystemExit:
+            checar("fusao_ancora_ausente_falha", True)
+
+
 def test_obra_de_materia_de_cargo_sai_do_comum():
     """O DEFEITO relatado: a PASTA onde o catálogo está não diz a que escopo a
     obra pertence.
