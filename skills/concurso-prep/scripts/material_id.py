@@ -288,13 +288,23 @@ def _parsear_texto(texto: str) -> dict:
     if a:
         item["autor"] = a.group(1).strip(" .,")
         item["titulo"] = a.group(2).strip()
-        item["editora"] = _CAUDA.sub("", a.group(3)).strip(" .,")
+        item["editora"] = _editora_de_cauda(a.group(3))
         return item
 
     t = _TITULO_MARCADO.search(corpo)
     if t:
         item["titulo"] = t.group(1).strip()
-        item["autor"], item["editora"] = _autor_editora(corpo[t.end():])
+        antes = corpo[:t.start()].strip()
+        # Ordem invertida que o `_AUTOR_TITULO` não pegou porque o autor tem
+        # parêntese: `Cormen, Leiserson, Rivest & Stein (CLRS) — *Algoritmos*.
+        # Elsevier.` Sem esta saída o autor sumia e "Elsevier" era lido COMO
+        # autor — pior que perder o dado, é gravar o dado errado.
+        if antes and antes[-1] in "—–-":
+            item["autor"] = re.sub(r"\s*\([^)]*\)\s*", " ",
+                                   antes.rstrip(" —–-")).strip(" .,")
+            item["editora"] = _editora_de_cauda(corpo[t.end():])
+        else:
+            item["autor"], item["editora"] = _autor_editora(corpo[t.end():])
         return item
 
     # sem título marcado: o item inteiro é o título. É o caso de
@@ -333,10 +343,12 @@ def _autor_editora(cauda: str) -> tuple[str, str]:
     if not _parece_autor(cauda):
         return "", _limpar_editora(editora)
 
+    # O marcador explícito VENCE o parêntese. `Ed. JusPodivm (violência contra a
+    # mulher)` tem editora e qualificação, e tomar o parêntese primeiro gravava
+    # "violência contra a mulher" no campo Editora do catálogo.
     marca = _MARCA_EDITORA.search(cauda)
     if marca:
-        if not editora:
-            editora = marca.group(1).strip(" .,")
+        editora = marca.group(1).strip(" .,")
         cauda = cauda[:marca.start()].strip()
 
     autor = cauda.strip(" .,;—–-")
@@ -359,11 +371,44 @@ def _parece_autor(texto: str) -> bool:
     return bool(texto) and not _NAO_AUTOR.match(texto.strip())
 
 
+def _editora_de_cauda(texto: str) -> str:
+    """Editora, quando a cauda é SÓ editora — o caso da ordem invertida.
+
+    Nas listas canônicas a forma é `Autor — *Título*. Editora.`, então tudo que
+    sobra depois do título é candidato a editora. As três formas medidas no
+    catálogo do vault, e o que cada uma tem de resolver:
+
+        `Ed. Método.`                                 -> marcador a remover
+        `Ed. JusPodivm (violência contra a mulher).`  -> marcador + qualificação
+        `Método (referência consagrada para ...).`    -> só qualificação
+
+    O marcador vence; a qualificação entre parênteses é descartada; sobra o nome.
+    """
+    t = _CAUDA.sub("", texto or "").strip()
+    t = re.sub(r"\s*\([^)]*\)\s*", " ", t).strip(" .,;")
+    marca = _MARCA_EDITORA.search(t)
+    if marca:
+        t = marca.group(1)
+    return _limpar_editora(t)
+
+
 def _limpar_editora(texto: str) -> str:
-    """Editora só quando é editora: o mesmo parêntese carrega qualificação
-    (`gratuito/oficial`, `atual`, `material online`) na metade dos itens."""
+    """Editora só quando é editora.
+
+    O mesmo parêntese que às vezes traz a editora traz, com a mesma frequência,
+    uma qualificação em prosa: `(violência contra a mulher)`, `(rede de saúde
+    mental / RAPS)`, `(referência consagrada para bancários CESGRANRIO)`. Dois
+    sinais separam um do outro no vault real, e nenhum sozinho basta:
+
+      - nome de editora começa com MAIÚSCULA (`Método`, `Pearson`, `JusPodivm`);
+        qualificação começa em minúscula;
+      - nome de editora é curto (`A Casa do Concurseiro` já é o extremo);
+        qualificação é frase.
+    """
     t = (texto or "").strip(" .,")
     if not t or not _parece_autor(t) or len(t) > 60:
+        return ""
+    if t[0].islower() or len(t.split()) > 4:
         return ""
     return t
 

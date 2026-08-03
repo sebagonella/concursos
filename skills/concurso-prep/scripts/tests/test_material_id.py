@@ -36,6 +36,45 @@ def checar(nome, cond, detalhe=""):
 # --------------------------------------------------------------------------- #
 # sobrenome e id
 # --------------------------------------------------------------------------- #
+def test_editora_na_ordem_do_catalogo():
+    """Na ordem invertida a cauda é SÓ editora, e vem em três formas no vault."""
+    casos = [
+        ("- Fernando Pestana — *A Gramática para Concursos Públicos*. Ed. Método.",
+         "Fernando Pestana", "Método"),
+        ("- Maria Berenice Dias — *A Lei Maria da Penha na Justiça*. "
+         "Ed. JusPodivm (violência contra a mulher).",
+         "Maria Berenice Dias", "JusPodivm"),
+        ("- Edgar Abreu — *Conhecimentos Bancários e Atualidades do Mercado Financeiro*. "
+         "Método (referência consagrada para bancários CESGRANRIO).",
+         "Edgar Abreu", "Método"),
+    ]
+    for linha, autor, editora in casos:
+        i = m.parsear_item(linha)
+        checar(f"catalogo_autor({autor})", i["autor"] == autor, f"deu {i['autor']!r}")
+        checar(f"catalogo_editora({editora})", i["editora"] == editora,
+               f"deu {i['editora']!r}")
+
+
+def test_qualificacao_entre_parenteses_nao_vira_editora():
+    """`(rede de saúde mental / RAPS)` é prosa, não nome de editora. Dois sinais:
+    editora começa com maiúscula e é curta."""
+    i = m.parsear_item("- Ministério da Saúde — *Caderno de Atenção Básica nº 34: "
+                       "Saúde Mental* (rede de saúde mental / RAPS).")
+    checar("qualificacao_nao_e_editora", i["editora"] == "", f"deu {i['editora']!r}")
+    checar("qualificacao_preserva_autor", i["autor"] == "Ministério da Saúde", i["autor"])
+
+
+def test_autor_com_parenteses_nao_perde_o_autor():
+    """`Cormen, … & Stein (CLRS) — *Algoritmos*. Elsevier.` fazia a EDITORA ser
+    lida como autor — gravar o dado errado é pior do que perdê-lo."""
+    i = m.parsear_item("- Cormen, Leiserson, Rivest & Stein (CLRS) — "
+                       "*Algoritmos: Teoria e Prática*. Elsevier.")
+    checar("autor_com_parenteses", i["autor"] == "Cormen, Leiserson, Rivest & Stein",
+           f"deu {i['autor']!r}")
+    checar("autor_com_parenteses_editora", i["editora"] == "Elsevier", i["editora"])
+    checar("autor_com_parenteses_sobrenome", m.sobrenome(i["autor"]) == "cormen")
+
+
 def test_sobrenome_de_casos_reais():
     casos = {
         "Fernando Pestana": "pestana",

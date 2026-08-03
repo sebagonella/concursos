@@ -46,12 +46,19 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   apagaria conteúdo escrito à mão). Rodado contra o vault, acusa exatamente os 7
   problemas que a auditoria mediu.
 
+- **`scripts/migrar_materiais.py`** — migração dos concursos já gerados. Lê também
+  o bloco de nível 2 do mapa de Português do SEDES (11 itens que um leitor só de
+  `###` perderia inteiros) e o catálogo legado, para não jogar fora 62 itens já
+  pesquisados. Dry-run por padrão, backup antes de escrever, e o ponteiro de
+  leitura (`— cap. 4`) sobrevive à reescrita: é a única parte do item que o
+  catálogo não guarda. 27 testes.
+
 ### Notas
 - A auditoria de 03/08/2026 nos dois concursos: 473 itens de material nos mapas contra
   62 nos catálogos; interseção de 15,6% (BB) e 5,9% (SEDES); Pestana com 4 grafias e 3
   editoras contraditórias; 25 livros sem autor; 31 prefixos distintos; 2 dos 473 itens
   linkando para algo baixado.
-- Testes: 62 -> 62 + **65** (`test_material_id.py`). O `test-all.sh` passou a rodar
+- Testes: 62 -> 62 + **76** (`test_material_id.py`) + **27** (`test_migrar_materiais.py`). O `test-all.sh` passou a rodar
   toda `test_*.py` da skill, não só `test_smoke.py`.
 
 ## [1.9.0] - 2026-08-01

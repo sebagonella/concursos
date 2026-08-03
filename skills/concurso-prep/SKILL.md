@@ -623,6 +623,10 @@ Em `scripts/`:
   catálogo (`^mat-pestana-gramatica`, block id do Obsidian), o conjunto canônico de
   prefixos e o casamento **exato ou nada** entre item de mapa e entrada de catálogo.
   Não reimplemente a convenção em outro script
+- `migrar_materiais.py` — **(migração)** constrói o catálogo dos concursos já
+  gerados a partir do que existe (mapas + catálogo legado), deduplica por obra e
+  reescreve o item do mapa para ponteiro **só no casamento exato**. Dry-run por
+  padrão; faz backup antes de tocar em qualquer arquivo
 - `validate_parsed.py` — valida a saída da Etapa 2 contra `assets/schema-edital.json`;
   roda ANTES da Etapa 3 e para o fluxo se o contrato estiver quebrado
 - `fetch_lei.py` — **baixa lei de fonte oficial e gera MD + PDF** (item 9)
