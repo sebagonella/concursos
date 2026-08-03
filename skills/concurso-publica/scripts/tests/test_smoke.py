@@ -813,6 +813,30 @@ def test_capa_agrupa_por_escopo():
         assert not orfas, orfas
 
 
+def test_cargo_com_catalogo_proprio_ainda_ve_o_do_comum():
+    """Regressão: quando o cargo ganhou catálogo próprio, a seção passou a ter um
+    documento só, COLAPSOU numa página de documento, e o bloco de herança sumiu
+    junto — o cargo exibia a própria bibliografia e perdia o caminho para a do
+    comum, que é a maior. O caso do fixture (cargo SEM catálogo) não pegava isto.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        proprio = base / "CARGO-X" / "04-MATERIAIS"
+        proprio.mkdir(parents=True)
+        (proprio / "livros-recomendados.md").write_text(
+            "# Catálogo\n\n### Obra do Cargo\n\n- **Autor:** Fulano\n\n^mat-fulano-obra\n",
+            encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        pag = out / "teste_2026" / "cargo-x" / "materiais" / "index.html"
+        h = pag.read_text(encoding="utf-8")
+        assert 'id="mat-fulano-obra"' in h, "o catálogo próprio do cargo não saiu"
+        assert "Comum a todos os cargos" in h, "perdeu o caminho para a bibliografia do comum"
+        m = re.search(r'class="botao" href="([^"]+)"', h)
+        assert m and (pag.parent / m.group(1)).resolve().exists(), \
+            "link para o comum quebrado na página colapsada"
+
+
 def test_cargo_herda_a_pagina_de_materiais_do_comum():
     """A bibliografia mora no `_COMUM` e o cargo não tinha caminho nenhum até ela.
 

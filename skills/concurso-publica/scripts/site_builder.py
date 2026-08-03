@@ -1571,7 +1571,7 @@ def bloco_sumario(md: str, rota_atual: str) -> str:
 
 def pagina_documento(doc: dict, secao: dict, escopo: dict, concurso: str,
                      rotas: "Rotas", rota: str, trilha_meio: tuple,
-                     rota_capa: str) -> str:
+                     rota_capa: str, slug_conc: str = "") -> str:
     md = Path(doc["caminho"]).read_text(encoding="utf-8")
     corpo_html = md2html.converter(md, wikilink_resolver=rotas.resolvedor(rota))
     sumario = bloco_sumario(md, rota)
@@ -1582,6 +1582,12 @@ def pagina_documento(doc: dict, secao: dict, escopo: dict, concurso: str,
                  f'<aside class="lateral">{sumario}</aside></div>')
     else:
         corpo = f'<article class="papel">{corpo_html}</article>'
+
+    # A seção colapsada É este documento, então o que ela herda tem de aparecer
+    # AQUI. Quando cada cargo ganhou catálogo próprio, a seção passou a ter um
+    # documento só, colapsou, e o bloco de herança sumiu junto: o cargo exibia a
+    # própria bibliografia e perdia o caminho para a do comum, que é a maior.
+    corpo += bloco_herdado(secao, slug_conc, rota)
 
     # o nível do meio da trilha é a seção quando ela tem índice próprio, e o escopo
     # quando a seção É este documento
@@ -1951,7 +1957,7 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
         elif tipo == "documento":
             html_pag = pagina_documento(item["doc"], item["secao"], item["escopo"],
                                         concurso, rotas, rota, item["trilha_meio"],
-                                        rota_capa)
+                                        rota_capa, slug_conc)
             # Só quando a seção foi colapsada neste documento: aí a rota da página é
             # a da seção e `rota_anexo` acerta o destino. Copiar aqui sempre fazia
             # CADA documento receber uma cópia inteira dos anexos da seção — 685
