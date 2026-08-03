@@ -71,7 +71,13 @@ tipo: mapa-materia
 - Livro: *Estatística Básica* — Bussab & Morettin (Saraiva)
 """
 
-CATALOGO_LEGADO = """# Livros
+CATALOGO_LEGADO = """---
+tipo: documentacao
+tags:
+  - concurso/bb/previsto
+  - area/carreira
+---
+# Livros
 
 ## Língua Portuguesa
 - Fernando Pestana — *A Gramática para Concursos Públicos*. Ed. Método.
@@ -89,6 +95,23 @@ def _montar(base: Path, com_catalogo=True, mapa=MAPA) -> Path:
         (conc / "_COMUM" / "04-MATERIAIS" / "livros-recomendados.md").write_text(
             CATALOGO_LEGADO, encoding="utf-8")
     return conc
+
+
+def test_tags_do_frontmatter_nao_viram_obra():
+    """A lista `tags:` do YAML usa `  - item`, o mesmo bullet do corpo.
+
+    Sem cortar o frontmatter, três tags do BB (`area/carreira`,
+    `concurso/bb/previsto`, `tipo/material`) viraram entradas de catálogo, com
+    âncora e tudo — e só apareceram porque a pesquisa estranhou. Lixo que entra
+    em silêncio é pior do que erro.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar(Path(d))
+        _, catalogos = mig.varrer(conc)
+        titulos = [e["titulo"] for e in catalogos["_COMUM"]]
+        for tag in ("concurso/bb/previsto", "area/carreira"):
+            checar(f"tag_fora_do_catalogo({tag})", tag not in titulos, str(titulos))
+        checar("obras_do_corpo_preservadas", len(titulos) == 2, str(titulos))
 
 
 def test_enriquecimento_casa_por_ancora_e_nao_apaga():

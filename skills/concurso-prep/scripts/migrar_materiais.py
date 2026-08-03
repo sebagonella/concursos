@@ -113,8 +113,14 @@ def _entradas_do_catalogo_legado(cat: Path) -> list[dict]:
     obrigaria a refazer a pesquisa inteira — pior, faria a migração parecer que o
     vault não tinha bibliografia nenhuma.
     """
+    texto = cat.read_text(encoding="utf-8")
+    # O frontmatter sai FORA. A lista `tags:` do YAML é escrita com `  - item`, que
+    # casa o mesmo regex de bullet do corpo — e três tags do BB
+    # (`area/carreira`, `concurso/bb/previsto`, `tipo/material`) viraram obras no
+    # catálogo, com âncora e tudo. Lixo que entra em silêncio é pior do que erro.
+    texto = re.sub(r"^---\s*\n.*?\n---\s*\n", "", texto, count=1, flags=re.DOTALL)
     entradas, materia = [], ""
-    for linha in cat.read_text(encoding="utf-8").splitlines():
+    for linha in texto.splitlines():
         h = re.match(r"^##\s+(.*)$", linha)
         if h:
             materia = h.group(1).strip()
