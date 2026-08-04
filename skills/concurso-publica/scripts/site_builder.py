@@ -1325,6 +1325,32 @@ def bloco_cobertura_edital(materia: dict) -> str:
 </section>"""
 
 
+def bussola_recolhida(html_doc: str) -> str:
+    """A bússola da banca abre FECHADA, com o título à vista.
+
+    Ela é o primeiro bloco da visão Estudo, e uma bússola bem escrita passa
+    fácil dos 2.700px. Aberta, ela empurrava o primeiro grupo de assuntos para
+    3.131px — 2,3 telas abaixo numa janela de 1.321px —, e a aba Estudo parecia
+    NÃO TER a matéria: o relato foi literalmente "nem existe dentro de Estudo".
+    O incentivo ficava invertido, porque quanto melhor o documento, mais ele
+    escondia justamente o que a aba existe para mostrar. Medido no vault: as
+    duas matérias com bússola escrita tinham ~6.000 e ~7.400 caracteres antes
+    do primeiro assunto; as sem bússola, 64 e 101.
+
+    Recolher preserva as duas coisas: o documento continua sendo o primeiro
+    bloco (a `concurso-aprofunda` o quer antes da lista, para orientar o
+    estudo), e a lista volta para a primeira tela. Um clique traz o texto
+    inteiro, e o `<details>` é nativo — sem depender do site.js.
+    """
+    m = re.match(r"\s*<h1[^>]*>(.*?)</h1>", html_doc, re.S)
+    titulo = m.group(1).strip() if m else "Como a banca cobra esta matéria"
+    corpo = html_doc[m.end():] if m else html_doc
+    return (f'<details class="papel bussola" style="margin-top:1.25rem">'
+            f'<summary><span class="bussola-titulo">{titulo}</span>'
+            f'<span class="bussola-dica">perfil da banca nesta matéria</span>'
+            f'</summary><div class="bussola-corpo">{corpo}</div></details>')
+
+
 def agrupar_por_topico(materia: dict, href_de) -> str:
     """Os assuntos aprofundados na ordem do plano do edital.
 
@@ -1458,15 +1484,13 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
 
     grupos_topico = agrupar_por_topico(materia, href_de)
 
-    # "Como a banca cobra esta matéria" — antes dos assuntos
+    # "Como a banca cobra esta matéria" — antes dos assuntos, e RECOLHIDA
     bloco_banca = ""
     if materia.get("doc_banca"):
         try:
             texto = (materia_dir / materia["doc_banca"]).read_text(encoding="utf-8")
-            bloco_banca = (
-                f'<section class="papel" style="margin-top:1.25rem">'
-                f'{md2html.converter(texto, wikilink_resolver=rotas.resolvedor(rota))}'
-                f'</section>')
+            bloco_banca = bussola_recolhida(
+                md2html.converter(texto, wikilink_resolver=rotas.resolvedor(rota)))
         except Exception:
             bloco_banca = ""
 

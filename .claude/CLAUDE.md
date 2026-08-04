@@ -58,6 +58,21 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
   propria linha**; colado na resposta o plugin Spaced Repetition nao le o cartao.
 - **Nunca fingir precisao**: localizacao com baixa confianca ou nao encontrada
   vira pendencia explicita para conferencia humana. Nao inventar pagina.
+- **Em norma, o `book_index` e triagem, nao localizacao — e "media" e o TETO, nao um
+  juizo.** PDF de lei do Planalto nao tem sumario (`toc_entradas: 0`), entao o script cai
+  na densidade; e `CONF_ALTA` so existe no caminho `toc` (linha 219), enquanto a densidade
+  acaba em `CONF_MEDIA if melhor_d >= 0.35 else CONF_BAIXA` (linha 249) — por densidade e
+  **impossivel** sair "alta", com qualquer score. O defeito real nem e a etiqueta, e o
+  **ponteiro**: na Lei 11.340 a densidade deu `pp. 1-9` para **8 dos 10** assuntos, num
+  documento de **9 paginas**. A referencia real de norma e o **artigo**: extraia com
+  `pdftotext`, monte o mapa artigo→pagina, confira, e grave `confianca: alta` com
+  `metodo: "mapeamento por artigo"` — a nota fica auditavel porque o metodo esta ao lado.
+- **Topico multi-fonte e o desenho do edital**: o literal do topico 2 do EDAS diz "Lei
+  Maria da Penha **e** Politica Nacional de Enfrentamento" — o "e" sao duas fontes, e a
+  Politica Nacional tem **zero** ocorrencias na lei. O `Material recomendado` do mapa
+  listava so a norma; segui-lo ao pe da letra deixaria 2 dos 10 assuntos sem fonte. Leia o
+  **literal do edital** antes de aprofundar; o que nao tiver fonte vira identidade propria
+  (`padrao--pdpm`) ou pendencia nomeada — nunca texto sob fonte que nao o sustenta.
 - **O site e derivado, o vault e a fonte**: `concurso-publica` nunca escreve no
   vault; o progresso exibido e so leitura.
 - **O site espelha COMUM/cargo** (`{concurso}/{comum|cargo}/`). `00-INDICE.md` e
@@ -97,6 +112,20 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
 - **Asset publicado leva a versao do conteudo na URL** (`site.css?v=<hash>`): o nginx
   manda `expires 1h`, entao sem isso o navegador serve **HTML novo com CSS velho** — e o
   defeito e invisivel, porque a pagina renderiza, so renderiza errado.
+- **Documento longo no topo de uma aba esconde o que a aba existe para mostrar**: a bussola
+  `COMO-A-BANCA-COBRA` saia inteira e aberta no comeco da visao Estudo — **2.770px** que
+  empurravam o primeiro grupo de assuntos para **3.131px**, **2,3 telas**, e o relato foi
+  "o topico **nem existe** dentro de Estudo". Existia. O incentivo ficava invertido: quanto
+  melhor o documento, mais ele escondia a lista (5.976 e 7.424 chars antes do 1o assunto nas
+  duas materias com bussola; 64 e 101 nas sem). Documento de apoio no topo de aba vai em
+  `<details>` **fechado**, titulo no `<summary>`, com `@media print` reabrindo. E: **"o HTML
+  contem o elemento" nao e "a pessoa ve o elemento"** — depois de publicar, meca **posicao**,
+  nao so presenca.
+- **Varredura de pasta de aprofundamento usa `arquivo_principal()`, ate em script
+  descartavel**: uma comparacao ad-hoc entre escopos pegou `sorted(glob("*.md"))[0]` e leu o
+  **`_fonte-notebooklm.md`** em vez do assunto (`_` = 95 ordena antes das minusculas),
+  fazendo o relatorio afirmar 17 artigos ausentes onde havia **8**. O helper ja filtra
+  `flashcards-`, `_`, `00-`, `report-`, `teste-` e `tabela-`.
 - **Nada escrito no topico do mapa se perde em silencio**: H3 fora do template e
   publicado com o texto do vault **e avisado** na geracao; rotulo repetido no mesmo
   topico acumula, nunca sobrescreve; e a lista exibida conta o mesmo que o contador
