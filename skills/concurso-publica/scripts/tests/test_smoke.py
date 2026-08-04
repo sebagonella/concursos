@@ -2570,6 +2570,38 @@ def test_doc_da_banca_detectado_e_renderizado_antes_dos_assuntos():
         assert i_grupo == -1 or i_banca < i_grupo
 
 
+def test_bussola_da_banca_abre_recolhida():
+    """O corpo da bússola não pode empurrar a lista de assuntos para fora da tela.
+
+    Aberta, uma bússola de verdade (2.770px medidos no vault) jogava o primeiro
+    grupo de assuntos para 3.131px — 2,3 telas — e a aba Estudo parecia NÃO TER
+    a matéria. O título fica à vista no `<summary>`; o corpo, atrás de um clique.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mat = _mat_vault(base)
+        corpo = "\n\n".join(f"Parágrafo longo número {i} sobre o estilo da banca. " * 12
+                            for i in range(40))
+        (mat / "COMO-A-BANCA-COBRA-PORTUGUES.md").write_text(
+            f"# Como a Banca X cobra\n\n{corpo}\n", encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+
+        m = re.search(r'<details class="papel bussola"([^>]*)>', h)
+        assert m, "a bússola não saiu num <details>"
+        assert " open" not in m.group(1), "a bússola saiu ABERTA — o defeito voltou"
+
+        # o título continua visível; o corpo, não
+        i_sum = h.find("<summary>", m.start())
+        i_fim_sum = h.find("</summary>", i_sum)
+        assert 0 < i_sum < i_fim_sum
+        assert "Como a Banca X cobra" in h[i_sum:i_fim_sum], "título fora do summary"
+        assert "Parágrafo longo número 0" not in h[i_sum:i_fim_sum], \
+            "o corpo vazou para o summary — continuaria ocupando a tela"
+        assert "Parágrafo longo número 0" in h[i_fim_sum:], "o corpo sumiu"
+
+
 def test_indice_raiz_acumula_concursos():
     """Deploy incremental: publicar o 2º concurso não some com o 1º do índice."""
     with tempfile.TemporaryDirectory() as d:

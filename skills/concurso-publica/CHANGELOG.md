@@ -2,6 +2,29 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.19.0] - 2026-08-03
+
+### Corrigido
+- **A bússola da banca escondia a lista de assuntos, e a aba Estudo parecia vazia.**
+  O documento "Como a banca cobra esta matéria" é o primeiro bloco da visão Estudo e
+  era renderizado inteiro, aberto. Medido na matéria `direitos-violacoes-vulnerabilidades`
+  do SEDES: a bússola ocupava **2.770px** e o primeiro grupo de assuntos começava em
+  **3.131px** — **2,3 telas** de rolagem numa janela de 1.321px. O relato do dono foi
+  literal: *"Mulheres e violência de gênero nem existe dentro de Estudo, apenas em Plano"*.
+  Existia; estava três telas abaixo de uma parede de texto.
+
+  O incentivo estava invertido: **quanto melhor a bússola, mais ela escondia** o que a
+  aba existe para mostrar. No vault, as duas matérias com bússola escrita tinham 5.976 e
+  7.424 caracteres antes do primeiro assunto; as sem bússola, 64 e 101.
+
+  Agora a bússola sai num `<details>` **fechado**, com o título no `<summary>` e uma
+  dica ("perfil da banca nesta matéria"). Ela continua sendo o primeiro bloco — a
+  `concurso-aprofunda` a quer antes da lista, para orientar o estudo —, mas os assuntos
+  voltam para a primeira tela. `<details>` nativo: funciona sem JS, o Ctrl+F do Chrome
+  abre o bloco, e no `@media print` o corpo volta a aparecer inteiro (papel não tem
+  clique). Coberto por `test_bussola_da_banca_abre_recolhida`, que falha contra o
+  código anterior.
+
 ## [0.18.0] - 2026-08-03
 
 ### Corrigido
