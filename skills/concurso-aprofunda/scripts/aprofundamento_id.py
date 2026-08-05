@@ -289,6 +289,100 @@ def localizacoes_por_fonte(fm: dict, aprof_id: str) -> list[tuple[str, str]]:
             for i, loc in enumerate(localizacoes(fm))]
 
 
+_RE_NORMA_SLUG = re.compile(
+    r"^(lei|leidf|lc|dec|decreto|res|port|portaria|ec|mp|sum)-(.+)$")
+_ROTULO_NORMA = {"lei": "Lei", "leidf": "Lei DF", "lc": "LC", "dec": "Decreto",
+                 "decreto": "Decreto", "res": "Resolução", "port": "Portaria",
+                 "portaria": "Portaria", "ec": "EC", "mp": "MP", "sum": "Súmula"}
+
+
+def separar_fontes(texto: str) -> list[str]:
+    """O campo `fontes:` como lista, respeitando vírgula DENTRO de parênteses.
+
+    `"Resolução CMN nº 4.893/2021 (redação vigente, atualizada em 19/12/2025)"` é
+    UMA fonte, não duas. Quebrar por vírgula crua é exatamente o defeito que
+    inflava o selo do site — reproduzi-lo aqui trocaria um contador errado por
+    outro. 2 dos 177 aprofundamentos do vault têm vírgula assim no nome.
+    """
+    itens, atual, profundidade = [], [], 0
+    for ch in texto:
+        if ch in "([":
+            profundidade += 1
+        elif ch in ")]":
+            profundidade = max(0, profundidade - 1)
+        if ch == "," and profundidade == 0:
+            itens.append("".join(atual).strip())
+            atual = []
+        else:
+            atual.append(ch)
+    itens.append("".join(atual).strip())
+    return [i for i in itens if i]
+
+
+def nome_legivel(slug_fonte_: str, catalogo: dict | None = None) -> str:
+    """Slug canônico -> nome humano da fonte. É a projeção `id -> texto`.
+
+    O sentido importa: derivar o id A PARTIR do texto é ambíguo — medido no vault,
+    66 dos 177 `fontes:` não reproduzem o id, porque
+    "Administracao-de-Marketing-Kotler-e-Keller" deriva `keller` (último token
+    significativo) enquanto o id diz `kotler`. O caminho inverso é determinístico,
+    e por isso é ele que vale.
+
+    `catalogo` é um mapa opcional {slug: nome da obra} — tipicamente montado a
+    partir das âncoras `^mat-{autor}-{obra}` dos `04-MATERIAIS/livros-recomendados.md`,
+    que já são o lugar canônico onde a obra é descrita uma vez. Sem catálogo,
+    devolve algo legível e reversível, nunca vazio.
+    """
+    s = (slug_fonte_ or "").strip()
+    if not s:
+        return ""
+    if catalogo and s in catalogo:
+        return catalogo[s]
+    if s == FONTE_PROPRIA:
+        return "material próprio"
+    m = _RE_NORMA_SLUG.match(s)
+    if m:
+        tipo, resto = m.group(1), m.group(2)
+        # `res-cmn-4949` -> "Resolução CMN 4.949"; `lei-8742` -> "Lei 8.742"
+        partes = resto.split("-")
+        orgao = " ".join(p.upper() for p in partes[:-1]) if len(partes) > 1 else ""
+        numero = partes[-1]
+        if numero.isdigit() and len(numero) > 3:
+            numero = f"{int(numero):,}".replace(",", ".")
+        return " ".join(x for x in (_ROTULO_NORMA.get(tipo, tipo.title()), orgao, numero) if x)
+    return " ".join(p.capitalize() for p in s.split("-"))
+
+
+def fontes_legiveis(aprof_id: str, catalogo: dict | None = None) -> list[str]:
+    """Os nomes humanos das fontes do id, na ordem do id."""
+    info = parse_id(aprof_id)
+    return [nome_legivel(f, catalogo) for f in (info["fontes"] if info else [])]
+
+
+def conferir_fontes(fm: dict, aprof_id: str) -> list[str]:
+    """Avisos quando o id e o campo `fontes:` não batem.
+
+    Espelha `conferir_localizacoes`, que faz o mesmo para (id x localizações). Sem
+    isto, o campo dizia uma coisa e o id outra sem que nada percebesse — e era do
+    campo que o site tirava a contagem exibida, o que inflava o selo em 15 dos 29
+    assuntos multi-nível do vault.
+
+    O material próprio é exceção declarada: o template grava a string fixa
+    "material próprio", que descreve o artefato e não se decompõe em fontes.
+    """
+    info = parse_id(aprof_id)
+    if not info:
+        return []
+    if info["fontes"] == [FONTE_PROPRIA]:
+        return []
+    texto = (fm.get("fontes") or "").strip()
+    itens = separar_fontes(texto)
+    if len(itens) != len(info["fontes"]):
+        return [f"{len(info['fontes'])} fonte(s) no id ({'+'.join(info['fontes'])}) e "
+                f"{len(itens)} no campo `fontes:` ({texto or 'vazio'})"]
+    return []
+
+
 def conferir_localizacoes(fm: dict, aprof_id: str) -> list[str]:
     """Avisos quando o id e as localizações não batem.
 

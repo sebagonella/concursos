@@ -2,6 +2,49 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.10.0] - 2026-08-05
+
+### Adicionado
+
+- **`conferir_fontes(fm, aprof_id)`** — espelho de `conferir_localizacoes` para o par
+  (id × campo `fontes:`). O campo podia divergir do id sem que nada percebesse, e era dele que
+  o site tirava a contagem exibida.
+- **`nome_legivel(slug)` / `fontes_legiveis(id)`** — a projeção `id → texto`, determinística.
+  O sentido importa: derivar id ← texto é ambíguo em obra de dois autores
+  ("Kotler-e-Keller" deriva `keller`, e o id diz `kotler`).
+- **`separar_fontes(texto)`** — quebra o campo respeitando vírgula **dentro de parênteses**.
+  `"Resolução CMN nº 4.893/2021 (redação vigente, atualizada em 2025)"` é UMA fonte; quebrar
+  por vírgula crua é o mesmo defeito que inflava o selo do site, e reproduzi-lo aqui trocaria
+  um contador errado por outro.
+- **`fontes_notebook:`** no frontmatter declara as leis que sobem ao notebook. Quando existe,
+  manda; sem ele, a heurística sugere. Adivinhação silenciosa pôs leis não declaradas em ~75
+  aprofundamentos do vault.
+
+### Corrigido
+
+- **A heurística de leis errava nos dois sentidos.** Falso negativo: o corpo escreve
+  `8.742` e o nome do arquivo tem `8742` — a comparação era de substring crua, e o ponto do
+  milhar quebrava o casamento. Falso positivo: `pnas-2004-texto-integral.pdf` tem **2004** como
+  primeiro número, então qualquer corpo que citasse o ano arrastava a PNAS inteira. Agora os
+  anos são descartados e os dígitos do corpo, normalizados.
+- **A mesma norma subia duas vezes** (`.md` e `.pdf` do mesmo arquivo). Medido: **9 pacotes**
+  do vault, um deles com 9 fontes que eram a nota + 4 leis × 2 containers. Agora é um container
+  por norma, e o `.md` vence — texto puro, menor, melhor ingestão.
+- **`validar_assuntos.py` passa a chamar as duas conferências.** `conferir_localizacoes`
+  existia desde a 0.4 e **nenhum script a invocava**; ligada, achou 13 aprofundamentos
+  multi-fonte com ponteiro só da primeira fonte. Ela só é cobrada de quem se declara de
+  **livro**: norma e material próprio não têm página, e cobrar de todos daria 42 falsos
+  positivos nos 177 aprofundamentos.
+
+### Notas
+
+- **O `fontes:` não é sobrescrito pelo derivado.** O texto informado vence quando é consistente
+  com o id; só na ausência é que se deriva. Medido: 53 dos 55 slugs do vault têm um único nome,
+  e esse nome carrega precisão que o slug não tem — `lei-8742` deriva "Lei 8.742", mas o texto
+  diz "Lei nº 8.742/1993". Trocar 53 nomes bons para consertar 2 divergentes seria piorar.
+- O `aprofundamento_id.py` é fonte de verdade com cópia sincronizada em `concurso-publica`;
+  a cópia foi atualizada na mesma PR, e a skill irmã recebeu bump de patch por isso.
+
 ## [0.9.0] - 2026-08-03
 
 ### Adicionado

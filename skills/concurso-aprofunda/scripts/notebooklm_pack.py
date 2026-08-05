@@ -94,25 +94,55 @@ def tem_placeholder(corpo: str) -> bool:
     return bool(re.search(r"\{[A-Z_]{3,}\}", corpo))
 
 
-def leis_relacionadas(corpo: str, leis_dir: Path | None) -> list[str]:
-    """Tenta casar leis citadas no corpo do assunto com PDFs/MDs em leis-baixadas."""
+# Números que sozinhos não identificam norma nenhuma: ano é o caso real e caro.
+# `pnas-2004-texto-integral.pdf` tem 2004 como PRIMEIRO grupo de 3-5 dígitos, então
+# qualquer corpo que citasse o ano arrastava a PNAS inteira para o notebook.
+_RE_ANO = re.compile(r"^(19|20)\d{2}$")
+
+
+def _numeros_de_norma(stem: str) -> list[str]:
+    """Os números do nome do arquivo que podem identificar uma norma, sem os anos."""
+    return [n for n in re.findall(r"\d{3,5}", stem) if not _RE_ANO.match(n)]
+
+
+def _corpo_tem_numero(corpo_digitos: str, numero: str) -> bool:
+    """O número aparece no corpo, ignorando a formatação de milhar.
+
+    `8.742` no texto e `8742` no nome do arquivo são a MESMA lei. A comparação
+    antiga era substring crua, então o ponto do milhar quebrava o casamento — e o
+    teste que existia escrevia "Lei 8742" sem ponto, mascarando o falso negativo.
+    """
+    return numero in corpo_digitos
+
+
+def leis_relacionadas(corpo: str, leis_dir: Path | None, fm: dict | None = None) -> list[str]:
+    """As leis a subir no notebook — declaradas, ou sugeridas pela heurística.
+
+    `fontes_notebook:` no frontmatter é a DECISÃO: quando existe, manda, e a
+    heurística nem roda. Sem ele, a heurística sugere — e quem chama deve ecoar o
+    que ela escolheu, porque adivinhação silenciosa foi o que pôs leis não
+    declaradas em ~75 aprofundamentos do vault.
+    """
+    declaradas = [x.strip() for x in ((fm or {}).get("fontes_notebook") or "").split(",")
+                  if x.strip()]
+    if declaradas:
+        return declaradas
     if not leis_dir or not leis_dir.exists():
         return []
-    achados = []
-    corpo_norm = slug(corpo)
-    for arq in list(leis_dir.glob("*.md")) + list(leis_dir.glob("*.pdf")):
-        # se o nome-base da lei (ex: lei-8742-1993-loas) aparece referenciado
-        base = slug(arq.stem)
-        # heurística leve: número da lei presente no corpo
-        num = re.search(r"(\d{3,5})", arq.stem)
-        if num and num.group(1) in corpo:
-            achados.append(arq.name)
-    # dedup mantendo ordem
-    vistos, out = set(), []
-    for a in achados:
-        if a not in vistos:
-            vistos.add(a); out.append(a)
-    return out
+    # o corpo sem separador de milhar: "Lei nº 8.742/1993" -> "...8742/1993..."
+    corpo_digitos = re.sub(r"(?<=\d)[.\s](?=\d)", "", corpo)
+    # Um container por norma: `.md` e `.pdf` do mesmo arquivo são o MESMO texto,
+    # não duas fontes. O `.md` vence — é texto puro, menor, e o modelo ingere
+    # melhor. Medido: 9 pacotes do vault subiam a norma duas vezes, e um deles
+    # mandava 9 fontes que eram a nota + 4 leis × 2 containers.
+    por_stem: dict[str, Path] = {}
+    for arq in sorted(list(leis_dir.glob("*.md")) + list(leis_dir.glob("*.pdf"))):
+        if not any(_corpo_tem_numero(corpo_digitos, n) for n in _numeros_de_norma(arq.stem)):
+            continue
+        atual = por_stem.get(arq.stem)
+        if atual is None or (atual.suffix == ".pdf" and arq.suffix == ".md"):
+            por_stem[arq.stem] = arq
+    return [p.name for p in por_stem.values()]
 
 
 def clausula_fonte(nota: str) -> str:
@@ -286,7 +316,7 @@ def gerar_para_pasta(pasta: Path, subdir: Path, *, concurso: str = "", materia: 
                 "pasta": f"{subdir.name}/{pasta.name}"}
 
     assunto = fm.get("title", subdir.name)
-    leis = leis_relacionadas(fm.get("_corpo", ""), leis_dir)
+    leis = leis_relacionadas(fm.get("_corpo", ""), leis_dir, fm=fm)
     base = assunto_md.stem          # nome único do aprofundamento
     nivel = (fm.get("nivel") or "padrao").strip()
     # a nota do vault é a âncora dos prompts; o livro NUNCA entra neles

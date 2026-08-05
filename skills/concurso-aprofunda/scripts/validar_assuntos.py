@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import aprofundamento_id as aid  # noqa: E402
 import notebooklm_pack as nlp  # noqa: E402
 
 # As seções que o site e o fluxo dependem de encontrar. Deliberadamente curta:
@@ -55,6 +56,42 @@ def faltantes(md: Path) -> list[str]:
     cabecalhos = re.findall(r"^##\s+(.+)$", txt, re.MULTILINE)
     achados = " · ".join(cabecalhos)
     return [nome for nome in OBRIGATORIAS if nome not in achados]
+
+
+def _frontmatter(md: Path) -> dict:
+    m = re.match(r"---\n(.*?)\n---\n", md.read_text(encoding="utf-8"), re.S)
+    out = {}
+    if m:
+        for linha in m.group(1).split("\n"):
+            if ":" in linha:
+                k, v = linha.split(":", 1)
+                out[k.strip()] = v.strip().strip('"')
+    return out
+
+
+def incoerencias(md: Path, pasta: Path) -> list[str]:
+    """Avisos de frontmatter que não bate com a identidade da pasta.
+
+    Duas conferências, ambas já implementadas na convenção — aqui elas
+    finalmente são CHAMADAS. `conferir_localizacoes` existia desde a 0.4 e
+    nenhum script a invocava; `conferir_fontes` nasceu porque o campo `fontes:`
+    podia divergir do id sem que nada percebesse, e era dele que o site tirava a
+    contagem exibida (selo inflado em 15 dos 29 assuntos multi-nível do vault).
+
+    A comparação é de CONTAGEM, nunca de re-derivação do slug: `slug_fonte` sobre
+    "Lei Federal nº 11.340/2006 (Lei Maria da Penha)" devolve `penha`, não
+    `lei-11340`, e re-derivar acusaria 8 falsos positivos entre os 55 slugs.
+    """
+    fm = _frontmatter(md)
+    avisos = aid.conferir_fontes(fm, pasta.name)
+    # Localização só se cobra de quem se declara de LIVRO. Norma e material
+    # próprio não têm página: a fonte é a própria norma (`fonte_norma:`) ou o
+    # texto escrito do zero. Cobrar de todos daria 42 falsos positivos nos 177
+    # aprofundamentos do vault — e validador que grita onde não há defeito é
+    # validador que se aprende a ignorar.
+    if aid.localizacoes(fm):
+        avisos += aid.conferir_localizacoes(fm, pasta.name)
+    return avisos
 
 
 def secao_de_tarefas(md: Path, slug_assunto: str) -> str:
@@ -111,7 +148,8 @@ def varrer(raiz: Path) -> list[tuple[Path, str, list[str]]]:
                 md = nlp.arquivo_principal(pasta)
                 if md is None:
                     continue
-                achados.append((md, assunto_dir.name, faltantes(md)))
+                achados.append((md, assunto_dir.name,
+                                faltantes(md) + incoerencias(md, pasta)))
     return achados
 
 

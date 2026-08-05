@@ -366,7 +366,9 @@ def test_fix_notebooklm_sem_leis_dir_nao_apaga_as_leis_da_lista_de_fontes():
         (pasta / "bpc--padrao--lei-8742--X_2026.md").write_text(
             '---\ntitle: "BPC"\naprofundamento: "padrao--lei-8742"\nnivel: padrao\n'
             'fontes: "Lei 8.742/1993"\nstatus: concluido\n---\n'
-            "O art. 20 da Lei 8742 define o BPC.\n", encoding="utf-8")
+            # com o ponto do milhar, que é como se escreve de verdade: escrever
+            # "Lei 8742" aqui mascarava o falso negativo da heurística
+            "O art. 20 da Lei nº 8.742/1993 define o BPC.\n", encoding="utf-8")
         cmd = [sys.executable, str(ROOT / "fix_notebooklm_packs.py"),
                "--assuntos-dir", str(d / "assuntos"), "--concurso", "X_2026",
                "--materia", "P", "--leis-dir", str(leis)]
@@ -1823,6 +1825,109 @@ def test_link_dos_flashcards_usa_o_arquivo_que_existe():
             "cartões", encoding="utf-8")
         bloco = va.secao_de_tarefas(md, "crase")
         assert "[[flashcards-crase--padrao--pestana--TESTE_2026]]" in bloco
+
+
+# ---------------- fontes: id × frontmatter × notebook ---------------- #
+def test_nome_legivel_reproduz_o_id():
+    """O `fontes:` tem de ser projeção do id, nunca o contrário.
+
+    Medido no vault: 111 dos 177 `fontes:` reproduzem o id ao passar por
+    `slug_fonte`, e 66 NÃO — porque `"…Kotler-e-Keller-14ed…"` deriva `keller`
+    (último token significativo) enquanto o id diz `kotler`. Derivar id ← texto é
+    ambíguo em obra de dois autores; texto ← id é determinístico.
+    """
+    import aprofundamento_id as aid
+    for slug_fonte_esperado in ("kotler", "pestana", "lei-8742", "res-cnas-109"):
+        legivel = aid.nome_legivel(slug_fonte_esperado)
+        assert legivel, f"nome vazio para {slug_fonte_esperado}"
+        assert aid.slug(legivel).startswith(slug_fonte_esperado.split("-")[0]), \
+            f"{slug_fonte_esperado} -> {legivel!r} não volta ao slug"
+
+
+def test_conferir_fontes_acusa_divergencia_com_o_id():
+    """Espelho de `conferir_localizacoes`, para o par (id × campo `fontes:`).
+
+    Sem isto, o campo pode dizer uma coisa e o id outra sem que nada perceba — e
+    é do campo que o site tirava a contagem exibida.
+    """
+    import aprofundamento_id as aid
+    assert aid.conferir_fontes({"fontes": "Pestana, Rosenthal"},
+                               "padrao--pestana+rosenthal") == []
+    assert aid.conferir_fontes({"fontes": "Pestana"},
+                               "padrao--pestana+rosenthal"), "1 no campo, 2 no id: devia acusar"
+    assert aid.conferir_fontes({"fontes": "Pestana, Rosenthal, Abreu"},
+                               "padrao--pestana+rosenthal"), "3 no campo, 2 no id: devia acusar"
+    # material próprio: o template grava texto fixo, e isso não é divergência
+    assert aid.conferir_fontes({"fontes": "material próprio"}, "padrao--proprio") == []
+    # vírgula DENTRO de parênteses não separa fonte — é o mesmo defeito que
+    # inflava o selo do site, e reproduzi-lo aqui seria trocar um contador
+    # errado por outro. Caso real do vault (`seguranca-cibernetica`):
+    assert aid.conferir_fontes(
+        {"fontes": "Resolução CMN nº 4.893/2021 (redação vigente, atualizada em 2025)"},
+        "padrao--res-cmn-4893") == [], "vírgula em parênteses virou duas fontes"
+
+
+def test_lei_casa_mesmo_com_numero_formatado_no_corpo():
+    """`8.742` no corpo e `8742` no nome do arquivo são a MESMA lei.
+
+    A heurística casava substring crua, então o ponto do milhar quebrava o
+    casamento — e o teste que existia escrevia "Lei 8742" sem ponto, mascarando
+    o falso negativo. Escrever o número formatado é o normal em texto.
+    """
+    import notebooklm_pack as pack
+    with tempfile.TemporaryDirectory() as d:
+        leis = Path(d) / "leis"
+        leis.mkdir()
+        (leis / "lei-8742-1993-loas.pdf").write_bytes(b"%PDF-1.4\n")
+        achadas = pack.leis_relacionadas("O art. 20 da Lei nº 8.742/1993 define o BPC.", leis)
+        assert "lei-8742-1993-loas.pdf" in achadas, achadas
+
+
+def test_ano_no_nome_do_arquivo_nao_casa_sozinho():
+    """Arquivo cujo primeiro número É o ano casa com qualquer texto que cite o ano.
+
+    `pnas-2004-texto-integral.pdf` existe no vault e seu primeiro grupo de 3–5
+    dígitos é **2004** — então qualquer corpo que mencione o ano 2004, ainda que
+    falando de outra coisa, arrastava a PNAS inteira para o notebook.
+    """
+    import notebooklm_pack as pack
+    with tempfile.TemporaryDirectory() as d:
+        leis = Path(d) / "leis"
+        leis.mkdir()
+        (leis / "pnas-2004-texto-integral.pdf").write_bytes(b"%PDF-1.4\n")
+        achadas = pack.leis_relacionadas(
+            "A Constituição de 1988 e o cenário de 2004 mudaram o desenho.", leis)
+        assert achadas == [], f"casou só pelo ano: {achadas}"
+
+
+def test_mesma_norma_em_md_e_pdf_entra_uma_vez_so():
+    """`.md` e `.pdf` da mesma norma são o mesmo texto, não duas fontes.
+
+    Medido: 9 pacotes do vault sobem a mesma norma duas vezes — um deles manda 9
+    fontes que são a nota + 4 leis × 2 containers. O `.md` vence: é texto puro,
+    menor, e o modelo ingere melhor.
+    """
+    import notebooklm_pack as pack
+    with tempfile.TemporaryDirectory() as d:
+        leis = Path(d) / "leis"
+        leis.mkdir()
+        (leis / "lei-13709-2018-lgpd.md").write_text("# LGPD\n", encoding="utf-8")
+        (leis / "lei-13709-2018-lgpd.pdf").write_bytes(b"%PDF-1.4\n")
+        achadas = pack.leis_relacionadas("Conforme a Lei nº 13.709/2018 (LGPD).", leis)
+        assert achadas == ["lei-13709-2018-lgpd.md"], achadas
+
+
+def test_fontes_notebook_declarado_vence_a_heuristica():
+    """Declaração explícita substitui adivinhação — a heurística vira sugestão."""
+    import notebooklm_pack as pack
+    with tempfile.TemporaryDirectory() as d:
+        leis = Path(d) / "leis"
+        leis.mkdir()
+        for n in ("lei-8742-1993-loas.pdf", "resolucao-cnas-109-2009-tipificacao.pdf"):
+            (leis / n).write_bytes(b"%PDF-1.4\n")
+        fm = {"fontes_notebook": "resolucao-cnas-109-2009-tipificacao.pdf"}
+        achadas = pack.leis_relacionadas("Lei nº 8.742/1993 e mais texto.", leis, fm=fm)
+        assert achadas == ["resolucao-cnas-109-2009-tipificacao.pdf"], achadas
 
 
 def test_validador_falha_quando_nao_acha_nada():
