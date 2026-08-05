@@ -2,6 +2,33 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.2.0] - 2026-08-05
+
+### Adicionado
+
+- **O validador confere a aritmética da nota** — o check 2 que o docstring anunciava e que
+  **nunca existiu no código**. Ele recalcula a nota a partir das contagens declaradas, pelo
+  critério da própria skill (RESPONDE 1,0 · PARCIAL 0,5 · NÃO RESPONDE 0,2), e compara com a
+  nota escrita **por nível**; e confere que `respondidas + parciais + não respondidas + sem
+  material` fecha com `questoes_aferidas` do frontmatter. Sem ele, a aritmética da primeira
+  aferição de Vendas e Negociação (13,0+13,2+13,2 = 39,4 e 39,4/45 = 8,76) foi conferida à mão.
+- **`SEM MATERIAL` fica fora do denominador**, como manda o critério: 10 respondidas e 5 sem
+  material dá **10,0**, não 6,7. Incluí-lo puniria o texto por uma lacuna de planejamento — e
+  há teste travando isso.
+- A mensagem **mostra a conta**: `35·1,0 + 8·0,5 + 2·0,2 = 39,4 sobre 45 dá 8,76, mas o
+  documento diz 9,20`. Erro de aritmética sem a conta ao lado obriga a refazê-la para saber
+  quem está errado.
+
+### Notas
+
+- **O check se cala onde não há contagem**, em vez de falhar alto. Onde não há números não há
+  aritmética a conferir, e o documento incompleto já é pego pelo marcador `···` do check 1.
+  Isso mantém o validador utilizável nas variações reais de formato — a tabela de Vendas e
+  Negociação tem **uma** coluna de nível e uma linha `Sem material`; a de Língua Portuguesa
+  tem **duas** colunas e nenhuma.
+- Verificado contra os dois documentos reais do vault (passam) e contra cópias adulteradas na
+  nota e numa contagem (pegos, com a conta na mensagem). 22 → 26 testes.
+
 ## [0.1.1] - 2026-08-05
 
 ### Corrigido
