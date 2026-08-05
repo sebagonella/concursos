@@ -10,6 +10,7 @@ Skills do [Claude Code](https://claude.com/claude-code) que automatizam a prepar
 | **`concurso-aprofunda`** | 2 | Do **livro de referência** → um `.md` por assunto (resumo próprio + páginas do livro + citações curtas), flashcards (Obsidian/Anki) e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM. Aceita **várias fontes** por aprofundamento, e sabe **acrescentar uma fonte ao que já está escrito** |
 | **`concurso-publica`** | 3 | Do **vault** → site estático navegável com **todo** o conteúdo do concurso, espelhando a organização em COMUM e cargos: edital, cronograma, mapas de matéria, leis, histórico, sinergia, discursiva e o aprofundamento — com o podcast tocando, o vídeo rodando, flashcards como quiz e os prompts do NotebookLM a um toque |
 | **`concurso-notebooklm`** | 3+ | Executa os pacotes NotebookLM que a Etapa 2 deixou prontos: cria o notebook, sobe as fontes, gera as mídias e salva os arquivos com o nome que o site reconhece. **Opcional** — o modo manual continua valendo, e a biblioteca usada não é oficial |
+| **`concurso-afere`** | 5 | Mede o material já aprofundado contra a **prova real** (caderno + gabarito oficial): quantas questões o conteúdo responde, por nível `padrao`/`detalhado`, onde falha e o que corrigir. Afere uma matéria, várias ou todas as de um cargo |
 
 Cada etapa consome a saída da anterior.
 
@@ -97,6 +98,21 @@ flowchart TB
     site --> D
     D --> nav
 
+    prova["📄 <b>Prova real</b><br/>caderno + gabarito oficial<br/><i>versão A/B/C · caderno 1-4</i>"]
+
+    subgraph E5["<b>Etapa 5 · concurso-afere</b> — a prova mede o material"]
+        direction TB
+        af1["🔎 <code>prova_id</code> confere <b>versão E cargo</b><br/><i>par errado devolve resposta plausível e errada</i>"]
+        af2["📊 faixa pela <b>capa</b> · gabarito do <b>caderno certo</b><br/>matéria da prova ↔ matéria do vault"]
+        af3["⚖️ <b>o agente julga</b> questão a questão<br/>✅ responde · ⚠️ parcial · ❌ não responde · ⬜ sem material"]
+        af1 --> af2 --> af3
+    end
+
+    prova --> E5
+    vaultC --> E5
+    E5 --> afout["🎯 <b>Aferição no vault</b><br/>nota por nível e por prova · lacunas nomeadas<br/><i>⬜ sem material fica FORA do denominador</i>"]
+    afout -.->|"o que corrigir"| E2
+
     ret["♻️ <b>Edital saiu ou foi retificado</b><br/><code>concurso-prep --reconciliar</code> · diff_editais compara o programa<br/>V1-PREVISTO → V2-OFICIAL → V3-RETIFICADO, <b>lado a lado</b><br/><i>nunca sobrescreve: preserva o progresso já marcado</i>"]
     vaultA -.-> ret
     ret -.-> vaultA
@@ -112,8 +128,9 @@ flowchart TB
     class vaultA,vaultB,vaultC vaultBox
     class n1,n2,n3 manual
     class m1,m2,m3 auto
-    class site,nav saida
+    class site,nav,afout saida
     class ret recon
+    class prova fonte
 ```
 
 Fonte em [`docs/fluxo-concurso.mmd`](docs/fluxo-concurso.mmd), que traz também as notas
@@ -232,6 +249,7 @@ Cada skill tem a mesma anatomia: `SKILL.md` é o orquestrador que o Claude execu
 | `concurso-aprofunda` | [`SKILL.md`](skills/concurso-aprofunda/SKILL.md) | [`README.md`](skills/concurso-aprofunda/README.md) | [`CHANGELOG.md`](skills/concurso-aprofunda/CHANGELOG.md) |
 | `concurso-publica` | [`SKILL.md`](skills/concurso-publica/SKILL.md) | [`README.md`](skills/concurso-publica/README.md) | [`CHANGELOG.md`](skills/concurso-publica/CHANGELOG.md) |
 | `concurso-notebooklm` | [`SKILL.md`](skills/concurso-notebooklm/SKILL.md) | [`README.md`](skills/concurso-notebooklm/README.md) | [`CHANGELOG.md`](skills/concurso-notebooklm/CHANGELOG.md) |
+| `concurso-afere` | [`SKILL.md`](skills/concurso-afere/SKILL.md) | [`README.md`](skills/concurso-afere/README.md) | [`CHANGELOG.md`](skills/concurso-afere/CHANGELOG.md) |
 
 ### Subagents da Etapa 1
 

@@ -11,6 +11,7 @@ opcional sobre a segunda:
 2. **`concurso-aprofunda`** — o livro de referência vira assunto aprofundado, com flashcards e o pacote do NotebookLM.
 3. **`concurso-publica`** — o vault vira site estático, servido por Docker na rede doméstica.
 4. **`concurso-notebooklm`** — camada **opcional** que executa os pacotes do NotebookLM. Ver "NotebookLM manual, automação como camada opcional".
+5. **`concurso-afere`** — mede o material contra a **prova real**. É a única etapa que olha para trás: com o caderno e o gabarito oficial, apura quantas questões o conteúdo escrito responde, compara os níveis `padrao` e `detalhado` e aponta o que corrigir. O script prepara o determinístico (versão do caderno, faixa de questões, gabarito, casamento de matéria) e **o agente julga** — nota que script inventa é nota que não vale.
 
 ## O fluxo completo, do edital ao site no ar
 
