@@ -143,7 +143,7 @@ Google e quebra sem aviso. Sem a biblioteca, o pacote gerado aqui continua compl
 O histórico de versões vive no [CHANGELOG.md](CHANGELOG.md) — antes havia um roadmap
 aqui que repetia e contradizia o changelog.
 
-Versão atual: **0.9.0** (`validar_assuntos.py`: as seções do template deixam de ser opcionais — 25 assuntos do vault foram escritos com estrutura própria e perderam a seção `📝 Para estudar depois`, onde vivem 100% das tarefas, e cinco matérias inteiras apareceram no site sem tarefa nenhuma sem erro em lugar nenhum). Na 0.8.0: (ampliar um aprofundamento já escrito com uma fonte nova —
+Versão atual: **0.10.0** (o campo `fontes:` deixa de poder divergir do id em silêncio — `conferir_fontes` acusa a divergência e `validar_assuntos.py` a barra, junto com `conferir_localizacoes`, que existia desde a 0.4 e **nenhum script chamava**; e as leis do pacote NotebookLM passam a poder ser **declaradas** em `fontes_notebook:`, com a heurística corrigida onde ela errava nos dois sentidos) (`validar_assuntos.py`: as seções do template deixam de ser opcionais — 25 assuntos do vault foram escritos com estrutura própria e perderam a seção `📝 Para estudar depois`, onde vivem 100% das tarefas, e cinco matérias inteiras apareceram no site sem tarefa nenhuma sem erro em lugar nenhum). Na 0.8.0: (ampliar um aprofundamento já escrito com uma fonte nova —
 `padrao--pestana` vira `padrao--pestana+rosenthal`, levando junto mídia, flashcards,
 wikilinks e o notebook já criado; e localização por fonte, com `localizacao_2:` para a
 segunda). Na 0.7.2: correção de documentação — o `SKILL.md` ainda afirmava que a

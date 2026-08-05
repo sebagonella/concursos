@@ -31,7 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import (  # noqa: E402
     slug, slug_fonte, slug_suspeito, id_aprofundamento, nome_base,
-    chave_localizacao,
+    chave_localizacao, parse_id, fontes_legiveis,
 )
 
 PADRAO_TEMPLATE = Path(__file__).resolve().parents[1] / "assets/templates/assunto.md.tpl"
@@ -286,7 +286,17 @@ def main():
             "SLUG_ASSUNTO": base,
             "APROFUNDAMENTO": aprof_id,
             "NIVEL": args.nivel,
-            "FONTES": ", ".join(fontes) if fontes else livro,
+            # O texto informado VENCE quando é consistente com o id (mesma
+            # contagem); só se não houver é que se deriva do id.
+            #
+            # Derivar sempre degradaria o dado: medido no vault, 53 dos 55 slugs
+            # têm um único nome, e esse nome carrega precisão que o slug não tem
+            # — `lei-8742` deriva "Lei 8.742", mas o texto diz "Lei nº 8.742/1993".
+            # Trocar 53 nomes bons para consertar 2 divergentes seria piorar.
+            # A consistência é garantida pelo validador, não por sobrescrita.
+            "FONTES": (", ".join(fontes)
+                       if len(fontes) == len(parse_id(aprof_id)["fontes"])
+                       else ", ".join(fontes_legiveis(aprof_id))) or livro,
             # O vínculo com o plano do edital, montado como YAML aqui e não no
             # template: sem tópico o campo tem de sair `[]`, não `[""]` — lista
             # vazia é "ainda não vinculado", e uma lista com string vazia é lixo

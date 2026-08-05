@@ -2,6 +2,18 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.21.1] - 2026-08-05
+
+### Alterado
+
+- Cópia de `aprofundamento_id.py` **sincronizada** com a `concurso-aprofunda` 0.10.0
+  (`separar_fontes`, `nome_legivel`, `fontes_legiveis`, `conferir_fontes`). O módulo é fonte de
+  verdade lá e cópia byte-idêntica aqui, travada por `test_copia_do_aprofundamento_id_nao_divergiu`
+  — mudar só o original quebraria o CI **na suíte desta skill**, porque o `test-all.sh` roda as
+  nove do mesmo checkout.
+- **Sem mudança de comportamento do site**: a contagem de fontes continua saindo do texto livre
+  nesta versão. Passa a sair do id na 0.22.0.
+
 ## [0.21.0] - 2026-08-05
 
 ### Corrigido
