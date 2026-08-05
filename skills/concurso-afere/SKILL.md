@@ -1,6 +1,6 @@
 ---
 name: concurso-afere
-version: 0.1.0
+version: 0.1.1
 description: >
   Use quando o usuário tiver a PROVA REAL de um concurso (PDF do caderno + gabarito
   oficial) e quiser medir o material já aprofundado no vault contra ela — descobrindo

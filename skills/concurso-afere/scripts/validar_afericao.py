@@ -7,8 +7,8 @@ Cinco checagens, cada uma nascida de um defeito real:
    Publicar com o marcador seria nota fantasma.
 2. **Notas por prova somam ao consolidado.** Se as parciais não fecham com o total,
    um dos dois está errado e não dá para saber qual.
-3. **Formatação única da nota.** O mesmo cálculo saiu 39,4 numa tabela e 39,5 noutra
-   do mesmo documento.
+3. **Formatação única da nota.** O mesmo cálculo saiu **39,4** numa tabela e **39,45**
+   noutra do mesmo documento — um é o arredondamento do outro.
 4. **N declarado.** Com 1 prova a conclusão desta sessão foi "empate técnico"; com 3,
    inverteu. Afirmação sem amostra declarada é afirmação sem lastro.
 5. **Superlativo sem amostra.** "prova que", "comprova", "confirma" exigem N ≥ 2 provas.
@@ -60,20 +60,41 @@ def conferir(md: Path) -> list[str]:
         erros.append("frontmatter sem `questoes_aferidas`")
 
     # 3: mesma grandeza formatada de dois jeitos.
-    # Agrupar por valor arredondado NÃO funciona: 39,4 e 39,45 caem em chaves
-    # diferentes (39.4 e 39.5) justamente porque uma delas já é o arredondamento da
-    # outra — e esse é o par que se quer pegar. O critério é a PROXIMIDADE: dois
-    # textos diferentes para valores a menos de meia casa decimal um do outro são o
-    # mesmo número escrito de dois jeitos.
-    # A comparação usa Decimal: em float, 39,45 − 39,4 dá 0.050000000000004 e escapa
-    # de um `<= 0.05` — o par que se quer pegar passaria batido por epsilon.
+    #
+    # O critério é a RELAÇÃO DE ARREDONDAMENTO, não a proximidade absoluta. Proximidade
+    # confunde duas coisas diferentes: "o mesmo número escrito de dois jeitos" (o
+    # defeito) e "dois números legitimamente vizinhos" (o normal). Numa matéria estável
+    # as notas por prova caem naturalmente a menos de 0,05 umas das outras — o `<= 0,05`
+    # recusava a aferição de Vendas e Negociação por ter 8,76 (consolidado) e 8,80
+    # (provas B e C), que são valores distintos e ambos corretos.
+    #
+    # Só há defeito quando as PRECISÕES diferem e o menos preciso é um arredondamento
+    # válido do mais preciso. A comparação é por desigualdade, não por `round()`, porque
+    # 39,45 arredonda para 39,4 (HALF_EVEN) ou 39,5 (HALF_UP) e os DOIS são o defeito:
+    # fixar um modo deixaria o outro passar.
+    #
+    # Em Decimal, não em float: 39,45 − 39,4 dá 0.050000000000004 em float e escaparia
+    # do limiar por epsilon — o par que se quer pegar passaria batido.
+    #
+    # Fica de fora, por construção: dois valores de MESMA precisão, por mais próximos
+    # que estejam (39,4 × 39,5). Não há como pegá-los sem recusar 13,0 × 13,2, que é
+    # legítimo — e o incidente que originou esta regra era 39,4 × 39,45.
     from decimal import Decimal
+
+    def casas(s: str) -> int:
+        return len(s.split(",")[1])
+
     brutos = sorted(set(re.findall(r"\b\d+,\d+\b", txt)))
     for i, a in enumerate(brutos):
-        va = Decimal(a.replace(",", "."))
         for b in brutos[i + 1:]:
-            if abs(va - Decimal(b.replace(",", "."))) <= Decimal("0.05"):
-                erros.append(f"mesmo valor com formatações diferentes: {a} e {b}")
+            if casas(a) == casas(b):
+                continue
+            grosso, fino = (a, b) if casas(a) < casas(b) else (b, a)
+            limiar = Decimal(5) * Decimal(10) ** (-casas(grosso) - 1)
+            if abs(Decimal(fino.replace(",", ".")) -
+                   Decimal(grosso.replace(",", "."))) <= limiar:
+                erros.append(f"mesmo valor com formatações diferentes: "
+                             f"{grosso} parece o arredondamento de {fino}")
 
     # 5: superlativo exige amostra
     try:
