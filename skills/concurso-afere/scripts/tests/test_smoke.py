@@ -346,6 +346,83 @@ def test_validador_aceita_notas_proximas_de_mesma_precisao():
                "aceita notas vizinhas de mesma precisão", validar_afericao.conferir(p))
 
 
+TAB = ("| | `padrao` |\n|---|---:|\n"
+       "| Questões plenamente respondidas | **{r}** / {t} |\n"
+       "| Respondidas em parte | {p} |\n"
+       "| **Não** respondidas | {n} |\n"
+       "| **Sem material** (fora do denominador) | {s} |\n"
+       "| **Nota** | **{nota}** / 10 |\n")
+
+
+def test_validador_recalcula_a_nota_das_contagens():
+    """A nota declarada tem de sair das contagens declaradas.
+
+    O docstring anunciava um check 2 ("notas por prova somam ao consolidado") que
+    NUNCA existiu no código — em Vendas e Negociação a aritmética (13,0+13,2+13,2
+    = 39,4 e 39,4/45 = 8,76) foi conferida à mão. Aqui ele existe, e mais forte:
+    recalcula a nota a partir de RESPONDE/PARCIAL/NÃO RESPONDE pelo critério
+    declarado da própria skill, em vez de comparar somas parciais.
+    """
+    cab45 = CAB.replace("questoes_aferidas: 30", "questoes_aferidas: 45")
+    with tempfile.TemporaryDirectory() as d:
+        # 35*1,0 + 8*0,5 + 2*0,2 = 39,4 sobre 45 => 8,76 (o caso real de Vendas)
+        p = _af(cab45 + TAB.format(r=35, p=8, n=2, s=0, t=45, nota="8,76"), Path(d))
+        checar(validar_afericao.conferir(p) == [],
+               "aceita nota coerente com as contagens", validar_afericao.conferir(p))
+
+        p = _af(cab45 + TAB.format(r=35, p=8, n=2, s=0, t=45, nota="9,10"), Path(d))
+        erros = validar_afericao.conferir(p)
+        checar(any("não confere com as contagens" in e for e in erros),
+               "pega nota que não sai das contagens", erros)
+
+
+def test_validador_pega_contagem_que_nao_fecha_com_a_amostra():
+    """35 + 8 + 2 + 0 tem de dar as 45 questões declaradas no frontmatter."""
+    with tempfile.TemporaryDirectory() as d:
+        p = _af(CAB.replace("questoes_aferidas: 30", "questoes_aferidas: 45")
+                + TAB.format(r=35, p=8, n=1, s=0, t=45, nota="8,73"), Path(d))
+        erros = validar_afericao.conferir(p)
+        checar(any("não somam" in e for e in erros),
+               "pega contagem que não fecha com questoes_aferidas", erros)
+
+
+def test_validador_ignora_sem_material_no_denominador():
+    """SEM MATERIAL sai do denominador — é falha de cobertura, não de profundidade.
+
+    Com 10 respondidas, 0 parciais, 0 não respondidas e 5 sem material, a nota é
+    10,0 (10/10), não 6,7 (10/15). Se o denominador incluísse o sem-material, a
+    skill puniria o texto por uma lacuna de planejamento — que é exatamente o que
+    o critério declarado recusa fazer.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        p = _af(CAB.replace("questoes_aferidas: 30", "questoes_aferidas: 15")
+                + TAB.format(r=10, p=0, n=0, s=5, t=15, nota="10,00"), Path(d))
+        checar(validar_afericao.conferir(p) == [],
+               "sem material fora do denominador", validar_afericao.conferir(p))
+
+
+def test_validador_confere_cada_nivel_da_tabela():
+    """Com dois níveis, cada coluna é uma nota — e cada uma tem de fechar sozinha.
+
+    Reproduz a tabela real de Língua Portuguesa: `padrao` 28/2/0 => 9,67 e
+    `detalhado` 25/1/4 => 8,77. Estragar SÓ a segunda coluna tem de ser pego.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = ("| | `padrao` | `detalhado` |\n|---|---:|---:|\n"
+                "| Questões plenamente respondidas | **28** / 30 | 25 / 30 |\n"
+                "| Respondidas em parte | 2 | 1 |\n"
+                "| **Não** respondidas | **0** | **4** |\n"
+                "| **Nota** | **9,67** / 10 | **{}** / 10 |\n")
+        p = _af(CAB + base.format("8,77"), Path(d))
+        checar(validar_afericao.conferir(p) == [],
+               "aceita as duas colunas corretas", validar_afericao.conferir(p))
+
+        p = _af(CAB + base.format("9,77"), Path(d))
+        erros = validar_afericao.conferir(p)
+        checar(any("detalhado" in e and "não confere" in e for e in erros),
+               "pega o nível errado, nomeando a coluna", erros)
+
+
 def test_validador_exige_amostra_declarada():
     with tempfile.TemporaryDirectory() as d:
         p = _af("---\nquestoes_aferidas: 10\n---\n\ntexto\n", Path(d))

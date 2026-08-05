@@ -5,8 +5,10 @@ Cinco checagens, cada uma nascida de um defeito real:
 
 1. **Veredicto em branco.** O arcabouço sai com `···` onde o agente precisa julgar.
    Publicar com o marcador seria nota fantasma.
-2. **Notas por prova somam ao consolidado.** Se as parciais não fecham com o total,
-   um dos dois está errado e não dá para saber qual.
+2. **A nota sai das contagens.** Recalcula RESPONDE/PARCIAL/NÃO RESPONDE pelo critério
+   declarado da própria skill e compara com a nota escrita, por nível; e confere que as
+   contagens somam as `questoes_aferidas` do frontmatter. `SEM MATERIAL` fica fora do
+   denominador, como manda o critério.
 3. **Formatação única da nota.** O mesmo cálculo saiu **39,4** numa tabela e **39,45**
    noutra do mesmo documento — um é o arredondamento do outro.
 4. **N declarado.** Com 1 prova a conclusão desta sessão foi "empate técnico"; com 3,
@@ -21,6 +23,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 VAZIO = "···"
@@ -44,6 +47,107 @@ def numeros_pt(s: str) -> list[float]:
     return [float(x.replace(",", ".")) for x in re.findall(r"\b\d+,\d+\b", s)]
 
 
+# Peso de cada veredicto, na ordem em que a tabela de Resultado os lista. É o
+# critério declarado no próprio documento: RESPONDE 1,0 · PARCIAL 0,5 · NÃO
+# RESPONDE 0,2 (esperança do chute em 5 alternativas).
+PESOS = {"resp": Decimal("1.0"), "parc": Decimal("0.5"), "nao": Decimal("0.2")}
+
+_LINHAS = (
+    ("resp", re.compile(r"quest[õo]es?\s+plenamente\s+respondidas")),
+    ("parc", re.compile(r"respondidas?\s+em\s+parte")),
+    ("nao", re.compile(r"^n[ãa]o\s+respondidas")),
+    ("sem", re.compile(r"^sem\s+material")),
+    ("nota", re.compile(r"^nota$")),
+)
+
+
+def _celulas(linha: str) -> list[str]:
+    return [c.strip() for c in linha.strip().strip("|").split("|")]
+
+
+def _limpo(txt: str) -> str:
+    """Rótulo sem markdown, sem parênteses explicativos e em minúsculas."""
+    txt = re.sub(r"\*+|`", "", txt)
+    txt = re.sub(r"\(.*?\)", "", txt)
+    return " ".join(txt.split()).strip().lower()
+
+
+def _primeiro_numero(cel: str, decimal: bool) -> Decimal | None:
+    """O primeiro número da célula. `**35** / 45` é 35; `**8,76** / 10` é 8,76."""
+    padrao = r"\d+,\d+" if decimal else r"\d+"
+    m = re.search(padrao, re.sub(r"\*+", "", cel))
+    return Decimal(m.group(0).replace(",", ".")) if m else None
+
+
+def conferir_aritmetica(txt: str, questoes: int | None) -> list[str]:
+    """A nota declarada tem de sair das contagens declaradas.
+
+    Não basta o agente somar certo uma vez: o documento é reescrito à mão, e a
+    tabela de Resultado é o único lugar onde nota e contagens convivem. Aqui a
+    nota é RECALCULADA pelo critério da skill e comparada com a escrita.
+
+    Onde não há contagem não há aritmética a conferir, e o check se cala — o
+    documento incompleto já é pego pelo marcador `···` do check 1. Isso mantém o
+    validador utilizável em variações de formato, que existem: a tabela de Vendas
+    e Negociação tem uma coluna de nível e uma linha `Sem material`; a de Língua
+    Portuguesa tem duas colunas e nenhuma.
+    """
+    achado: dict[str, list[str]] = {}
+    for linha in txt.split("\n"):
+        if not linha.lstrip().startswith("|"):
+            continue
+        cels = _celulas(linha)
+        if len(cels) < 2:
+            continue
+        rot = _limpo(cels[0])
+        for chave, padrao in _LINHAS:
+            if padrao.search(rot) and chave not in achado:
+                achado[chave] = cels[1:]
+                break
+
+    if not all(k in achado for k in ("resp", "parc", "nao", "nota")):
+        return []
+
+    erros: list[str] = []
+    n_niveis = len(achado["nota"])
+    rotulos = [f"nível {i + 1}" for i in range(n_niveis)]
+    # nomeia a coluna quando o cabeçalho da tabela traz os níveis em crase
+    cab = re.search(r"^\|[^\n]*`([^`]+)`[^\n]*\|$", txt, re.M)
+    if cab:
+        nomes = re.findall(r"`([^`]+)`", cab.group(0))
+        if len(nomes) == n_niveis:
+            rotulos = nomes
+
+    for i in range(n_niveis):
+        def val(chave: str, dec: bool = False) -> Decimal | None:
+            col = achado.get(chave, [])
+            return _primeiro_numero(col[i], dec) if i < len(col) else None
+
+        resp, parc, nao = val("resp"), val("parc"), val("nao")
+        nota = val("nota", dec=True)
+        if None in (resp, parc, nao) or nota is None:
+            continue
+        sem = val("sem") or Decimal(0)
+
+        denom = resp + parc + nao
+        if denom == 0:
+            continue
+        pontos = resp * PESOS["resp"] + parc * PESOS["parc"] + nao * PESOS["nao"]
+        esperada = (pontos / denom * 10).quantize(Decimal("0.01"), ROUND_HALF_UP)
+        if abs(esperada - nota) > Decimal("0.01"):
+            erros.append(
+                f"nota de `{rotulos[i]}` não confere com as contagens: "
+                f"{resp}·1,0 + {parc}·0,5 + {nao}·0,2 = {pontos} sobre {denom} "
+                f"dá {esperada}, mas o documento diz {nota}".replace(".", ","))
+
+        if questoes is not None and denom + sem != questoes:
+            erros.append(
+                f"contagens de `{rotulos[i]}` não somam a amostra declarada: "
+                f"{resp} + {parc} + {nao} + {sem} (sem material) = {denom + sem}, "
+                f"mas o frontmatter diz questoes_aferidas: {questoes}")
+    return erros
+
+
 def conferir(md: Path) -> list[str]:
     txt = md.read_text(encoding="utf-8")
     fm = frontmatter(txt)
@@ -58,6 +162,13 @@ def conferir(md: Path) -> list[str]:
         erros.append("frontmatter sem `provas_aferidas_n` — amostra não declarada")
     if not fm.get("questoes_aferidas"):
         erros.append("frontmatter sem `questoes_aferidas`")
+
+    # 2: a nota sai das contagens, e as contagens fecham com a amostra
+    try:
+        questoes = int(fm["questoes_aferidas"]) if fm.get("questoes_aferidas") else None
+    except ValueError:
+        questoes = None
+    erros += conferir_aritmetica(txt, questoes)
 
     # 3: mesma grandeza formatada de dois jeitos.
     #
@@ -79,8 +190,6 @@ def conferir(md: Path) -> list[str]:
     # Fica de fora, por construção: dois valores de MESMA precisão, por mais próximos
     # que estejam (39,4 × 39,5). Não há como pegá-los sem recusar 13,0 × 13,2, que é
     # legítimo — e o incidente que originou esta regra era 39,4 × 39,45.
-    from decimal import Decimal
-
     def casas(s: str) -> int:
         return len(s.split(",")[1])
 
