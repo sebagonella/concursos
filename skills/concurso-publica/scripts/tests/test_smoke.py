@@ -2641,6 +2641,72 @@ def test_afericao_e_publicada_com_conteudo_e_recolhida():
             "a aferição saiu como nome de arquivo numa lista, em vez de conteúdo"
 
 
+def test_materia_com_varias_afericoes_publica_todas():
+    """Uma matéria pode ser aferida mais de uma vez, e nenhuma pode sumir.
+
+    `achar_doc_afericao` devolvia a PRIMEIRA em ordem alfabética. Com duas
+    aferições — a original e a refeita depois das correções —, a segunda
+    escondia a primeira em silêncio, que é o mesmo defeito que a publicação da
+    aferição veio consertar, só que em outra forma.
+
+    A ordem é por `data:` do frontmatter, da mais recente para a mais antiga: a
+    última medição é a que interessa primeiro, e as anteriores viram histórico.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mat = _mat_vault(base)
+        (mat / "00-AFERICAO-PORTUGUES.md").write_text(
+            "---\ndata: 2026-08-04\n---\n\n# Aferição de agosto\n\nCorpo da primeira.\n",
+            encoding="utf-8")
+        (mat / "00-AFERICAO-PORTUGUES-REFEITA.md").write_text(
+            "---\ndata: 2026-09-01\n---\n\n# Aferição de setembro\n\nCorpo da segunda.\n",
+            encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+
+        blocos = re.findall(r'<details class="papel afericao"([^>]*)>', h)
+        assert len(blocos) == 2, f"esperava 2 aferições publicadas, veio {len(blocos)}"
+        assert all(" open" not in b for b in blocos), "alguma aferição saiu ABERTA"
+
+        assert "Corpo da primeira" in h and "Corpo da segunda" in h, \
+            "uma das aferições sumiu do site"
+        i_set = h.find("Aferição de setembro")
+        i_ago = h.find("Aferição de agosto")
+        assert 0 < i_set < i_ago, "a mais recente tem de vir primeiro"
+
+        assert "00-AFERICAO-PORTUGUES.md" not in h, "nome de arquivo vazou para a lista"
+
+
+def test_afericoes_do_mesmo_dia_ordenam_pela_rodada():
+    """Reaferir logo depois de corrigir o material dá duas aferições no MESMO dia.
+
+    Aí o desempate pelo nome não funciona, e o defeito é silencioso: medido no
+    vault, `00-AFERICAO-VENDAS-E-NEGOCIACAO.md` ordenava DEPOIS de
+    `00-AFERICAO-VENDAS-E-NEGOCIACAO-2-POS-CORRECAO.md` — no ponto de divergência
+    o `.` (46) é maior que o `-` (45) —, e a rodada 2 caía para baixo da rodada 1.
+    Ordem que depende de tabela ASCII é coincidência, não ordem.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mat = _mat_vault(base)
+        # nomes escolhidos para reproduzir a colisão: o `.md` do primeiro cai
+        # depois do `-2-` do segundo numa comparação de strings
+        (mat / "00-AFERICAO-PORTUGUES.md").write_text(
+            "---\ndata: 2026-08-05\nrodada: 1\n---\n\n# Rodada um\n\nCorpo um.\n",
+            encoding="utf-8")
+        (mat / "00-AFERICAO-PORTUGUES-2-POS-CORRECAO.md").write_text(
+            "---\ndata: 2026-08-05\nrodada: 2\n---\n\n# Rodada dois\n\nCorpo dois.\n",
+            encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+
+        assert len(re.findall(r'<details class="papel afericao"', h)) == 2
+        i2, i1 = h.find("Rodada dois"), h.find("Rodada um")
+        assert 0 < i2 < i1, "a rodada 2 tem de vir primeiro, mesmo com a data igual"
+
+
 def test_indice_raiz_acumula_concursos():
     """Deploy incremental: publicar o 2º concurso não some com o 1º do índice."""
     with tempfile.TemporaryDirectory() as d:

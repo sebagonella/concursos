@@ -349,11 +349,40 @@ def achar_doc_banca(materia_dir: Path) -> str | None:
     return None
 
 
-def achar_doc_afericao(materia_dir: Path) -> str | None:
+def achar_docs_afericao(materia_dir: Path) -> list[str]:
+    """TODAS as aferições da matéria, da mais recente para a mais antiga.
+
+    Uma matéria pode ser aferida mais de uma vez — contra outra prova, ou contra
+    a mesma depois de corrigido o material. Devolver só a primeira em ordem
+    alfabética escondia as demais **em silêncio**, que é exatamente o defeito que
+    a publicação da aferição veio consertar (o `00-AFERICAO-*` fora da allowlist),
+    reaparecendo em outra forma.
+
+    A ordem é `data:` e depois `rodada:`, ambas decrescentes: a última medição
+    primeiro, as anteriores como histórico.
+
+    O `rodada:` existe porque **o desempate pelo nome não funciona** quando as
+    duas aferições são do mesmo dia — e reaferir logo após corrigir o material é
+    justamente o caso comum. Medido: com `data` igual,
+    `00-AFERICAO-VENDAS-E-NEGOCIACAO.md` ordena DEPOIS de
+    `00-AFERICAO-VENDAS-E-NEGOCIACAO-2-POS-CORRECAO.md`, porque no ponto de
+    divergência o `.` (46) é maior que o `-` (45) — e a rodada 2 acabava embaixo.
+    Ordem que depende de tabela ASCII não é ordem; é coincidência.
+
+    Nada disso é obrigatório: sem `data:` e sem `rodada:`, cai no nome do arquivo
+    e a aferição **nunca some** — no pior caso fica no fim.
+    """
+    achados = []
     for md in sorted(materia_dir.glob("*.md")):
         if DOC_AFERICAO.match(md.stem):
-            return md.name
-    return None
+            fm = ler_frontmatter(md) or {}
+            try:
+                rodada = int(fm.get("rodada") or 0)
+            except (TypeError, ValueError):
+                rodada = 0
+            achados.append((str(fm.get("data") or ""), rodada, md.name))
+    achados.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
+    return [nome for _, _, nome in achados]
 
 
 def extrair_paginas(fm: dict) -> str | None:
@@ -830,7 +859,7 @@ def coletar_materia(materia_dir: Path) -> dict | None:
 
     mapa_loc = materia_dir / "mapa-localizacao.json"
     doc_banca = achar_doc_banca(materia_dir)
-    doc_afericao = achar_doc_afericao(materia_dir)
+    docs_afericao = achar_docs_afericao(materia_dir)
 
     # Aliases OPCIONAIS tópico-do-mapa → assunto(s), preenchidos à mão quando o
     # usuário quiser o link fino. Ausente = sem links extras, e nenhum palpite: o
@@ -854,7 +883,7 @@ def coletar_materia(materia_dir: Path) -> dict | None:
         "materia_id": next((a["materia_id"] for a in assuntos if a.get("materia_id")),
                            materia_dir.name),
         "doc_banca": doc_banca,
-        "doc_afericao": doc_afericao,
+        "docs_afericao": docs_afericao,
         "slug": materia_dir.name,
         "dir": str(materia_dir),
         "docs_apoio": docs,
