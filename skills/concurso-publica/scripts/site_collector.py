@@ -349,11 +349,26 @@ def achar_doc_banca(materia_dir: Path) -> str | None:
     return None
 
 
-def achar_doc_afericao(materia_dir: Path) -> str | None:
+def achar_docs_afericao(materia_dir: Path) -> list[str]:
+    """TODAS as aferições da matéria, da mais recente para a mais antiga.
+
+    Uma matéria pode ser aferida mais de uma vez — contra outra prova, ou contra
+    a mesma depois de corrigido o material. Devolver só a primeira em ordem
+    alfabética escondia as demais **em silêncio**, que é exatamente o defeito que
+    a publicação da aferição veio consertar (o `00-AFERICAO-*` fora da allowlist),
+    reaparecendo em outra forma.
+
+    A ordem é pelo `data:` do frontmatter, decrescente: a última medição é a que
+    interessa primeiro e as anteriores viram histórico. Sem `data:`, cai no nome
+    do arquivo — nunca some, no pior caso fica no fim.
+    """
+    achados = []
     for md in sorted(materia_dir.glob("*.md")):
         if DOC_AFERICAO.match(md.stem):
-            return md.name
-    return None
+            data = (ler_frontmatter(md) or {}).get("data") or ""
+            achados.append((str(data), md.name))
+    achados.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return [nome for _, nome in achados]
 
 
 def extrair_paginas(fm: dict) -> str | None:
@@ -830,7 +845,7 @@ def coletar_materia(materia_dir: Path) -> dict | None:
 
     mapa_loc = materia_dir / "mapa-localizacao.json"
     doc_banca = achar_doc_banca(materia_dir)
-    doc_afericao = achar_doc_afericao(materia_dir)
+    docs_afericao = achar_docs_afericao(materia_dir)
 
     # Aliases OPCIONAIS tópico-do-mapa → assunto(s), preenchidos à mão quando o
     # usuário quiser o link fino. Ausente = sem links extras, e nenhum palpite: o
@@ -854,7 +869,7 @@ def coletar_materia(materia_dir: Path) -> dict | None:
         "materia_id": next((a["materia_id"] for a in assuntos if a.get("materia_id")),
                            materia_dir.name),
         "doc_banca": doc_banca,
-        "doc_afericao": doc_afericao,
+        "docs_afericao": docs_afericao,
         "slug": materia_dir.name,
         "dir": str(materia_dir),
         "docs_apoio": docs,

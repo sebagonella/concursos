@@ -2,6 +2,22 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.21.0] - 2026-08-05
+
+### Corrigido
+
+- **A matéria publica TODAS as suas aferições**, não só a primeira em ordem alfabética. Uma
+  matéria pode ser medida mais de uma vez — contra outra prova, ou contra a **mesma** depois
+  de corrigido o material — e `achar_doc_afericao` devolvia um único nome. Com dois arquivos,
+  `00-AFERICAO-…-POS-CORRECAO.md` viria antes de `00-AFERICAO-….md` (o `-` ordena antes do
+  `.`) e **esconderia a original em silêncio**: o mesmo defeito que a 0.20.0 veio consertar,
+  reaparecendo em outra forma.
+- A ordem é pelo **`data:` do frontmatter, decrescente** — a última medição é a que interessa
+  primeiro, e as anteriores viram histórico logo abaixo. Sem `data:`, cai no nome do arquivo:
+  no pior caso a aferição fica no fim, **nunca some**.
+- Todas continuam em `<details>` fechado, e nenhuma vaza para a lista de "documentos de apoio"
+  — o filtro passou a excluir o conjunto inteiro, não só um nome.
+
 ## [0.20.0] - 2026-08-05
 
 ### Adicionado

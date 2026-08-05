@@ -1519,18 +1519,21 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
         except Exception:
             bloco_banca = ""
 
-    bloco_afericao = ""
-    if materia.get("doc_afericao"):
+    # Todas as aferições, da mais recente para a mais antiga. Uma matéria pode ser
+    # medida mais de uma vez, e publicar só a primeira esconderia as outras.
+    afericoes = []
+    for nome in materia.get("docs_afericao") or []:
         try:
-            texto = (materia_dir / materia["doc_afericao"]).read_text(encoding="utf-8")
-            bloco_afericao = afericao_recolhida(
-                md2html.converter(texto, wikilink_resolver=rotas.resolvedor(rota)))
+            texto = (materia_dir / nome).read_text(encoding="utf-8")
+            afericoes.append(afericao_recolhida(
+                md2html.converter(texto, wikilink_resolver=rotas.resolvedor(rota))))
         except Exception:
-            bloco_afericao = ""
+            continue
+    bloco_afericao = "".join(afericoes)
 
     docs = ""
-    outros = [d for d in materia.get("docs_apoio", [])
-              if d not in (materia.get("doc_banca"), materia.get("doc_afericao"))]
+    ja_publicados = {materia.get("doc_banca"), *(materia.get("docs_afericao") or [])}
+    outros = [d for d in materia.get("docs_apoio", []) if d not in ja_publicados]
     if outros:
         lista = "".join(f"<li>{esc(d)}</li>" for d in outros)
         docs = (f'<section class="papel" style="margin-top:1.5rem">'
