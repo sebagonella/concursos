@@ -317,6 +317,35 @@ def test_validador_pega_formatacao_dupla():
                "pega o mesmo número escrito de dois jeitos", erros)
 
 
+def test_validador_pega_arredondamento_para_cima():
+    """39,45 arredonda para 39,4 (HALF_EVEN) ou 39,5 (HALF_UP) — os DOIS são o defeito.
+
+    Invariante de desenho, não regressão: este par dista 0,05 e o critério antigo de
+    proximidade também o pegava. Existe para travar a escolha de comparar por
+    desigualdade em vez de `round()`, que fixaria um modo e deixaria o outro passar.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        p = _af(CAB + "nota 39,45 no texto e 39,5 na tabela\n", Path(d))
+        erros = validar_afericao.conferir(p)
+        checar(any("formatações diferentes" in e for e in erros),
+               "pega o arredondamento para cima também", erros)
+
+
+def test_validador_aceita_notas_proximas_de_mesma_precisao():
+    """8,76 (consolidado) e 8,80 (provas B e C) distam 0,04 e são números DIFERENTES.
+
+    O critério antigo era proximidade absoluta (<= 0,05) e recusava a aferição de
+    Vendas e Negociação inteira. Duas notas de mesma precisão a 0,04 uma da outra são
+    o resultado normal de uma matéria estável — o defeito que se quer pegar é o mesmo
+    número escrito com precisões diferentes, não dois números vizinhos.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        p = _af(CAB + "| consolidado | 8,76 |\n| prova B | 8,80 |\n"
+                      "| prova A | 8,67 |\n| pontos | 13,0 e 13,2 |\n", Path(d))
+        checar(validar_afericao.conferir(p) == [],
+               "aceita notas vizinhas de mesma precisão", validar_afericao.conferir(p))
+
+
 def test_validador_exige_amostra_declarada():
     with tempfile.TemporaryDirectory() as d:
         p = _af("---\nquestoes_aferidas: 10\n---\n\ntexto\n", Path(d))

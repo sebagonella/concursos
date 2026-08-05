@@ -2,6 +2,39 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.1.1] - 2026-08-05
+
+### Corrigido
+
+- **O check de formatação dupla passou a exigir relação de arredondamento, não
+  proximidade.** O critério anterior (`|a − b| <= 0,05`) confundia duas coisas
+  diferentes: *o mesmo número escrito de dois jeitos* — o defeito — e *dois números
+  legitimamente vizinhos*. Numa matéria estável as notas por prova caem naturalmente a
+  menos de 0,05 umas das outras, e a primeira aferição de **Vendas e Negociação** foi
+  recusada inteira por trazer **8,76** (consolidado) e **8,80** (provas B e C), que são
+  valores distintos, calculados em separado e ambos corretos. Agora só há defeito quando
+  as **precisões diferem** e o menos preciso é um arredondamento válido do mais preciso.
+  O par que originou a regra (**39,4 × 39,45**) continua sendo pego, e a mensagem passou
+  a nomear qual número parece o arredondamento de qual.
+- A comparação é por **desigualdade**, não por `round()`: 39,45 arredonda para 39,4
+  (HALF_EVEN) ou 39,5 (HALF_UP), e os **dois** são o defeito — fixar um modo deixaria o
+  outro passar. Segue em `Decimal` pelo motivo de sempre (em float, 39,45 − 39,4 dá
+  0.050000000000004 e escaparia do limiar por epsilon).
+- **O docstring do script dizia "39,4 numa tabela e 39,5 noutra"**, mas o incidente real
+  — registrado neste changelog em 0.1.0 — foi **39,4 × 39,45**. A imprecisão importa:
+  39,4 × 39,5 têm a *mesma* precisão e nunca foram pegos por regra nenhuma, nem pela
+  antiga. Corrigido.
+
+### Notas
+
+- **Fica de fora, por construção:** dois valores de mesma precisão, por mais próximos que
+  estejam (39,4 × 39,5). Não há como pegá-los sem recusar 13,0 × 13,2, que é legítimo e
+  aparece na aferição de Vendas. Preferiu-se deixar passar o caso hipotético a recusar o
+  caso real.
+- O `validar_afericao.py` tem no docstring um check 2 ("notas por prova somam ao
+  consolidado") que **não existe no código**. Não entra nesta correção: é gap separado e
+  mais substantivo — implementado, teria conferido sozinho a aritmética de Vendas.
+
 ## [0.1.0] - 2026-08-04
 
 ### Adicionado

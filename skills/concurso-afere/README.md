@@ -3,11 +3,13 @@
 Mede o material aprofundado do vault contra a **prova real**: quantas questões o
 conteúdo escrito responde, onde falha e o que corrigir.
 
-Versão atual: **0.1.0** (primeira versão — afere uma ou mais matérias (`--materia`) ou
-todas as matérias aprofundadas de um cargo (`--cargo`), com nota por nível `padrao` e
-`detalhado`, nota por prova e distribuição das questões por assunto; o script prepara o
-determinístico e **o agente julga**, com quatro vereditos em que `SEM MATERIAL` fica
-fora do denominador — falha de cobertura e falha de profundidade têm ações diferentes).
+Versão atual: **0.1.1** (afere uma ou mais matérias (`--materia`) ou todas as matérias
+aprofundadas de um cargo (`--cargo`), com nota por nível `padrao` e `detalhado`, nota por
+prova e distribuição das questões por assunto; o script prepara o determinístico e **o
+agente julga**, com quatro vereditos em que `SEM MATERIAL` fica fora do denominador —
+falha de cobertura e falha de profundidade têm ações diferentes. Nesta versão, o check de
+formatação dupla passou a exigir **relação de arredondamento** em vez de proximidade
+absoluta: duas notas vizinhas de mesma precisão não são o mesmo número escrito duas vezes).
 
 ## Por que existe
 
