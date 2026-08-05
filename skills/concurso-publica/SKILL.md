@@ -1,6 +1,6 @@
 ---
 name: concurso-publica
-version: 0.21.1
+version: 0.22.0
 description: Use quando o usuário quiser transformar a estrutura de um concurso já gerada no vault (pelas skills concurso-prep e concurso-aprofunda) em um site estático navegável para uso local/rede doméstica. Publica TODO o conteúdo abaixo da pasta do concurso, espelhando a organização do vault (COMUM e um galho por cargo) - edital e análise da banca, cronograma, mapas de matéria, materiais e leis baixadas, histórico, sinergia, discursiva, títulos e o aprofundamento. Cada matéria tem duas visões (Plano, do mapa do edital, e Estudo, dos assuntos aprofundados); no Plano, cada tópico leva o literal do edital, os subtópicos derivados, o material recomendado, as pegadinhas da banca, a meta de questões e as seções que o mapa tiver além dessas. Cada assunto tem o podcast tocando, o vídeo rodando, mapa mental e report embutidos, flashcards como quiz e uma página com os prompts do pacote NotebookLM prontos para copiar. Triggers - "publicar o concurso como site", "gerar páginas web do concurso", "site do vault", "ver o material no navegador", "montar o site de estudo", "levar os mapas de matéria para a web", "ver as pegadinhas da banca no site", "publicar o pacote do NotebookLM".
 ---
 
@@ -90,7 +90,23 @@ assuntos/{slug-assunto}/{nivel}--{fonte1}[+{fonte2}]/
 ```
 
 e o nível e as fontes saem do **nome da pasta**, que é mais confiável que o
-frontmatter (material antigo pode não ter `nivel:`). Os layouts anteriores
+frontmatter (material antigo pode não ter `nivel:`). Até a 0.21 isso valia só
+para o nível: a **contagem** de fontes saía do campo `fontes:`, texto livre, e a
+mesma obra grafada de dois jeitos entre os níveis fazia o selo dizer "3 fontes"
+onde havia 2 — em 15 dos 29 assuntos multi-nível do vault.
+
+**Duas listas de fonte convivem na página, e nunca se somam:**
+
+| | o que é | de onde vem |
+|---|---|---|
+| **Fontes do aprofundamento** | o que sustenta o **texto escrito** | o id da pasta, exibido pelo nome da obra |
+| **Fontes do notebook** | o que **sobe** para gerar a mídia | `fontes_notebook:`, a nota + as leis de apoio |
+
+Elas divergem por natureza: um assunto de norma tem **1** fonte e manda **6** ao
+notebook; um de livro tem **2** e manda **1**, porque o livro não está no vault.
+Escrever "fontes" duas vezes sem qualificador na mesma tela é o que confundia.
+
+Os layouts anteriores
 (`aprofundamentos/{id}/` e o legado plano) continuam sendo lidos — o site não pode
 quebrar por material que o usuário ainda não migrou. Vários aprofundamentos do mesmo
 assunto viram abas na página, e a mídia de cada um fica em `media/<id>/`, sem colidir.
