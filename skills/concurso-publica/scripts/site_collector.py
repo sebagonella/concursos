@@ -49,7 +49,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import (  # noqa: E402
-    eh_pasta_aprofundamento, parse_id, rotulo, localizacoes_por_fonte, FONTE_PROPRIA,
+    eh_pasta_aprofundamento, parse_id, localizacoes_por_fonte, FONTE_PROPRIA,
+    # com alias: o `site_builder` tem uma `nome_legivel` PRÓPRIA, que traduz slug
+    # de CONCURSO ("SEDES_2026" -> "SEDES 2026"). São coisas diferentes com o
+    # mesmo nome, e ler `nome_legivel(...)` sem saber de qual módulo veio é o
+    # tipo de ambiguidade que se paga meses depois.
+    nome_legivel as nome_da_fonte,
 )
 
 
@@ -175,18 +180,29 @@ def sinais_do_assunto(aprofs: list[dict], principal: dict) -> dict:
     }
 
 
-def fontes_externas(aprofs: list[dict]) -> set[str]:
-    """Fontes de verdade do assunto, ignorando o material próprio.
+def fontes_externas(aprofs: list[dict]) -> list[str]:
+    """Os SLUGS de fonte distintos do assunto, na ordem em que aparecem.
 
-    "material próprio" ocupa o campo `fontes:` do frontmatter porque o template
-    precisa preencher alguma coisa — mas não é fonte, é a declaração de que não
-    há nenhuma. Somá-lo faria o card dizer "2 fontes" onde há uma norma e um
-    texto escrito do zero.
+    Conta pelo **id**, não pelo campo `fontes:`. O campo é texto livre: a mesma
+    obra aparecia como título num nível ("A Gramática para Concursos (Pestana)")
+    e como nome de arquivo no outro ("A-Gramatica-…-Pestana.pdf"), e a união das
+    strings dava 3 onde as fontes são 2 — 15 dos 29 assuntos multi-nível do vault
+    exibiam número inflado por isso. O slug é canônico e não tem esse problema.
+
+    O material próprio sai **por slug**, não por aprofundamento. O filtro antigo
+    testava a PASTA (`fontes_id != [FONTE_PROPRIA]`) para decidir sobre o texto:
+    em layout legado, onde `parse_id` falha e `fontes_id` sai `[]`, a comparação
+    dava verdadeiro e o "material próprio" era contado como fonte externa — o
+    site afirmando que existe fonte onde o arquivo declara que não há.
     """
-    return {f.strip()
-            for a in aprofs
-            if (a.get("fontes_id") or []) != [FONTE_PROPRIA]
-            for f in (a.get("fontes") or "").split(",") if f.strip()}
+    vistos, out = set(), []
+    for a in aprofs:
+        for s in (a.get("fontes_id") or []):
+            if s == FONTE_PROPRIA or s in vistos:
+                continue
+            vistos.add(s)
+            out.append(s)
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -485,11 +501,20 @@ def coletar_aprofundamento(subdir: Path, slug_assunto: str,
         "slug": slug,
         "slug_assunto": slug_assunto,
         "aprofundamento": aprof_id,
-        "rotulo": rotulo(aprof_id) if info_pasta else (aprof_id or "Original"),
         "nivel": nivel,
         "n_fontes_id": info_pasta["n_fontes"] if info_pasta else None,
         "fontes_id": info_pasta["fontes"] if info_pasta else [],
+        # O que sustenta o TEXTO escrito. É o campo do frontmatter (nome humano da
+        # obra, com a precisão que o slug não tem: "Lei nº 8.742/1993" x "lei-8742").
         "fontes": fm.get("fontes", ""),
+        # O que SOBE ao notebook — conceito diferente, e por isso campo diferente.
+        # Um assunto de norma manda a nota + as leis relacionadas (6 a 8 no SUAS);
+        # um de livro manda só a nota, porque o livro não está no vault. Somar os
+        # dois faria o site afirmar uma fonte que não sustenta o texto, e é essa
+        # confusão que esta versão existe para desfazer.
+        "fontes_notebook": lista_yaml(fm.get("fontes_notebook")),
+        # ausente != vazio: `[]` é decisão ("só a nota"), ausência é "ninguém declarou"
+        "fontes_notebook_declarado": "fontes_notebook" in fm,
         "titulo": fm.get("title", slug_assunto),
         "prioridade": prioridade,
         # o vínculo com o plano do edital, GRAVADO na Etapa 2 — não inferido aqui
@@ -788,11 +813,10 @@ def coletar_assunto(subdir: Path, mapa_prio: dict | None = None) -> dict | None:
         "paginas_livro": principal.get("paginas_livro"),
         "n_aprofundamentos": len(aprofs),
         "niveis": sorted({a["nivel"] for a in aprofs}),
-        # Fontes distintas entre todos os aprofundamentos deste assunto.
-        # O material próprio NÃO conta como fonte: ele é a ausência de fonte
-        # externa. Contá-lo fazia o card anunciar "2 fontes" para um assunto com
-        # uma norma e um texto escrito do zero — que é afirmar o que não é.
-        "fontes": sorted(fontes_externas(aprofs)),
+        # Fontes distintas entre todos os aprofundamentos deste assunto, contadas
+        # pelo SLUG do id — que é canônico — e exibidas pelo nome legível. O
+        # material próprio não conta: é a ausência de fonte externa, não uma.
+        "fontes": [nome_da_fonte(s) for s in fontes_externas(aprofs)],
         "n_fontes": len(fontes_externas(aprofs)),
         "aprofundamentos": aprofs,
         # o vínculo com o tópico é do ASSUNTO, então vale a união do que os

@@ -2,6 +2,46 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.22.0] - 2026-08-05
+
+### Corrigido
+
+- **O selo conta as fontes pelo id, não pelo texto livre.** `fontes_externas` quebrava o campo
+  `fontes:` por vírgula e unia as strings entre os níveis do assunto. Como a mesma obra aparece
+  grafada como título num nível (`A Gramática para Concursos (Pestana)`) e como nome de arquivo
+  no outro (`A-Gramatica-…-Pestana.pdf`), a união dava **3** onde as fontes são **2** — em
+  **15 dos 29** assuntos multi-nível do vault. O `fontes_id`, derivado do id por `parse_id`,
+  já existia no modelo e **não era usado na contagem**.
+- **Material próprio em layout legado deixou de contar como fonte externa.** O filtro testava a
+  PASTA (`fontes_id != [FONTE_PROPRIA]`) para decidir sobre o TEXTO: quando `parse_id` falha,
+  `fontes_id` sai `[]`, a comparação dá verdadeiro e o "material próprio" era somado — o site
+  afirmando que existe fonte onde o arquivo declara que não há. Agora o filtro é por slug.
+- **Campo morto `rotulo` removido do modelo.** Era gravado no collector e o builder **nunca o
+  lia** — recalculava com `rotulo_aprof`, em formato diferente ("Detalhado — pestana" ×
+  "Pestana · Detalhado"). Duas regras para o mesmo dado, uma delas sem leitor.
+
+### Adicionado
+
+- **As duas listas de fonte, separadas e qualificadas.** A ficha do aprofundamento passa a
+  dizer *Fontes do aprofundamento* (o que sustenta o texto escrito) e, quando houver,
+  *Fontes do notebook* (o que sobe para gerar a mídia), com a contagem e se foram **declaradas**
+  ou **sugeridas**. Elas divergem por natureza — um assunto de norma tem 1 fonte e manda 6 ao
+  notebook; um de livro tem 2 e manda 1 —, e escrever "fontes" duas vezes sem qualificador na
+  mesma tela é o que gerou a dúvida que originou esta série.
+- `fontes_notebook` e `fontes_notebook_declarado` no modelo, lidos do frontmatter. Ausente ≠
+  `[]`: vazio é decisão ("só a nota"), ausência é "ninguém declarou".
+
+### Notas
+
+- **Fixture corrigida:** `_add_aprof` criava ids **invertidos** (`pestana--padrao` em vez de
+  `padrao--pestana`), que não parseiam. Enquanto a contagem vinha do texto isso não aparecia;
+  com ela vindo do id, os testes passariam a medir 0 fontes e quebrariam **pelo motivo errado**.
+  Fixture divergente é teste que se autoconfirma — o mesmo defeito que já custou dois bugs
+  invisíveis nesta skill.
+- `nome_legivel` de `aprofundamento_id` é importada **com alias** (`nome_da_fonte`): o
+  `site_builder` tem uma `nome_legivel` própria, que traduz slug de **concurso**
+  (`SEDES_2026` → `SEDES 2026`). Nomes iguais para coisas diferentes se pagam meses depois.
+
 ## [0.21.1] - 2026-08-05
 
 ### Alterado

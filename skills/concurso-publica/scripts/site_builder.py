@@ -657,7 +657,8 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
     pag = ap.get("paginas_livro")
     ficha = []
     if ap.get("fontes"):
-        ficha.append(f'<div><dt>Fonte</dt><dd style="font-size:.92rem">{esc(ap["fontes"])}</dd></div>')
+        ficha.append(f'<div><dt>Fontes do aprofundamento</dt>'
+                     f'<dd style="font-size:.92rem">{esc(ap["fontes"])}</dd></div>')
     # Uma linha por fonte quando o aprofundamento é combinado. Mostrar só a
     # primeira faria o leitor procurar no livro errado as outras — e o texto do
     # ponteiro vai inteiro, porque metade do vault escreve em prosa livre
@@ -673,6 +674,20 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
         ficha.append(f'<div><dt>No livro</dt><dd style="font-size:.92rem">págs. {esc(pag)}</dd></div>')
     ficha.append(f'<div><dt>Nível</dt><dd style="font-size:.92rem">'
                  f'{esc(ROTULO_NIVEL.get(ap.get("nivel",""), ap.get("nivel","")))}</dd></div>')
+
+    # O que SOBE ao notebook, qualificado e separado do que sustenta o texto.
+    # São conceitos diferentes e podem divergir legitimamente: um assunto de
+    # norma tem 1 fonte e manda 6 ao notebook (a nota + as leis de apoio); um de
+    # livro tem 2 e manda 1, porque o livro não está no vault. Escrever "fontes"
+    # duas vezes sem qualificador na mesma tela é o que confundia.
+    fnb = ap.get("fontes_notebook") or []
+    if fnb:
+        itens = "".join(f"<div>{esc(n)}</div>" for n in fnb)
+        origem = "declaradas" if ap.get("fontes_notebook_declarado") else "sugeridas"
+        ficha.append(f'<div><dt>Fontes do notebook</dt>'
+                     f'<dd style="font-size:.92rem">{itens}'
+                     f'<div class="meta">{len(fnb)} {origem} · além da nota deste assunto</div>'
+                     f'</dd></div>')
 
     corpo = (f'<article class="papel {cls}" data-aprof="{esc(ident)}">'
              f'<dl class="ficha">{"".join(ficha)}</dl>'

@@ -1080,9 +1080,83 @@ def test_material_proprio_nao_conta_como_fonte():
         {"fontes_id": ["lei-8069"], "fontes": "Lei nº 8.069/1990"},
         {"fontes_id": ["proprio"], "fontes": "material próprio"},
     ]
-    assert sc.fontes_externas(aprofs) == {"Lei nº 8.069/1990"}
-    assert sc.fontes_externas([aprofs[1]]) == set()
+    # devolve SLUGS do id (canônicos), não o texto livre do frontmatter
+    assert sc.fontes_externas(aprofs) == ["lei-8069"]
+    assert sc.fontes_externas([aprofs[1]]) == []
     assert len(sc.fontes_externas(aprofs)) == 1
+
+
+def test_selo_conta_fontes_pelo_id_nao_pelo_texto_livre():
+    """Dados literais do vault: a MESMA obra grafada de dois jeitos entre níveis.
+
+    `compreensao-de-textos` tem `padrao--pestana+rosenthal` com o Pestana escrito
+    como NOME DE ARQUIVO e `detalhado--pestana+rosenthal` com o mesmo Pestana
+    escrito como TÍTULO. A união dos textos dá 3; as fontes são 2. Medido: 15 dos
+    29 assuntos multi-nível do vault exibiam número inflado por isso.
+    """
+    aprofs = [
+        {"fontes_id": ["pestana", "rosenthal"],
+         "fontes": "A-Gramatica-para-Concursos-Fernando-Pestana.pdf, "
+                   "Gramática para Concursos (Rosenthal)"},
+        {"fontes_id": ["pestana", "rosenthal"],
+         "fontes": "A Gramática para Concursos (Pestana), "
+                   "Gramática para Concursos (Rosenthal)"},
+    ]
+    assert len(sc.fontes_externas(aprofs)) == 2, sc.fontes_externas(aprofs)
+
+
+def test_material_proprio_em_layout_legado_nao_conta_como_fonte():
+    """O filtro de `proprio` testava a PASTA para decidir sobre o FRONTMATTER.
+
+    Em layout legado `parse_id` falha e `fontes_id` sai `[]`; como `[] != ["proprio"]`,
+    o texto "material próprio" era contado como fonte externa — o site afirmando
+    que existe fonte onde o próprio arquivo declara que não há.
+    """
+    aprofs = [{"fontes_id": [], "fontes": "material próprio"}]
+    assert sc.fontes_externas(aprofs) == [] or sc.fontes_externas(aprofs) == set(), \
+        sc.fontes_externas(aprofs)
+
+
+def test_modelo_nao_publica_campo_que_ninguem_le():
+    """`rotulo` era gravado no modelo e o builder NUNCA o lia — recalculava com
+    `rotulo_aprof`, em formato diferente ("Detalhado — pestana" × "Pestana ·
+    Detalhado"). Duas regras para o mesmo dado, e uma delas morta."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        m = sc.coletar_materia(_mat_vault(base))
+        aprofs = [ap for a in m["assuntos"] for ap in a.get("aprofundamentos", [])]
+        assert aprofs, "fixture sem aprofundamento — o teste não mede nada"
+        assert all("rotulo" not in ap for ap in aprofs), \
+            "campo morto `rotulo` continua no modelo"
+
+
+def test_ficha_e_notebook_nomeiam_coisas_diferentes():
+    """As duas listas de "fonte" convivem na página sem se confundirem.
+
+    São conceitos distintos: o que sustenta o TEXTO (o id, a obra lida) e o que
+    SOBE ao notebook (a nota + leis de apoio). Um assunto de norma tem 1 fonte e
+    manda 6 ao notebook; um de livro tem 2 e manda 1. Escrever "fontes" duas
+    vezes sem qualificador na mesma tela é o que gerou a dúvida que originou
+    esta série de correções.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        alvo = _mat_vault(base) / "assuntos" / "crase" / "padrao--pestana"
+        alvo.mkdir(parents=True, exist_ok=True)
+        (alvo / "crase--padrao--pestana--TESTE_2026.md").write_text(
+            '---\ntitle: "Crase"\naprofundamento: "padrao--pestana"\nnivel: padrao\n'
+            'fontes: "A Gramática para Concursos (Pestana)"\n'
+            'fontes_notebook: [lei-8742-1993-loas.pdf, resolucao-cnas-109.pdf]\n'
+            'status: concluido\n---\n\n## Resumo\n\nTexto.\n', encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "crase" / "index.html").read_text(encoding="utf-8")
+
+        # o que sustenta o texto aparece com o nome da obra
+        assert "Pestana" in h, "a fonte do aprofundamento sumiu da ficha"
+        # o que sobe ao notebook aparece QUALIFICADO, nunca como "fontes" solto
+        assert "notebook" in h.lower(), "as fontes do notebook não aparecem"
+        assert "lei-8742-1993-loas.pdf" in h, "a lei declarada não foi publicada"
 
 
 def test_rotulo_do_aprofundamento_proprio_descreve_o_artefato():
@@ -2776,8 +2850,8 @@ def _add_aprof(base: Path, assunto: str, ident: str, nivel: str, fontes: str):
 def test_varios_aprofundamentos_por_assunto():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        _add_aprof(base, "crase", "pestana--padrao", "padrao", "Pestana")
-        _add_aprof(base, "crase", "damasceno--detalhado", "detalhado", "Damasceno")
+        _add_aprof(base, "crase", "padrao--pestana", "padrao", "Pestana")
+        _add_aprof(base, "crase", "detalhado--damasceno", "detalhado", "Damasceno")
         m = _rodar(base)
         a = next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == "crase")
         # 2 novos + o legado que já existia na fixture
@@ -2799,12 +2873,12 @@ def test_legado_continua_funcionando_sozinho():
 def test_site_gera_seletor_quando_ha_varios():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        _add_aprof(base, "crase", "pestana--padrao", "padrao", "Pestana")
+        _add_aprof(base, "crase", "padrao--pestana", "padrao", "Pestana")
         out = Path(d) / "site"
         _construir(base, out)
         h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
         assert "seletor-aprof" in h
-        assert 'data-alvo="pestana--padrao"' in h
+        assert 'data-alvo="padrao--pestana"' in h
         assert h.count('class="aprof') >= 2      # blocos de conteúdo separados
         # assunto com um só aprofundamento não ganha seletor
         h2 = (_dir_assunto(out, "teste_2026", "regencia-verbal-e-nominal") / "index.html").read_text(encoding="utf-8")
@@ -2814,15 +2888,15 @@ def test_site_gera_seletor_quando_ha_varios():
 def test_midias_de_aprofundamentos_nao_colidem():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        d1 = _add_aprof(base, "crase", "aaa--padrao", "padrao", "A")
-        d2 = _add_aprof(base, "crase", "bbb--detalhado", "detalhado", "B")
+        d1 = _add_aprof(base, "crase", "padrao--aaa", "padrao", "A")
+        d2 = _add_aprof(base, "crase", "detalhado--bbb", "detalhado", "B")
         (d1 / "podcast-crase--aaa--padrao.m4a").write_bytes(b"1")
         (d2 / "podcast-crase--bbb--detalhado.m4a").write_bytes(b"2")
         out = Path(d) / "site"
         _construir(base, out)
         media = (_dir_assunto(out, "teste_2026", "crase") / "media")
-        assert (media / "aaa--padrao").is_dir()
-        assert (media / "bbb--detalhado").is_dir()
+        assert (media / "padrao--aaa").is_dir()
+        assert (media / "detalhado--bbb").is_dir()
 
 
 def test_indice_raiz_agrupa_por_orgao():
@@ -2846,8 +2920,8 @@ def test_indice_raiz_agrupa_por_orgao():
 def test_selos_de_aprofundamento_sinalizam_fontes_e_niveis():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        _add_aprof(base, "crase", "pestana--padrao", "padrao", "Pestana")
-        _add_aprof(base, "crase", "damasceno--detalhado", "detalhado", "Damasceno")
+        _add_aprof(base, "crase", "padrao--pestana", "padrao", "Pestana")
+        _add_aprof(base, "crase", "detalhado--damasceno", "detalhado", "Damasceno")
         out = Path(d) / "site"
         _construir(base, out)
         h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
@@ -2881,8 +2955,8 @@ def test_frontmatter_ignora_comentario_inline_do_yaml():
 def test_niveis_distintos_geram_selo_combinado():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        _add_aprof(base, "crase", "aaa--padrao", "padrao", "Fonte A")
-        _add_aprof(base, "crase", "bbb--detalhado", "detalhado", "Fonte B")
+        _add_aprof(base, "crase", "padrao--aaa", "padrao", "Fonte A")
+        _add_aprof(base, "crase", "detalhado--bbb", "detalhado", "Fonte B")
         out = Path(d) / "site"
         _construir(base, out)
         h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
