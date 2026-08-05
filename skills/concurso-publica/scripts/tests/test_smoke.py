@@ -2678,6 +2678,35 @@ def test_materia_com_varias_afericoes_publica_todas():
         assert "00-AFERICAO-PORTUGUES.md" not in h, "nome de arquivo vazou para a lista"
 
 
+def test_afericoes_do_mesmo_dia_ordenam_pela_rodada():
+    """Reaferir logo depois de corrigir o material dá duas aferições no MESMO dia.
+
+    Aí o desempate pelo nome não funciona, e o defeito é silencioso: medido no
+    vault, `00-AFERICAO-VENDAS-E-NEGOCIACAO.md` ordenava DEPOIS de
+    `00-AFERICAO-VENDAS-E-NEGOCIACAO-2-POS-CORRECAO.md` — no ponto de divergência
+    o `.` (46) é maior que o `-` (45) —, e a rodada 2 caía para baixo da rodada 1.
+    Ordem que depende de tabela ASCII é coincidência, não ordem.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mat = _mat_vault(base)
+        # nomes escolhidos para reproduzir a colisão: o `.md` do primeiro cai
+        # depois do `-2-` do segundo numa comparação de strings
+        (mat / "00-AFERICAO-PORTUGUES.md").write_text(
+            "---\ndata: 2026-08-05\nrodada: 1\n---\n\n# Rodada um\n\nCorpo um.\n",
+            encoding="utf-8")
+        (mat / "00-AFERICAO-PORTUGUES-2-POS-CORRECAO.md").write_text(
+            "---\ndata: 2026-08-05\nrodada: 2\n---\n\n# Rodada dois\n\nCorpo dois.\n",
+            encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+
+        assert len(re.findall(r'<details class="papel afericao"', h)) == 2
+        i2, i1 = h.find("Rodada dois"), h.find("Rodada um")
+        assert 0 < i2 < i1, "a rodada 2 tem de vir primeiro, mesmo com a data igual"
+
+
 def test_indice_raiz_acumula_concursos():
     """Deploy incremental: publicar o 2º concurso não some com o 1º do índice."""
     with tempfile.TemporaryDirectory() as d:

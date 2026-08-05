@@ -12,9 +12,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   `00-AFERICAO-…-POS-CORRECAO.md` viria antes de `00-AFERICAO-….md` (o `-` ordena antes do
   `.`) e **esconderia a original em silêncio**: o mesmo defeito que a 0.20.0 veio consertar,
   reaparecendo em outra forma.
-- A ordem é pelo **`data:` do frontmatter, decrescente** — a última medição é a que interessa
-  primeiro, e as anteriores viram histórico logo abaixo. Sem `data:`, cai no nome do arquivo:
-  no pior caso a aferição fica no fim, **nunca some**.
+- A ordem é **`data:` e depois `rodada:`**, ambas decrescentes — a última medição primeiro, as
+  anteriores como histórico logo abaixo.
+- **O `rodada:` existe porque o desempate pelo nome não funciona**, e reaferir logo após
+  corrigir o material é justamente o caso em que as duas caem no mesmo dia. Medido no vault:
+  com `data` igual, `00-AFERICAO-VENDAS-E-NEGOCIACAO.md` ordenava **depois** de
+  `00-AFERICAO-VENDAS-E-NEGOCIACAO-2-POS-CORRECAO.md`, porque no ponto de divergência o `.`
+  (46) é maior que o `-` (45) — e a rodada 2 caía para baixo da rodada 1. Ordem que depende de
+  tabela ASCII é coincidência, não ordem.
+- Nada é obrigatório: sem `data:` e sem `rodada:`, cai no nome e a aferição **nunca some** —
+  no pior caso fica no fim.
 - Todas continuam em `<details>` fechado, e nenhuma vaza para a lista de "documentos de apoio"
   — o filtro passou a excluir o conjunto inteiro, não só um nome.
 
