@@ -774,30 +774,38 @@ mark, .marcado { background: var(--marcatexto); padding: 0 .15em; }
    lista volta para a primeira tela. `<details>` nativo: sem JS, imprime, e o
    Ctrl+F do Chrome abre o bloco. Só variáveis de tema — hex fixo para cor de
    texto já quebrou o tema escuro neste arquivo. */
-.bussola { padding: 0; }
-.bussola > summary {
+.bussola, .afericao { padding: 0; }
+.bussola > summary,
+.afericao > summary {
   cursor: pointer; list-style: none; display: flex; flex-wrap: wrap;
   align-items: baseline; gap: .5rem; padding: 1.1rem 2.25rem; min-height: 44px;
 }
-.bussola > summary::-webkit-details-marker { display: none; }
-.bussola > summary::before {
+.bussola > summary::-webkit-details-marker,
+.afericao > summary::-webkit-details-marker { display: none; }
+.bussola > summary::before,
+.afericao > summary::before {
   content: "▸"; color: var(--tinta); align-self: center;
 }
-.bussola[open] > summary::before { content: "▾"; }
-.bussola > summary:hover .bussola-titulo { color: var(--tinta); }
-.bussola > summary:focus-visible { outline: 2px solid var(--tinta); outline-offset: -2px; }
+.bussola[open] > summary::before,
+.afericao[open] > summary::before { content: "▾"; }
+.bussola > summary:hover .bussola-titulo,
+.afericao > summary:hover .bussola-titulo { color: var(--tinta); }
+.bussola > summary:focus-visible,
+.afericao > summary:focus-visible { outline: 2px solid var(--tinta); outline-offset: -2px; }
 .bussola-titulo {
   font-family: var(--fonte-titulo); font-size: 1rem; color: var(--forte);
 }
 .bussola-dica {
   font-family: var(--fonte-dado); font-size: .72rem; color: var(--grafite-fraco);
 }
-.bussola[open] > summary { border-bottom: 1px solid var(--pauta); }
+.bussola[open] > summary,
+.afericao[open] > summary { border-bottom: 1px solid var(--pauta); }
 .bussola-corpo { padding: .5rem 2.25rem 2rem; }
 .bussola-corpo > :first-child { margin-top: .75rem; }
 
-/* Impresso, a bússola vale inteira: papel não tem clique. */
+/* Impressas, valem inteiras: papel não tem clique. */
 @media print {
-  .bussola > summary { display: none; }
-  .bussola > .bussola-corpo { display: block !important; padding-top: 0; }
+  .bussola > summary, .afericao > summary { display: none; }
+  .bussola > .bussola-corpo,
+  .afericao > .bussola-corpo { display: block !important; padding-top: 0; }
 }

@@ -2602,6 +2602,45 @@ def test_bussola_da_banca_abre_recolhida():
         assert "Parágrafo longo número 0" in h[i_fim_sum:], "o corpo sumiu"
 
 
+def test_afericao_e_publicada_com_conteudo_e_recolhida():
+    """A aferição da matéria some do site em silêncio, e é análise, não nome de arquivo.
+
+    `DOCS_APOIO_CONHECIDOS` casava só 00-COBERTURA|00-GUIA|00-INDICE|COMO-USAR,
+    então `00-AFERICAO-*.md` era ignorado sem aviso — as duas aferições do vault
+    não apareciam em lugar nenhum. E acrescentá-lo àquela lista publicaria apenas
+    o NOME numa lista de "documentos de apoio (no vault)": a aferição de Vendas e
+    Negociação tem 267 linhas de tabela e ação corretiva, e é para ser lida.
+
+    Vai recolhida pelo mesmo motivo da bússola: documento longo no topo de uma aba
+    esconde o que a aba existe para mostrar.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mat = _mat_vault(base)
+        corpo = "\n\n".join(f"Linha {i} da análise contra a prova real. " * 10
+                            for i in range(40))
+        (mat / "00-AFERICAO-PORTUGUES.md").write_text(
+            f"# Aferição contra as provas de 2023\n\n{corpo}\n", encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
+
+        m = re.search(r'<details class="papel afericao"([^>]*)>', h)
+        assert m, "a aferição não foi publicada com conteúdo"
+        assert " open" not in m.group(1), "a aferição saiu ABERTA — empurra a lista"
+
+        i_sum = h.find("<summary>", m.start())
+        i_fim_sum = h.find("</summary>", i_sum)
+        assert 0 < i_sum < i_fim_sum
+        assert "Aferição contra as provas" in h[i_sum:i_fim_sum], "título fora do summary"
+        assert "Linha 0 da análise" not in h[i_sum:i_fim_sum], "o corpo vazou para o summary"
+        assert "Linha 0 da análise" in h[i_fim_sum:], "o corpo sumiu — publicou só o nome"
+
+        # e não pode cair na lista de nomes, que é o destino dos outros docs de apoio
+        assert "00-AFERICAO-PORTUGUES.md" not in h, \
+            "a aferição saiu como nome de arquivo numa lista, em vez de conteúdo"
+
+
 def test_indice_raiz_acumula_concursos():
     """Deploy incremental: publicar o 2º concurso não some com o 1º do índice."""
     with tempfile.TemporaryDirectory() as d:

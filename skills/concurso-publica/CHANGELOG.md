@@ -2,6 +2,30 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.20.0] - 2026-08-05
+
+### Adicionado
+
+- **A aferição contra prova real agora é publicada na página da matéria**, com conteúdo e
+  **recolhida**. A skill `concurso-afere` grava `00-AFERICAO-*.md` ao lado do material que
+  mediu, mas `DOCS_APOIO_CONHECIDOS` casava apenas `00-COBERTURA|00-GUIA|00-INDICE|COMO-USAR`
+  — o arquivo era ignorado **em silêncio**, e as **duas** aferições do vault não apareciam em
+  lugar nenhum do site.
+- **Publicar só o nome não resolveria.** Os "outros documentos de apoio" viram uma lista de
+  nomes de arquivo (`<li>00-AFERICAO-….md</li>`), e a aferição é a análise que mede a matéria:
+  nota por nível, distribuição das questões por assunto, lacunas nomeadas e ações corretivas —
+  **267 linhas** em Vendas e Negociação. Ela é para ser lida, não citada.
+- Vai em `<details>` **fechado**, pelo mesmo motivo da bússola: é ainda maior que ela, e
+  documento longo no topo de uma aba esconde o que a aba existe para mostrar. Título no
+  `<summary>`, `@media print` reabre.
+
+### Alterado
+
+- **A regra do documento recolhido virou um lugar só** (`_doc_recolhido`), com `bussola_recolhida`
+  e `afericao_recolhida` sobre ela. Era regra de layout prestes a ser copiada — e regra de layout
+  copiada é a que diverge depois. O CSS seguiu o mesmo caminho: os seletores da bússola passaram
+  a valer para as duas, sem hex fixo novo.
+
 ## [0.19.0] - 2026-08-03
 
 ### Corrigido

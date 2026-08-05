@@ -336,10 +336,22 @@ DOC_BANCA = re.compile(
     r"^(como[-_ ].*(cobra|banca)|.*banca.*cobra|analise[-_ ]?banca|00-BANCA)",
     re.IGNORECASE)
 
+# Aferição do material contra prova real (skill `concurso-afere`), publicada com
+# CONTEÚDO — não como nome numa lista. Ela mede a matéria em que está e traz as
+# ações corretivas; a de Vendas e Negociação tem 267 linhas de tabela e análise.
+DOC_AFERICAO = re.compile(r"^00-AFERICAO", re.IGNORECASE)
+
 
 def achar_doc_banca(materia_dir: Path) -> str | None:
     for md in sorted(materia_dir.glob("*.md")):
         if DOC_BANCA.match(md.stem):
+            return md.name
+    return None
+
+
+def achar_doc_afericao(materia_dir: Path) -> str | None:
+    for md in sorted(materia_dir.glob("*.md")):
+        if DOC_AFERICAO.match(md.stem):
             return md.name
     return None
 
@@ -818,6 +830,7 @@ def coletar_materia(materia_dir: Path) -> dict | None:
 
     mapa_loc = materia_dir / "mapa-localizacao.json"
     doc_banca = achar_doc_banca(materia_dir)
+    doc_afericao = achar_doc_afericao(materia_dir)
 
     # Aliases OPCIONAIS tópico-do-mapa → assunto(s), preenchidos à mão quando o
     # usuário quiser o link fino. Ausente = sem links extras, e nenhum palpite: o
@@ -841,6 +854,7 @@ def coletar_materia(materia_dir: Path) -> dict | None:
         "materia_id": next((a["materia_id"] for a in assuntos if a.get("materia_id")),
                            materia_dir.name),
         "doc_banca": doc_banca,
+        "doc_afericao": doc_afericao,
         "slug": materia_dir.name,
         "dir": str(materia_dir),
         "docs_apoio": docs,

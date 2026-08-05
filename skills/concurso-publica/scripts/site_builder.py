@@ -1342,12 +1342,37 @@ def bussola_recolhida(html_doc: str) -> str:
     estudo), e a lista volta para a primeira tela. Um clique traz o texto
     inteiro, e o `<details>` é nativo — sem depender do site.js.
     """
+    return _doc_recolhido(html_doc, "bussola", "Como a banca cobra esta matéria",
+                          "perfil da banca nesta matéria")
+
+
+def afericao_recolhida(html_doc: str) -> str:
+    """A aferição contra prova real, publicada com CONTEÚDO e fechada.
+
+    Antes ela não aparecia: `DOCS_APOIO_CONHECIDOS` não casava `00-AFERICAO-*`,
+    e o arquivo era ignorado em silêncio. Publicá-la só como NOME numa lista de
+    "documentos de apoio" também não serve — ela é a análise que mede a matéria,
+    com nota, distribuição por assunto e ações corretivas (267 linhas em Vendas e
+    Negociação). Fechada pelo mesmo motivo da bússola: é ainda maior que ela, e
+    documento longo no topo de uma aba esconde o que a aba existe para mostrar.
+    """
+    return _doc_recolhido(html_doc, "afericao", "Aferição contra prova real",
+                          "o material medido contra o gabarito oficial")
+
+
+def _doc_recolhido(html_doc: str, classe: str, titulo_padrao: str, dica: str) -> str:
+    """Documento de apoio no topo de uma aba: `<details>` fechado, título à vista.
+
+    Um só lugar para a regra, porque ela vale para qualquer documento longo que
+    abra uma aba — foi generalizada quando a aferição virou o segundo caso. O
+    `<details>` é nativo: não depende do site.js, e o `@media print` reabre.
+    """
     m = re.match(r"\s*<h1[^>]*>(.*?)</h1>", html_doc, re.S)
-    titulo = m.group(1).strip() if m else "Como a banca cobra esta matéria"
+    titulo = m.group(1).strip() if m else titulo_padrao
     corpo = html_doc[m.end():] if m else html_doc
-    return (f'<details class="papel bussola" style="margin-top:1.25rem">'
+    return (f'<details class="papel {classe}" style="margin-top:1.25rem">'
             f'<summary><span class="bussola-titulo">{titulo}</span>'
-            f'<span class="bussola-dica">perfil da banca nesta matéria</span>'
+            f'<span class="bussola-dica">{dica}</span>'
             f'</summary><div class="bussola-corpo">{corpo}</div></details>')
 
 
@@ -1494,8 +1519,18 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
         except Exception:
             bloco_banca = ""
 
+    bloco_afericao = ""
+    if materia.get("doc_afericao"):
+        try:
+            texto = (materia_dir / materia["doc_afericao"]).read_text(encoding="utf-8")
+            bloco_afericao = afericao_recolhida(
+                md2html.converter(texto, wikilink_resolver=rotas.resolvedor(rota)))
+        except Exception:
+            bloco_afericao = ""
+
     docs = ""
-    outros = [d for d in materia.get("docs_apoio", []) if d != materia.get("doc_banca")]
+    outros = [d for d in materia.get("docs_apoio", [])
+              if d not in (materia.get("doc_banca"), materia.get("doc_afericao"))]
     if outros:
         lista = "".join(f"<li>{esc(d)}</li>" for d in outros)
         docs = (f'<section class="papel" style="margin-top:1.5rem">'
@@ -1548,7 +1583,7 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
     if tem_estudo:
         ativo = " ativo" if not plano else ""
         estudo = (f'<div class="visao{ativo}" data-visao="estudo">'
-                  f'{bloco_banca}{cob_edital}{eixo}{corpo_estudo}{herdado}'
+                  f'{bloco_banca}{bloco_afericao}{cob_edital}{eixo}{corpo_estudo}{herdado}'
                   f'{docs}{cobertura}</div>')
     elif cobertura:
         estudo = cobertura
@@ -1574,7 +1609,7 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
   {seletor}
 </div>
 {plano}
-{estudo if (plano and tem_estudo) else (estudo or bloco_banca + cob_edital + eixo + corpo_estudo + docs)}"""
+{estudo if (plano and tem_estudo) else (estudo or bloco_banca + bloco_afericao + cob_edital + eixo + corpo_estudo + docs)}"""
     trilha = (f'<a href="{relativo(rota_capa, rota)}">{esc(nome_legivel(concurso))}</a>'
               f' › {esc(materia["nome"])}')
     return pagina(f'{materia["nome"]} — {nome_legivel(concurso)}', trilha, corpo, rota)
