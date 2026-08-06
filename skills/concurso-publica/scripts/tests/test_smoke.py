@@ -1159,6 +1159,40 @@ def test_ficha_e_notebook_nomeiam_coisas_diferentes():
         assert "lei-8742-1993-loas.pdf" in h, "a lei declarada não foi publicada"
 
 
+def test_notebook_declarado_vazio_diz_que_foi_conferido():
+    """`fontes_notebook: []` não é o mesmo que campo ausente.
+
+    Ausente, vazio e desconhecido são três coisas — a mesma regra das barras.
+    Um assunto de livro sobe legitimamente só a nota; um cuja lista falhou sobe
+    só a nota também. Sem dizer qual é qual, os dois ficam idênticos na tela, e
+    foi essa indistinção que gerou o relato "os notebooks só receberam uma
+    fonte". Campo ausente segue sem bloco: aí de fato não se sabe.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        mv = _mat_vault(base) / "assuntos"
+        for slug, linha in (("crase", "fontes_notebook: []\n"), ("sintaxe", "")):
+            alvo = mv / slug / "padrao--pestana"
+            alvo.mkdir(parents=True, exist_ok=True)
+            (alvo / f"{slug}--padrao--pestana--TESTE_2026.md").write_text(
+                f'---\ntitle: "{slug}"\naprofundamento: "padrao--pestana"\n'
+                f'nivel: padrao\nfontes: "A Gramática para Concursos (Pestana)"\n'
+                f'{linha}status: concluido\n---\n\n## Resumo\n\nTexto.\n',
+                encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        mdir = _dir_materia(out, "teste_2026")
+
+        vazio = (mdir / "crase" / "index.html").read_text(encoding="utf-8")
+        assert "Fontes do notebook" in vazio, \
+            "declarado vazio tem de dizer que foi conferido, não sumir"
+        assert "Só a nota deste assunto" in vazio
+
+        ausente = (mdir / "sintaxe" / "index.html").read_text(encoding="utf-8")
+        assert "Fontes do notebook" not in ausente, \
+            "campo ausente não pode afirmar nada — não se sabe"
+
+
 def test_rotulo_do_aprofundamento_proprio_descreve_o_artefato():
     """`proprio` é token de PATH, não nome de fonte: a cascata genérica faria
     title-case e sairia "Proprio · Padrão" — que não descreve nada e ainda perde

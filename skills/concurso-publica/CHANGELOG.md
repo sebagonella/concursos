@@ -2,6 +2,19 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.22.1] - 2026-08-06
+
+### Corrigido
+- **`fontes_notebook: []` declarado sumia da ficha.** O bloco só aparecia com a
+  lista não-vazia, então "conferido, não há lei a subir" e "ninguém conferiu"
+  renderizavam idênticos — nada. Ausente, vazio e desconhecido são três coisas,
+  a mesma regra que já vale para as barras de progresso: campo **ausente** segue
+  sem bloco (não se sabe), campo **declarado vazio** passa a dizer *"Só a nota
+  deste assunto · conferido · nenhuma lei a subir"*. Um assunto de livro sobe
+  legitimamente só a nota; um cuja lista falhou também — sem dizer qual é qual,
+  os dois ficam iguais na tela, e foi essa indistinção que gerou o relato "os
+  notebooks só receberam uma fonte".
+
 ## [0.22.0] - 2026-08-05
 
 ### Corrigido
