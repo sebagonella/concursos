@@ -680,14 +680,27 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
     # norma tem 1 fonte e manda 6 ao notebook (a nota + as leis de apoio); um de
     # livro tem 2 e manda 1, porque o livro não está no vault. Escrever "fontes"
     # duas vezes sem qualificador na mesma tela é o que confundia.
+    # Ausente, vazio e desconhecido são três coisas — a mesma regra das barras.
+    # Sem o campo, não se sabe o que o notebook recebeu, e o bloco some. Com o
+    # campo em `[]`, sabe-se: alguém olhou e não há lei a subir — e dizer isso
+    # é o que separa "conferido, só a nota" de "ninguém conferiu". Sem a
+    # distinção, o assunto de livro (que legitimamente sobe só a nota) fica
+    # indistinguível daquele cuja lista falhou, que foi exatamente a dúvida que
+    # o relato trouxe: "os notebooks só receberam uma fonte".
     fnb = ap.get("fontes_notebook") or []
+    declarado = ap.get("fontes_notebook_declarado")
     if fnb:
         itens = "".join(f"<div>{esc(n)}</div>" for n in fnb)
-        origem = "declaradas" if ap.get("fontes_notebook_declarado") else "sugeridas"
+        origem = "declaradas" if declarado else "sugeridas"
         ficha.append(f'<div><dt>Fontes do notebook</dt>'
                      f'<dd style="font-size:.92rem">{itens}'
                      f'<div class="meta">{len(fnb)} {origem} · além da nota deste assunto</div>'
                      f'</dd></div>')
+    elif declarado:
+        ficha.append('<div><dt>Fontes do notebook</dt>'
+                     '<dd style="font-size:.92rem">Só a nota deste assunto'
+                     '<div class="meta">conferido · nenhuma lei a subir</div>'
+                     '</dd></div>')
 
     corpo = (f'<article class="papel {cls}" data-aprof="{esc(ident)}">'
              f'<dl class="ficha">{"".join(ficha)}</dl>'
