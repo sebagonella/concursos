@@ -2,6 +2,35 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.23.0] - 2026-08-06
+
+### Alterado
+- **A contagem de fontes sai em todo card aprofundado, inclusive no singular.**
+  O corte era `n_fontes > 1`, sob o argumento de que com uma fonte só o nome é
+  dado e não estado. O efeito medido foi outro: dos **148** assuntos aprofundados
+  do vault, apenas **41** informavam a quantidade; **101** mostravam o nome sem
+  número e **6** não mostravam nada. Número comparável entre cards vale mais que
+  a economia de um selo — o nome continua na linha de contexto, ao lado das
+  páginas, e os dois convivem. Segue barrada a redundância que motivou o corte
+  original: "⇄ N versões" só aparece com mais de uma fonte, porque com uma só
+  ele repete o "Padrão + Detalhado" ao lado.
+
+### Corrigido
+- **6 cards não diziam nada sobre fonte.** Todos de `vendas-e-negociacao`, todos
+  com o mesmo desenho: o único aprofundamento é `padrao--proprio`, e a contagem
+  saía de `fontes_externas`, que exclui o material próprio. Zero não vira selo
+  (a regra era `> 1`) nem entra na linha de contexto (que só imprime com
+  exatamente 1), então o card ficava mudo e o leitor não distinguia "escrito do
+  zero" de "faltou declarar a fonte".
+
+  São duas perguntas diferentes e agora são duas funções: `fontes_externas`
+  responde "há obra de terceiro?" e segue excluindo o próprio;
+  `fontes_do_assunto` responde "o que sustenta este texto?" e o inclui — é a que
+  o card conta. O material próprio se anuncia por selo ✍️ dedicado, e a linha de
+  contexto não o repete.
+
+  Medido depois: **148 de 148** cards com contagem, **0** mudos.
+
 ## [0.22.1] - 2026-08-06
 
 ### Corrigido

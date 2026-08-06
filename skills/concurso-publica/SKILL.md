@@ -1,6 +1,6 @@
 ---
 name: concurso-publica
-version: 0.22.1
+version: 0.23.0
 description: Use quando o usuário quiser transformar a estrutura de um concurso já gerada no vault (pelas skills concurso-prep e concurso-aprofunda) em um site estático navegável para uso local/rede doméstica. Publica TODO o conteúdo abaixo da pasta do concurso, espelhando a organização do vault (COMUM e um galho por cargo) - edital e análise da banca, cronograma, mapas de matéria, materiais e leis baixadas, histórico, sinergia, discursiva, títulos e o aprofundamento. Cada matéria tem duas visões (Plano, do mapa do edital, e Estudo, dos assuntos aprofundados); no Plano, cada tópico leva o literal do edital, os subtópicos derivados, o material recomendado, as pegadinhas da banca, a meta de questões e as seções que o mapa tiver além dessas. Cada assunto tem o podcast tocando, o vídeo rodando, mapa mental e report embutidos, flashcards como quiz e uma página com os prompts do pacote NotebookLM prontos para copiar. Triggers - "publicar o concurso como site", "gerar páginas web do concurso", "site do vault", "ver o material no navegador", "montar o site de estudo", "levar os mapas de matéria para a web", "ver as pegadinhas da banca no site", "publicar o pacote do NotebookLM".
 ---
 
