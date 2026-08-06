@@ -2,6 +2,31 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-08-06
+
+### Corrigido
+
+- **`Relatorio.codigo_saida` era CÓDIGO MORTO.** A propriedade existia e **nenhum chamador a
+  usava**: `nlm_run.py` remontava `2 if falhou else 0` à mão e a quota noutro ponto,
+  `nlm_coleta.py` idem. A regra do código de saída vivia num lugar que ninguém lia — então
+  acrescentar `fontes_faltando` só a ela não teria mudado nada. Os dois `main()` passam a
+  consultar o relatório, tomando o **pior** código entre os pacotes processados.
+- **Fonte declarada que falta em disco passa a sair 2.** Notebook montado sem a lei que o
+  próprio pacote declara não é sucesso: a "pendência nomeada" ia só para o stdout, e quem
+  automatiza olha o **exit code**, que dizia que estava tudo bem. A quota mantém precedência
+  (4), porque é o único caso em que "rode amanhã" é a instrução certa.
+- O aviso das fontes faltantes sai junto do **bloco final** do `nlm_run`, não no meio: mensagem
+  no meio de saída longa não se lê.
+
+### Adicionado
+
+- **`notebooklm_fontes_subidas` e `notebooklm_fontes_faltando` gravados no pacote.** Antes o
+  relatório morria no stdout da execução e não havia como saber, depois, com que fontes um
+  podcast foi gerado — a não ser abrindo o notebook. O prefixo `notebooklm_` é deliberado:
+  `herdar_campos` herda por prefixo, então os campos sobrevivem a toda regeração futura do
+  pacote sem código novo. Fontes que já estavam no notebook entram na conta, porque também
+  sustentam a mídia gerada.
+
 ## [0.2.1] - 2026-07-31
 
 ### Corrigido

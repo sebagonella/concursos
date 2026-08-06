@@ -57,6 +57,11 @@ class Relatorio:
             return 4                       # retomável: mesmo comando amanhã
         if self.falhas:
             return 2                       # degradação parcial
+        if self.fontes_faltando:
+            # Notebook criado sem a lei declarada não é sucesso. A "pendência
+            # nomeada" ia só para o stdout — quem automatiza olha o código de
+            # saída, e ele dizia que estava tudo bem.
+            return 2
         return 0
 
 
@@ -106,6 +111,19 @@ def garantir_fontes(pac, nb: str, porta, rel: Relatorio, leis_dir: Path | None) 
             continue
         porta.subir_fonte(nb, caminho)
         rel.fontes_subidas.append(caminho.name)
+
+    # O que subiu fica GRAVADO, não só relatado. Sem isto não há como saber com
+    # que fontes um podcast foi feito sem abrir o notebook — e o relatório morre
+    # no stdout da execução.
+    #
+    # O prefixo `notebooklm_` é deliberado: `herdar_campos` herda por prefixo, e
+    # por isso estes campos sobrevivem a toda regeração futura do pacote sem
+    # precisar de código novo. `ja_la` entra na conta porque uma fonte que já
+    # estava no notebook também sustenta a mídia gerada.
+    pac_mod.gravar_campos(pac.caminho, {
+        "notebooklm_fontes_subidas": ", ".join(sorted(ja_la | set(rel.fontes_subidas))),
+        "notebooklm_fontes_faltando": ", ".join(faltando),
+    })
 
 
 def executar(pac, tarefas: list, porta, *, leis_dir: Path | None = None,
