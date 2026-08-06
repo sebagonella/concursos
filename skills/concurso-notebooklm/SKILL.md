@@ -1,6 +1,6 @@
 ---
 name: concurso-notebooklm
-version: 0.2.1
+version: 0.3.0
 description: >
   Use quando o usuário quiser EXECUTAR automaticamente os pacotes NotebookLM que a
   skill concurso-aprofunda já preparou no vault — criar o notebook, subir as fontes,

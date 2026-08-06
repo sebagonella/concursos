@@ -388,6 +388,54 @@ def test_dublê_tem_a_mesma_assinatura_do_protocolo():
         assert esperado == obtido, f"{nome}: {esperado} != {obtido}"
 
 
+def test_fonte_faltando_muda_o_codigo_de_saida():
+    """Notebook criado sem a lei declarada não pode sair 0.
+
+    A "pendência nomeada" ia só para o stdout: não mudava o exit code, não era
+    gravada no vault e não bloqueava a geração. Quem automatiza olha o código de
+    saída — e ele dizia que estava tudo bem.
+    """
+    rel = exe_mod.Relatorio(fontes_faltando=["lei-8742-1993-loas.pdf"])
+    assert rel.codigo_saida == 2, rel.codigo_saida
+    # quota tem precedência: é o único caso em que "rode amanhã" é a instrução
+    rel2 = exe_mod.Relatorio(fontes_faltando=["x.pdf"], sem_quota=[("podcast", "teto")])
+    assert rel2.codigo_saida == 4, rel2.codigo_saida
+
+
+def test_nlm_run_usa_o_codigo_de_saida_do_relatorio():
+    """`codigo_saida` era CÓDIGO MORTO: os dois comandos remontavam o exit à mão.
+
+    `nlm_run.py` fazia `return 2 if falhou else 0` e `nlm_coleta.py` idem, com a
+    quota remontada em outro ponto. Corrigir só a propriedade não mudaria nada —
+    é preciso que os `main()` a consultem, senão a regra vive num lugar que
+    ninguém lê.
+    """
+    fonte = (ROOT / "nlm_run.py").read_text(encoding="utf-8")
+    assert "codigo_saida" in fonte, "nlm_run.py não consulta o codigo_saida"
+    fonte_c = (ROOT / "nlm_coleta.py").read_text(encoding="utf-8")
+    assert "codigo_saida" in fonte_c, "nlm_coleta.py não consulta o codigo_saida"
+
+
+def test_fontes_subidas_e_faltando_sao_gravadas_no_pacote():
+    """Sem isto, não há como saber com que fontes um podcast foi feito.
+
+    O relatório morria no stdout. Os campos vão com o prefixo `notebooklm_` de
+    propósito: `herdar_campos` herda por prefixo, então sobrevivem a toda
+    regeração futura do pacote sem código novo.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d), com_leis=True)
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa()
+        exe_mod.executar(pac, [], porta, leis_dir=None)
+        txt = caminho.read_text(encoding="utf-8")
+        assert "notebooklm_fontes_subidas:" in txt, txt[:400]
+        assert "notebooklm_fontes_faltando:" in txt, txt[:400]
+        assert "decreto-7053-2009-populacao-rua.pdf" in txt, "a pendência não foi gravada"
+
+
 def test_notebook_existente_nao_e_recriado():
     """Reexecutar sobre 66 assuntos criaria 66 duplicados e queimaria a quota."""
     with tempfile.TemporaryDirectory() as d:

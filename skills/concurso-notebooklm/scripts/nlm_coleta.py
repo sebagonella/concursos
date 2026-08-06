@@ -81,13 +81,14 @@ def main() -> int:
         return 2
 
     porta = porta_mod.PortaCLI(args.executavel)
-    itens, baixadas, falhou = [], 0, False
+    itens, baixadas, falhou, rels = [], 0, False, []
     for pac, _ in pendentes:
         try:
             rel = exe_mod.coletar(pac, porta, forcar_idade=args.ignorar_idade)
         except porta_mod.ErroDaPorta as e:
             sys.stderr.write(f"ERRO de rede/auth em {pac.pasta.name}: {e}\n")
             return 1
+        rels.append(rel)
         baixadas += len(rel.baixadas)
         falhou = falhou or bool(rel.falhas)
         itens.append({"pacote": pac.pasta.name, "baixadas": rel.baixadas,
@@ -102,7 +103,9 @@ def main() -> int:
     elif baixadas:
         sys.stderr.write("\nPronto. Republique o site para o material aparecer:\n"
                          "  skills/concurso-publica — site_collector + site_builder\n")
-    return 2 if falhou else 0
+    # Mesmo motivo do nlm_run: o código de saída é do relatório, não recomputado.
+    pior = max((r.codigo_saida for r in rels), default=0)
+    return max(pior, 2) if falhou else pior
 
 
 if __name__ == "__main__":

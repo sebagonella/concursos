@@ -153,6 +153,13 @@ def main() -> int:
                   for p, r in relatorios],
     }, indent=2, ensure_ascii=False))
 
+    # O exit code sai do RELATÓRIO, não de um cálculo paralelo. Antes,
+    # `Relatorio.codigo_saida` era código morto: aqui se remontava
+    # `2 if falhou else 0` à mão e a quota noutro ponto, então a regra vivia num
+    # lugar que ninguém lia — e `fontes_faltando` nunca chegava ao chamador.
+    pior = max((r.codigo_saida for _, r in relatorios), default=0) if relatorios else 0
+    faltando = sorted({n for _, r in relatorios for n in r.fontes_faltando})
+
     if quota:
         sys.stderr.write(
             "\nParou na quota diária. O teto não é informado pelo servidor — o que se\n"
@@ -165,7 +172,12 @@ def main() -> int:
             f"\n{total} geração(ões) pedida(s). Elas levam minutos. Colete com:\n"
             f"  python3 {AQUI / 'nlm_coleta.py'} "
             f"{'--aprofundamento' if args.aprofundamento else '--assuntos-dir'} {onde}\n")
-    return 2 if falhou else 0
+    if faltando:
+        # Aviso junto do bloco final: mensagem no meio de saída longa não se lê.
+        sys.stderr.write(
+            f"\nATENÇÃO: {len(faltando)} fonte(s) declarada(s) NÃO encontrada(s) em disco —\n"
+            f"o notebook foi montado sem ela(s): {', '.join(faltando)}\n")
+    return max(pior, 2) if falhou else pior
 
 
 if __name__ == "__main__":
