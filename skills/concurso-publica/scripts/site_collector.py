@@ -195,14 +195,35 @@ def fontes_externas(aprofs: list[dict]) -> list[str]:
     dava verdadeiro e o "material próprio" era contado como fonte externa — o
     site afirmando que existe fonte onde o arquivo declara que não há.
     """
+    return [s for s in fontes_do_assunto(aprofs) if s != FONTE_PROPRIA]
+
+
+def fontes_do_assunto(aprofs: list[dict]) -> list[str]:
+    """TODOS os slugs de fonte do assunto, na ordem, inclusive o material próprio.
+
+    É o que o card conta. `fontes_externas` responde outra pergunta — "há obra de
+    terceiro?" —, e usá-la para a contagem deixava **6 assuntos do vault sem
+    informação nenhuma** no card: os que só têm `padrao--proprio` davam zero, e
+    zero não sai como selo (a regra era `> 1`) nem como nome na linha de contexto
+    (que só imprime com exatamente 1). O leitor não distinguia "escrito do zero"
+    de "faltou declarar a fonte".
+
+    Material próprio é uma **origem**, não a ausência de uma. Quem precisa da
+    distinção usa `tem_material_proprio`, que vira selo à parte.
+    """
     vistos, out = set(), []
     for a in aprofs:
         for s in (a.get("fontes_id") or []):
-            if s == FONTE_PROPRIA or s in vistos:
+            if s in vistos:
                 continue
             vistos.add(s)
             out.append(s)
     return out
+
+
+def tem_material_proprio(aprofs: list[dict]) -> bool:
+    """Algum aprofundamento deste assunto foi escrito do zero."""
+    return any(FONTE_PROPRIA in (a.get("fontes_id") or []) for a in aprofs)
 
 
 # --------------------------------------------------------------------------- #
@@ -814,10 +835,13 @@ def coletar_assunto(subdir: Path, mapa_prio: dict | None = None) -> dict | None:
         "n_aprofundamentos": len(aprofs),
         "niveis": sorted({a["nivel"] for a in aprofs}),
         # Fontes distintas entre todos os aprofundamentos deste assunto, contadas
-        # pelo SLUG do id — que é canônico — e exibidas pelo nome legível. O
-        # material próprio não conta: é a ausência de fonte externa, não uma.
-        "fontes": [nome_da_fonte(s) for s in fontes_externas(aprofs)],
-        "n_fontes": len(fontes_externas(aprofs)),
+        # pelo SLUG do id — que é canônico — e exibidas pelo nome legível.
+        # Inclui o material próprio: ele é uma ORIGEM, e excluí-lo deixava 6
+        # assuntos do vault com card mudo. Quem foi escrito do zero se anuncia
+        # pelo selo de `tem_proprio`, não pela ausência de número.
+        "fontes": [nome_da_fonte(s) for s in fontes_do_assunto(aprofs)],
+        "n_fontes": len(fontes_do_assunto(aprofs)),
+        "tem_proprio": tem_material_proprio(aprofs),
         "aprofundamentos": aprofs,
         # o vínculo com o tópico é do ASSUNTO, então vale a união do que os
         # aprofundamentos declararam: basta um deles saber o tópico para o

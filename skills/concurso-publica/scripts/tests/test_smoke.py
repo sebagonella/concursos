@@ -1071,11 +1071,16 @@ def test_agrupamento_por_topico_usa_o_vinculo_gravado_nao_o_slug():
     assert "Ainda sem tópico" in h
 
 
-def test_material_proprio_nao_conta_como_fonte():
-    """"material próprio" ocupa o campo `fontes:` porque o template precisa
-    preencher algo — mas é a declaração de que NÃO há fonte externa. Contá-lo
-    fazia o card anunciar "2 fontes" num assunto com uma norma e um texto
-    escrito do zero."""
+def test_material_proprio_e_fonte_para_o_card_e_nao_para_a_pergunta_externa():
+    """Duas perguntas diferentes, duas funções.
+
+    `fontes_externas` responde "há obra de terceiro?" e segue excluindo o
+    material próprio. `fontes_do_assunto` responde "o que sustenta este texto?"
+    e o inclui — é o que o card conta. Usar a primeira para contar deixava **6
+    assuntos do vault com card mudo**: os que só têm `padrao--proprio` davam
+    zero, e zero não vira selo nem entra na linha de contexto, então o leitor
+    não distinguia "escrito do zero" de "faltou declarar a fonte".
+    """
     aprofs = [
         {"fontes_id": ["lei-8069"], "fontes": "Lei nº 8.069/1990"},
         {"fontes_id": ["proprio"], "fontes": "material próprio"},
@@ -1083,7 +1088,12 @@ def test_material_proprio_nao_conta_como_fonte():
     # devolve SLUGS do id (canônicos), não o texto livre do frontmatter
     assert sc.fontes_externas(aprofs) == ["lei-8069"]
     assert sc.fontes_externas([aprofs[1]]) == []
-    assert len(sc.fontes_externas(aprofs)) == 1
+    # o card conta as duas, e sabe que uma delas é própria
+    assert sc.fontes_do_assunto(aprofs) == ["lei-8069", "proprio"]
+    assert sc.tem_material_proprio(aprofs) is True
+    assert sc.tem_material_proprio([aprofs[0]]) is False
+    # assunto SÓ com material próprio conta 1, nunca 0
+    assert len(sc.fontes_do_assunto([aprofs[1]])) == 1
 
 
 def test_selo_conta_fontes_pelo_id_nao_pelo_texto_livre():
@@ -1115,6 +1125,8 @@ def test_material_proprio_em_layout_legado_nao_conta_como_fonte():
     aprofs = [{"fontes_id": [], "fontes": "material próprio"}]
     assert sc.fontes_externas(aprofs) == [] or sc.fontes_externas(aprofs) == set(), \
         sc.fontes_externas(aprofs)
+    # e sem id parseável não há o que contar — o card não inventa fonte
+    assert sc.fontes_do_assunto(aprofs) == []
 
 
 def test_modelo_nao_publica_campo_que_ninguem_le():
@@ -1191,6 +1203,42 @@ def test_notebook_declarado_vazio_diz_que_foi_conferido():
         ausente = (mdir / "sintaxe" / "index.html").read_text(encoding="utf-8")
         assert "Fontes do notebook" not in ausente, \
             "campo ausente não pode afirmar nada — não se sabe"
+
+
+def test_todo_card_aprofundado_diz_quantas_fontes():
+    """Card de assunto aprofundado nunca fica mudo sobre fonte.
+
+    Medido no vault antes da correção: dos 148 assuntos aprofundados, **101**
+    não diziam quantas fontes têm (o selo exigia `> 1`, e o nome ia solto na
+    linha de contexto) e **6** não diziam nada — os que só têm `padrao--proprio`
+    contavam zero, e zero não vira selo nem entra na linha. Duas regras
+    diferentes produzindo o mesmo silêncio.
+    """
+    # uma fonte: selo no singular, e o nome continua na linha de contexto
+    h = sb.selos_aprofundamento({"niveis": ["padrao"], "n_fontes": 1,
+                                 "n_aprofundamentos": 1, "fontes": ["Abreu"]})
+    assert "📚 1 fonte" in h and "1 fontes" not in h, h
+
+    # duas: plural, como antes
+    assert "📚 2 fontes" in sb.selos_aprofundamento(
+        {"niveis": ["padrao"], "n_fontes": 2, "n_aprofundamentos": 1,
+         "fontes": ["Pestana", "Rosenthal"]})
+
+    # material próprio conta E se anuncia — era o card totalmente mudo
+    proprio = {"niveis": ["padrao"], "n_fontes": 1, "n_aprofundamentos": 1,
+               "fontes": ["material próprio"], "tem_proprio": True}
+    h = sb.selos_aprofundamento(proprio)
+    assert "📚 1 fonte" in h, h
+    assert "Material próprio" in h, h
+
+    # e a linha de contexto não repete o que o selo já disse. Conta só o texto
+    # VISÍVEL: o `title=` é tooltip, e lá o nome da fonte é legítimo.
+    card = sb.card_assunto({**proprio, "titulo": "Copywriting", "slug": "copywriting",
+                            "progresso": {"total": 0, "feitos": 0}, "midias": {},
+                            "flashcards": {}, "sinais": {}}, "x/index.html")
+    visivel = re.sub(r'\s\w+="[^"]*"', "", card)
+    assert visivel.lower().count("aterial próprio") == 1, \
+        f"o card anunciou material próprio duas vezes: {visivel}"
 
 
 def test_rotulo_do_aprofundamento_proprio_descreve_o_artefato():
@@ -2516,10 +2564,15 @@ def test_card_mostra_so_midia_presente_e_pagina_mostra_todas():
 
 
 def test_card_nao_repete_a_mesma_informacao_em_tres_selos():
-    """O card antigo trazia "1 fonte", "Padrão + Detalhado" e "2 versões" — com uma
-    única fonte, "2 versões" é exatamente "Padrão + Detalhado" dito de novo. Fonte
-    única passa a ser texto de contexto (dado), ao lado das páginas; selo fica só
-    para estado."""
+    """Com uma única fonte, "2 versões" é exatamente "Padrão + Detalhado" dito de
+    novo — essa redundância continua barrada.
+
+    O que mudou: a **contagem** de fontes voltou a sair sempre, inclusive no
+    singular. O corte em `> 1` deixava 101 dos 148 assuntos aprofundados do vault
+    sem dizer quantas fontes têm, e mais 6 sem dizer nada; número comparável
+    entre cards vale mais que a economia de um selo. O nome segue na linha de
+    contexto, ao lado das páginas — os dois convivem.
+    """
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
         alvo = _mat_vault(base) / "assuntos" / "regencia-verbal-e-nominal"
@@ -2535,9 +2588,10 @@ def test_card_nao_repete_a_mesma_informacao_em_tres_selos():
         h = (_dir_materia(out, "teste_2026") / "index.html").read_text(encoding="utf-8")
 
         assert "Padrão + Detalhado" in h            # o nível continua sinalizado
-        assert "1 fonte" not in h                   # fonte única não é selo
+        assert "📚 1 fonte" in h                     # a contagem sai sempre
+        assert "1 fontes" not in h                  # …e concorda em número
         assert "versões" not in h                   # com 1 fonte, repetiria o nível
-        assert "págs. 978–1017 · Pestana" in h      # virou linha de contexto
+        assert "págs. 978–1017 · Pestana" in h      # o nome segue no contexto
 
         # com DUAS fontes, os selos voltam: aí a contagem informa algo novo
         outro = alvo / "padrao--abreu"

@@ -906,17 +906,29 @@ def selos_aprofundamento(assunto: dict) -> str:
     niveis = assunto.get("niveis") or []
     n_fontes = assunto.get("n_fontes") or 0
     n_aprof = assunto.get("n_aprofundamentos") or 0
-    if not niveis and n_fontes <= 1 and n_aprof <= 1:
-        return ""   # caso simples: não poluir o card
+    if not niveis and not n_fontes and n_aprof <= 1:
+        return ""   # sem aprofundamento nenhum: não há o que selar
 
     partes = []
 
-    # Fonte só vira SELO quando há mais de uma — com uma única, o nome dela é dado,
-    # não estado, e vive na linha de contexto do card, junto das páginas do livro.
-    if n_fontes > 1:
+    # A contagem sai em TODO card aprofundado, inclusive com uma fonte só. Antes
+    # o corte era `> 1`, sob o argumento de que com uma única o nome é dado e não
+    # estado — mas o efeito medido era outro: dos 148 assuntos aprofundados do
+    # vault, 101 não diziam quantas fontes têm e 6 não diziam nada, porque zero
+    # não vira selo nem entra na linha de contexto. Número comparável entre
+    # cards vale mais que a economia de um selo; o nome continua ao lado.
+    if n_fontes:
         titulo = "; ".join(assunto.get("fontes") or [])
+        plural = "fonte" if n_fontes == 1 else "fontes"
         partes.append(f'<span class="selo-aprof" title="{esc(titulo)}">'
-                      f'📚 {n_fontes} fontes</span>')
+                      f'📚 {n_fontes} {plural}</span>')
+
+    # Escrito do zero é uma origem que muda como se lê o material — não há página
+    # para conferir nem obra para checar —, então se anuncia por conta própria em
+    # vez de aparecer como falta de fonte.
+    if assunto.get("tem_proprio"):
+        partes.append('<span class="selo-aprof" title="Escrito do zero para este '
+                      'concurso, sem obra de referência">✍️ Material próprio</span>')
 
     # níveis — meia bolha (padrão) e/ou bolha cheia (detalhado)
     tem_padrao = "padrao" in niveis
@@ -953,7 +965,10 @@ def card_assunto(a: dict, href: str, selo_topico: dict | None = None) -> str:
     if a.get("paginas_livro"):
         ctx.append(f'págs. {a["paginas_livro"]}')
     fontes = a.get("fontes") or []
-    if len(fontes) == 1:
+    # Com uma fonte só, o nome dela é dado útil e fica aqui, ao lado das páginas.
+    # A exceção é o material próprio, que já tem selo dizendo isso — repeti-lo na
+    # linha faria o card anunciar a mesma coisa duas vezes, uma linha abaixo.
+    if len(fontes) == 1 and not a.get("tem_proprio"):
         ctx.append(fontes[0])
     pag = f'<span class="meta">{esc(" · ".join(ctx))}</span>' if ctx else ""
     # o que EXISTE neste assunto — contagem e presença, nunca julgamento
