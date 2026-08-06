@@ -105,14 +105,61 @@ def _numeros_de_norma(stem: str) -> list[str]:
     return [n for n in re.findall(r"\d{3,5}", stem) if not _RE_ANO.match(n)]
 
 
-def _corpo_tem_numero(corpo_digitos: str, numero: str) -> bool:
-    """O número aparece no corpo, ignorando a formatação de milhar.
+# O que qualifica um número como NORMA. Sem isto, qualquer número casa: no vault,
+# "Cap. 3 — Ortografia 105–142" e "(p. 105)" mandavam a LC 105 (sigilo bancário)
+# para o notebook de ortografia, e "art. 109" puxaria a Resolução CNAS 109.
+# Página é número, artigo é número, inciso é número — norma é número COM NOME.
+_MARCADOR_NORMA = (
+    r"(?:lei(?:\s+complementar|\s+federal|\s+distrital|\s+org[âa]nica)?|lc|ldb"
+    r"|decreto(?:\s+federal|\s+distrital)?|dec"
+    r"|resolu[çc][ãa]o(?:\s+conjunta)?|res|portaria|port"
+    r"|emenda(?:\s+constitucional)?|ec|medida\s+provis[óo]ria|mp|s[úu]mula)"
+)
 
-    `8.742` no texto e `8742` no nome do arquivo são a MESMA lei. A comparação
-    antiga era substring crua, então o ponto do milhar quebrava o casamento — e o
-    teste que existia escrevia "Lei 8742" sem ponto, mascarando o falso negativo.
+
+def _corpo_tem_numero(corpo_digitos: str, numero: str) -> bool:
+    """O número aparece no corpo COMO NORMA, não como página ou artigo.
+
+    Duas exigências, cada uma nascida de um falso positivo real:
+
+    1. **fronteira**: `105` não pode casar dentro de `1050` — a comparação era
+       substring crua;
+    2. **marcador**: o número precisa vir depois de "Lei", "Decreto",
+       "Resolução"… em até ~40 caracteres, que cobre "Lei Complementar nº
+       105/2001" e "Resolução CMN nº 4.949/2021" sem alcançar a frase seguinte.
+
+    O milhar já foi removido pelo chamador, então `8.742` no texto e `8742` no
+    nome do arquivo são a mesma lei.
     """
-    return numero in corpo_digitos
+    return re.search(rf"{_MARCADOR_NORMA}[^.\n]{{0,40}}?(?<!\d){re.escape(numero)}(?!\d)",
+                     corpo_digitos, re.IGNORECASE) is not None
+
+
+# Siglas que nomeiam A NORMA, não o órgão que a editou nem o sistema que ela criou.
+# A distinção é julgamento, não derivação, e por isso a lista é explícita: medindo o
+# vault, "token alfabético final do stem" pegava CDC e LGPD mas também SEGURANCA,
+# CLIENTE e HISTORICO, enquanto qualquer regra que aceitasse BACEN fazia toda menção
+# ao Banco Central arrastar duas circulares específicas (7 casos), e SUAS — o sistema —
+# arrastava a NOB (21 casos). Referência a "CDC" É referência à Lei 8.078; referência
+# a "BACEN" não é referência à Circular 3.978.
+# Para acrescentar: só entra sigla que o leitor usaria NO LUGAR do número da norma.
+_APELIDOS_DE_NORMA = {
+    "CDC": "lei-8078",
+    "ECA": "lei-8069",
+    "LGPD": "lei-13709",
+    "LOAS": "lei-8742",
+    "LBI": "lei-13146",
+    "PNAS": "pnas-",
+    "PLD": "pld",
+    "PRSA": "prsa-",
+    "PRSAC": "prsac-",
+}
+
+
+def _corpo_tem_apelido(corpo: str, stem: str) -> bool:
+    """O corpo cita a norma pelo apelido consagrado dela (CDC, LGPD, ECA…)."""
+    return any(marca in stem.lower() and re.search(rf"\b{sigla}\b", corpo)
+               for sigla, marca in _APELIDOS_DE_NORMA.items())
 
 
 def leis_relacionadas(corpo: str, leis_dir: Path | None, fm: dict | None = None) -> list[str]:
@@ -123,8 +170,15 @@ def leis_relacionadas(corpo: str, leis_dir: Path | None, fm: dict | None = None)
     que ela escolheu, porque adivinhação silenciosa foi o que pôs leis não
     declaradas em ~75 aprofundamentos do vault.
     """
-    declaradas = [x.strip() for x in ((fm or {}).get("fontes_notebook") or "").split(",")
-                  if x.strip()]
+    # Tolera as duas grafias do frontmatter: `a.pdf, b.pdf` e a lista YAML inline
+    # `[a.pdf, b.pdf]`. A `concurso-publica` lê este MESMO campo com `lista_yaml`,
+    # que aceita ambas — divergir aqui faria o nome vir com colchete colado,
+    # nunca casar com arquivo em disco e virar "fonte faltando" sem motivo
+    # aparente. Mesmo campo, dois leitores: têm de ler igual.
+    bruto = str((fm or {}).get("fontes_notebook") or "").strip()
+    if bruto.startswith("[") and bruto.endswith("]"):
+        bruto = bruto[1:-1]
+    declaradas = [x.strip().strip('"').strip("'") for x in bruto.split(",") if x.strip()]
     if declaradas:
         return declaradas
     if not leis_dir or not leis_dir.exists():
@@ -137,7 +191,8 @@ def leis_relacionadas(corpo: str, leis_dir: Path | None, fm: dict | None = None)
     # mandava 9 fontes que eram a nota + 4 leis × 2 containers.
     por_stem: dict[str, Path] = {}
     for arq in sorted(list(leis_dir.glob("*.md")) + list(leis_dir.glob("*.pdf"))):
-        if not any(_corpo_tem_numero(corpo_digitos, n) for n in _numeros_de_norma(arq.stem)):
+        if not (any(_corpo_tem_numero(corpo_digitos, n) for n in _numeros_de_norma(arq.stem))
+                or _corpo_tem_apelido(corpo, arq.stem)):
             continue
         atual = por_stem.get(arq.stem)
         if atual is None or (atual.suffix == ".pdf" and arq.suffix == ".md"):

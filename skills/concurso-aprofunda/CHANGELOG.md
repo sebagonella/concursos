@@ -2,6 +2,35 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.11.0] - 2026-08-06
+
+### Corrigido
+- **A heurística de leis do notebook casava número de página com número de lei.**
+  `_corpo_tem_numero` fazia substring crua, então "Cap. 3 — Ortografia 105–142" e
+  "(p. 105)" no assunto **ortografia-oficial** casavam com
+  `lei-complementar-105-2001-sigilo-bancario` — e `art. 109` puxaria a Resolução
+  CNAS 109. Página é número, artigo é número, inciso é número; **norma é número
+  com nome**. Agora o número exige fronteira de dígito e um marcador de norma
+  (Lei/Decreto/Resolução/LC…) em até 40 caracteres antes. Achado no dry-run da
+  migração, **antes** de gravar em 177 arquivos.
+
+### Adicionado
+- **Apelido consagrado casa a norma.** `produtos-bancarios` cita "CDC" seis vezes
+  e não escreve "8.078" nenhuma — a heurística por número deixava o CDC fora do
+  notebook do assunto que mais depende dele. `_APELIDOS_DE_NORMA` é lista
+  **explícita**, não derivação: medindo o vault, "token final do stem" pegava CDC
+  e LGPD mas também SEGURANCA e HISTORICO, e qualquer regra que aceitasse BACEN
+  fazia toda menção ao Banco Central arrastar duas circulares (7 assuntos),
+  enquanto SUAS — o sistema — arrastava a NOB (21). Referência a "CDC" **é**
+  referência à Lei 8.078; referência a "BACEN" **não é** referência à Circular
+  3.978. Rendeu 21 leis devidas em 18 aprofundamentos.
+- **`migrar_fontes_notebook.py`** — declara `fontes_notebook:` nos aprofundamentos
+  do vault. `--dry-run` por padrão, backup `.md.bak` (nunca `.bak.md`, que
+  ordenaria antes do `.md` e viraria o arquivo principal), e falha alto quando a
+  varredura não acha nada. `--completar` reexamina o que já está declarado e
+  **acrescenta sem nunca remover** — é o modo de usar depois de melhorar a
+  heurística, e é idempotente.
+
 ## [0.10.0] - 2026-08-05
 
 ### Adicionado
