@@ -1883,6 +1883,71 @@ def test_lei_casa_mesmo_com_numero_formatado_no_corpo():
         assert "lei-8742-1993-loas.pdf" in achadas, achadas
 
 
+def test_apelido_consagrado_casa_a_norma():
+    """"CDC" é referência à Lei 8.078, e o corpo pode nunca escrever o número.
+
+    Caso real: `produtos-bancarios` cita "CDC" seis vezes e não escreve "8.078"
+    nenhuma — a heurística por número deixava o CDC fora do notebook do assunto
+    que mais depende dele.
+    """
+    import notebooklm_pack as pack
+    with tempfile.TemporaryDirectory() as d:
+        leis = Path(d) / "leis"
+        leis.mkdir()
+        (leis / "lei-8078-1990-cdc.md").write_text("…", encoding="utf-8")
+        corpo = "A oferta vincula o fornecedor (CDC, art. 30), e a recusa é abusiva."
+        assert pack.leis_relacionadas(corpo, leis) == ["lei-8078-1990-cdc.md"]
+
+
+def test_sigla_de_orgao_nao_puxa_norma():
+    """"BACEN" nomeia o órgão, não a circular que ele editou.
+
+    Sem esta separação, toda menção ao Banco Central arrastava duas circulares
+    específicas (7 assuntos do vault), e "SUAS" — o sistema — arrastava a NOB
+    (21 assuntos).
+    """
+    import notebooklm_pack as pack
+    with tempfile.TemporaryDirectory() as d:
+        leis = Path(d) / "leis"
+        leis.mkdir()
+        (leis / "carta-circular-bacen-4001-2020.md").write_text("…", encoding="utf-8")
+        assert pack.leis_relacionadas("Cabe ao BACEN fiscalizar as instituições.",
+                                      leis) == []
+
+
+def test_numero_de_pagina_nao_puxa_lei():
+    """Página é número, e número solto não identifica norma.
+
+    Caso real do vault: `ortografia-oficial` do BB cita "Cap. 3 — Ortografia
+    105–142" e "(p. 105)" — números de PÁGINA do Pestana. A heurística casava
+    `105` com `lei-complementar-105-2001-sigilo-bancario` e mandava a LC do
+    sigilo bancário para o notebook de ortografia. O número só vale quando vem
+    acompanhado da palavra que o qualifica como norma.
+    """
+    import notebooklm_pack as pack
+    with tempfile.TemporaryDirectory() as d:
+        leis = Path(d) / "leis"
+        leis.mkdir()
+        (leis / "lei-complementar-105-2001-sigilo-bancario.pdf").write_bytes(b"%PDF-1.4\n")
+        corpo = "Cap. 3 — Ortografia 105–142. Estuda-se por memória (p. 105)."
+        assert pack.leis_relacionadas(corpo, leis) == [], \
+            "número de página puxou a lei"
+        # e a citação de verdade continua casando
+        assert pack.leis_relacionadas(
+            "Nos termos da Lei Complementar nº 105/2001, o sigilo…", leis) == [
+            "lei-complementar-105-2001-sigilo-bancario.pdf"]
+
+
+def test_artigo_nao_puxa_resolucao_de_mesmo_numero():
+    """`art. 109` não é a Resolução CNAS 109."""
+    import notebooklm_pack as pack
+    with tempfile.TemporaryDirectory() as d:
+        leis = Path(d) / "leis"
+        leis.mkdir()
+        (leis / "resolucao-cnas-109-2009-tipificacao.pdf").write_bytes(b"%PDF-1.4\n")
+        assert pack.leis_relacionadas("Conforme o art. 109 do estatuto…", leis) == []
+
+
 def test_ano_no_nome_do_arquivo_nao_casa_sozinho():
     """Arquivo cujo primeiro número É o ano casa com qualquer texto que cite o ano.
 
@@ -1898,6 +1963,82 @@ def test_ano_no_nome_do_arquivo_nao_casa_sozinho():
         achadas = pack.leis_relacionadas(
             "A Constituição de 1988 e o cenário de 2004 mudaram o desenho.", leis)
         assert achadas == [], f"casou só pelo ano: {achadas}"
+
+
+def _vault_migracao(d: Path) -> Path:
+    """Vault mínimo: um concurso, uma lei baixada, um assunto que a cita."""
+    conc = d / "T_2026"
+    leis = conc / "_COMUM/04-MATERIAIS/leis-baixadas"
+    leis.mkdir(parents=True)
+    (leis / "lei-8742-1993-loas.pdf").write_bytes(b"%PDF-1.4\n")
+    pasta = conc / "_COMUM/03-APROFUNDAMENTO/m/assuntos/bpc/padrao--lei-8742"
+    pasta.mkdir(parents=True)
+    (pasta / "bpc--padrao--lei-8742--T_2026.md").write_text(
+        '---\ntitle: "BPC"\naprofundamento: "padrao--lei-8742"\nnivel: padrao\n'
+        'fontes: "Lei nº 8.742/1993"\n---\n\nO art. 20 da Lei nº 8.742/1993 define o BPC.\n',
+        encoding="utf-8")
+    return conc
+
+
+def test_migracao_declara_as_leis_sugeridas():
+    """A heurística deixa de adivinhar a cada geração: a decisão fica gravada."""
+    import migrar_fontes_notebook as mig
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault_migracao(Path(d))
+        achados = mig.varrer(conc)
+        assert len(achados) == 1, achados
+        assert achados[0]["sugeridas"] == ["lei-8742-1993-loas.pdf"], achados[0]
+        mig.gravar_campo(achados[0]["md"], achados[0]["sugeridas"])
+        txt = achados[0]["md"].read_text(encoding="utf-8")
+        assert "fontes_notebook: [lei-8742-1993-loas.pdf]" in txt, txt[:300]
+        assert achados[0]["md"].with_name(achados[0]["md"].name + ".bak").exists()
+
+
+def test_migracao_e_idempotente_e_nao_sobrescreve_decisao():
+    """Rodar duas vezes não pode apagar o que a pessoa declarou à mão.
+
+    Depois da primeira passada o campo existe; a segunda tem de VER isso e não
+    tocar — senão a decisão humana é substituída pelo palpite da heurística a
+    cada execução.
+    """
+    import migrar_fontes_notebook as mig
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault_migracao(Path(d))
+        a1 = mig.varrer(conc)
+        mig.gravar_campo(a1[0]["md"], a1[0]["sugeridas"])
+        a2 = mig.varrer(conc)
+        assert a2[0]["ja_declarado"] is True, a2[0]
+        assert a2[0]["sugeridas"] == [], "não devia nem calcular sugestão"
+        # e uma decisão manual de "só a nota" sobrevive
+        md = a2[0]["md"]
+        md.write_text(md.read_text(encoding="utf-8")
+                      .replace("fontes_notebook: [lei-8742-1993-loas.pdf]",
+                               "fontes_notebook: []"), encoding="utf-8")
+        a3 = mig.varrer(conc)
+        assert a3[0]["ja_declarado"] is True, "`[]` é decisão, não ausência"
+
+
+def test_migracao_falha_alto_sem_alvo():
+    """Varrer e não achar nada é falha, não sucesso."""
+    import migrar_fontes_notebook as mig
+    with tempfile.TemporaryDirectory() as d:
+        sys.argv = ["m", "--concurso-dir", d]
+        assert mig.main() == 2
+
+
+def test_fontes_notebook_le_lista_yaml_com_colchetes():
+    """As duas skills leem o MESMO campo, e precisam ler igual.
+
+    A `concurso-publica` usa `lista_yaml`, que tolera `[a, b]`; aqui o split era
+    direto, então um campo gravado no formato YAML inline virava `['[a.pdf',
+    'b.pdf]']` — nomes com colchete que nunca casariam com arquivo em disco, e a
+    falha seria silenciosa (viraria "fonte faltando" sem motivo aparente).
+    """
+    import notebooklm_pack as pack
+    esperado = ["a.pdf", "b.pdf"]
+    for valor in ("a.pdf, b.pdf", "[a.pdf, b.pdf]", '["a.pdf", "b.pdf"]'):
+        achado = pack.leis_relacionadas("x", None, fm={"fontes_notebook": valor})
+        assert achado == esperado, f"{valor!r} -> {achado}"
 
 
 def test_mesma_norma_em_md_e_pdf_entra_uma_vez_so():
