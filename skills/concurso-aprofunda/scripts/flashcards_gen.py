@@ -132,6 +132,12 @@ def main():
     ap.add_argument("--concurso", default="",
                     help="slug do concurso (ex.: SEDES_2026); entra no fim do "
                          "nome-base para o arquivo ser único no vault.")
+    ap.add_argument("--forcar", action="store_true",
+                    help="regerar por cima de um baralho já existente. Faz backup\n"
+                         ".md.bak / .csv.bak antes. Cuidado: o plugin Spaced\n"
+                         "Repetition ancora o histórico de revisão no TEXTO DA\n"
+                         "FRENTE, então reescrever a frente zera o histórico sem\n"
+                         "apagar arquivo nenhum. Para somar cartões, edite o .md.")
     args = ap.parse_args()
 
     spec = json.loads(args.cards.read_text(encoding="utf-8"))
@@ -160,20 +166,49 @@ def main():
     else:
         s = slug(assunto)
     gerados = []
+    ja_existiam = []
+
+    # NÃO sobrescrever baralho já existente.
+    #
+    # O plugin Spaced Repetition ancora o histórico de revisão no TEXTO DA FRENTE
+    # do cartão: regerar por cima zera semanas de revisão sem apagar arquivo
+    # nenhum — perda de trabalho que não deixa rastro, e por isso pior que a do
+    # `.md`, que ao menos se vê. Até aqui o `write_text` era incondicional, e a
+    # regra "flashcards se acrescentam, nunca se regeneram" existia só como prosa
+    # dirigida ao agente. Agora o script recusa, como o build_subject_md.py já faz
+    # com o resumo escrito à mão.
+    def gravar(p: Path, escrever) -> None:
+        if p.exists() and not args.forcar:
+            ja_existiam.append(str(p))
+            return
+        if p.exists():
+            p.with_suffix(p.suffix + ".bak").write_text(
+                p.read_text(encoding="utf-8"), encoding="utf-8")
+        escrever(p)
+        gerados.append(str(p))
 
     if "obsidian" in formatos:
-        p = args.out_dir / f"flashcards-{s}.md"
-        p.write_text(gerar_obsidian(cards, assunto, materia, args.estilo), encoding="utf-8")
-        gerados.append(str(p))
+        gravar(args.out_dir / f"flashcards-{s}.md",
+               lambda p: p.write_text(
+                   gerar_obsidian(cards, assunto, materia, args.estilo),
+                   encoding="utf-8"))
     if "anki" in formatos:
-        p = args.out_dir / f"flashcards-{s}.csv"
-        gerar_anki_csv(cards, p, assunto)
-        gerados.append(str(p))
+        gravar(args.out_dir / f"flashcards-{s}.csv",
+               lambda p: gerar_anki_csv(cards, p, assunto))
+
+    for j in ja_existiam:
+        sys.stderr.write(
+            f"AVISO: {j} já existe — não regerado. O histórico do Spaced "
+            f"Repetition mora na frente do cartão; use --forcar (com backup) "
+            f"só se quiser mesmo perdê-lo.\n")
 
     print(json.dumps({
         "assunto": assunto, "cards_validos": len(cards),
         "cards_descartados": len(cards_raw) - len(cards),
-        "avisos": avisos, "gerados": gerados,
+        # `ja_existiam` vai no relatório, não só no stderr: quem consome este
+        # script é o agente, que lê o JSON — baralho pulado que só aparecesse no
+        # stderr seria trabalho silenciosamente não feito.
+        "avisos": avisos, "gerados": gerados, "ja_existiam": ja_existiam,
     }, indent=2, ensure_ascii=False))
     sys.exit(0)
 

@@ -2,6 +2,31 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-08-06
+
+### Corrigido
+- **`build_afericao.py` sobrescrevia a aferição já julgada.** O destino tem nome fixo
+  (`00-AFERICAO-{MATERIA_ID}.md`) e o `write_text` era incondicional, então reexecutar
+  a mesma matéria trocava **o julgamento do agente** — veredicto por questão, conceito
+  decisivo, ações corretivas — pelo arcabouço com `···` de volta. É exatamente o
+  trabalho que a skill declara não saber fazer sozinha ("o script prepara o
+  determinístico e **o agente julga**"), e o único que nenhuma reexecução recupera.
+  Agora aferição existente é **pulada**, com o motivo no stderr e `pulado: true` no
+  relatório JSON; `--forcar` regenera, com backup `.md.bak`. Para uma segunda rodada,
+  o caminho continua sendo `--out` com nome próprio (`...-2-POS-CORRECAO.md`), que é o
+  que a `concurso-publica` já espera encontrar — uma matéria tem legitimamente várias.
+- **O `--bloco-out` saiu de dentro do bloco de escrita da aferição.** Ele é derivado da
+  PROVA, não do julgamento: é o determinístico que o agente lê para julgar. Preso ao
+  mesmo `if`, quem reencontrasse uma aferição pronta e quisesse refazê-la noutro
+  arquivo ficaria sem o insumo.
+
+### Testes
+- Primeira cobertura do `build_afericao.py`, que era o único script da skill sem teste
+  nenhum — e o único que **escreve no vault**.
+  `test_build_afericao_nao_sobrescreve_julgamento` falha contra a 0.2.0 com "segunda
+  execução NÃO apaga o julgamento"; `test_build_afericao_forcar_faz_backup` cobre a
+  saída explícita.
+
 ## [0.2.0] - 2026-08-05
 
 ### Adicionado

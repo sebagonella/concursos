@@ -83,6 +83,55 @@ else
   fail "uninstall_preserva_agent_de_outro_projeto" "apagou agent que nao e deste repo"
 fi
 
+# --- skills/ sem nenhum SKILL.md: o guarda tem de segurar --------------------
+#
+# `printf '%s\n' "${vazio[@]}"` imprime uma linha em branco, então o mapfile
+# devolvia SKILLS=("") — comprimento 1 — e o teste `-eq 0` não disparava. O laço
+# seguia com s="" e montava `destino="$CLAUDE_DIR/skills/"`, que ia inteiro para
+# o `rm -rf`: skills de OUTROS projetos que dividem o mesmo ~/.claude/ sumiam.
+# Estes quatro casos falham contra o código anterior.
+FALSO="$TMP/repo-sem-skills"
+mkdir -p "$FALSO/scripts" "$FALSO/skills/pasta-que-nao-e-skill"
+cp "$REPO_ROOT/scripts/install.sh" "$FALSO/scripts/install.sh"
+
+CASA="$TMP/casa"
+semear_casa() {
+  rm -rf "$CASA"
+  mkdir -p "$CASA/.claude/skills/skill-de-outro-projeto"
+  echo "# skill de outro projeto" > "$CASA/.claude/skills/skill-de-outro-projeto/SKILL.md"
+}
+
+semear_casa
+cd "$CASA"
+if bash "$FALSO/scripts/install.sh" --local > "$TMP/vazio.log" 2>&1; then
+  fail "install_sem_skills_falha" "saiu com 0 tendo skills/ sem SKILL.md"
+else
+  ok "install_sem_skills_falha"
+fi
+
+if grep -q "Nenhuma skill encontrada" "$TMP/vazio.log"; then
+  ok "install_sem_skills_diz_o_motivo"
+else
+  fail "install_sem_skills_diz_o_motivo" "mensagem ausente; veja $TMP/vazio.log"
+fi
+
+if [[ -f "$CASA/.claude/skills/skill-de-outro-projeto/SKILL.md" ]]; then
+  ok "install_sem_skills_nao_apaga_skill_de_outro_projeto"
+else
+  fail "install_sem_skills_nao_apaga_skill_de_outro_projeto" \
+       "o rm -rf alcancou \$CLAUDE_DIR/skills/ inteiro"
+fi
+
+semear_casa
+cd "$CASA"
+bash "$FALSO/scripts/install.sh" --local --uninstall > "$TMP/vazio-un.log" 2>&1
+if [[ -f "$CASA/.claude/skills/skill-de-outro-projeto/SKILL.md" ]]; then
+  ok "uninstall_sem_skills_nao_apaga_skill_de_outro_projeto"
+else
+  fail "uninstall_sem_skills_nao_apaga_skill_de_outro_projeto" \
+       "o rm -rf alcancou \$CLAUDE_DIR/skills/ inteiro"
+fi
+
 echo ""
 TOTAL=$((PASSES + FALHAS))
 if [[ "$FALHAS" -eq 0 ]]; then

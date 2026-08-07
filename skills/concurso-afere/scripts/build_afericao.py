@@ -177,6 +177,13 @@ def main() -> int:
     ap.add_argument("--bloco-out", type=Path,
                     help="grava o texto das questões, para o agente ler")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--forcar", action="store_true",
+                    help="regerar por cima de uma aferição já existente. Faz backup\n"
+                         ".md.bak antes — o documento guarda o JULGAMENTO do agente\n"
+                         "(vereditos, conceito decisivo, ações), que o script não\n"
+                         "sabe refazer. Para uma segunda rodada, prefira --out com\n"
+                         "um nome próprio (ex.: ...-2-POS-CORRECAO.md), que é o que\n"
+                         "a concurso-publica já espera encontrar.")
     a = ap.parse_args()
 
     gabs = a.gabarito or []
@@ -234,17 +241,42 @@ def main() -> int:
         destino = (a.out if a.out and len(alvos) == 1
                    else m.dir / f"00-AFERICAO-{m.materia_id.upper()}.md")
 
-        if not a.dry_run:
+        # NÃO sobrescrever aferição já existente.
+        #
+        # O que este arquivo guarda depois de preenchido é JULGAMENTO — veredicto
+        # por questão, conceito decisivo, ações corretivas —, e o script só sabe
+        # montar o arcabouço com `···`. Regravar por cima destrói o único trabalho
+        # que a skill declara não saber fazer sozinha ("o agente julga"). Mesma
+        # proteção que o build_subject_md.py dá ao resumo escrito à mão.
+        #
+        # Vale também porque uma matéria tem legitimamente VÁRIAS aferições: a
+        # concurso-publica publica todas (`00-AFERICAO-...-2-POS-CORRECAO.md`),
+        # e o nome fixo daqui colidiria com a segunda rodada.
+        pulado = destino.exists() and not a.forcar
+        if pulado:
+            sys.stderr.write(
+                f"AVISO ({alvo}): {destino} já existe — não regerado. Ela guarda o "
+                f"julgamento do agente. Use --out para uma segunda rodada, ou "
+                f"--forcar (com backup) para refazer esta.\n")
+
+        if not a.dry_run and not pulado:
             destino.parent.mkdir(parents=True, exist_ok=True)
+            if destino.exists():
+                destino.with_suffix(".md.bak").write_text(
+                    destino.read_text(encoding="utf-8"), encoding="utf-8")
             destino.write_text(doc, encoding="utf-8")
-            if a.bloco_out:
-                saida = (a.bloco_out if len(alvos) == 1
-                         else a.bloco_out.with_name(
-                             f"{a.bloco_out.stem}-{m.materia_id}{a.bloco_out.suffix}"))
-                saida.write_text("\n\n".join(
-                    f"=========== PROVA {d['versao']} (caderno {d['caderno']}) — gabarito: "
-                    + " ".join(f"{q}-{r}" for q, r in sorted(d["gabarito"].items()))
-                    + " ===========\n" + d["bloco"] for d in dados), encoding="utf-8")
+
+        # O bloco é derivado da PROVA, não do julgamento: é o determinístico que o
+        # agente lê para julgar. Fica fora do `pulado` de propósito — quem reencontra
+        # uma aferição pronta e quer refazê-la noutro arquivo precisa dele.
+        if not a.dry_run and a.bloco_out:
+            saida = (a.bloco_out if len(alvos) == 1
+                     else a.bloco_out.with_name(
+                         f"{a.bloco_out.stem}-{m.materia_id}{a.bloco_out.suffix}"))
+            saida.write_text("\n\n".join(
+                f"=========== PROVA {d['versao']} (caderno {d['caderno']}) — gabarito: "
+                + " ".join(f"{q}-{r}" for q, r in sorted(d["gabarito"].items()))
+                + " ===========\n" + d["bloco"] for d in dados), encoding="utf-8")
 
         resumo.append({
             "materia": m.materia_id, "escopo": m.escopo,
@@ -252,7 +284,11 @@ def main() -> int:
             "questoes": sum(len(d["gabarito"]) for d in dados),
             "niveis": m.niveis, "assuntos": m.n_assuntos,
             "compara_niveis": len(m.niveis) > 1,
+            # `pulado` vai no relatório, não só no stderr: quem consome este script
+            # é o agente, que lê o JSON. Aferição pulada que só aparecesse no stderr
+            # viraria "julguei" sobre um documento que ninguém regerou.
             "destino": str(destino), "a_preencher": doc.count(VAZIO),
+            "pulado": pulado,
         })
 
     print(json.dumps({"dry_run": a.dry_run, "materias": len(resumo),

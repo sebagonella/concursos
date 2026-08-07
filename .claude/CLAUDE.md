@@ -167,7 +167,15 @@ Regras vindas de bugs reais — quebra-las volta a quebrar coisas:
   resolve a pagina POR ASSUNTO; um `--localizacao` unico gravaria a pagina certa de um
   assunto e errada de todos os outros.
 - **Preservar trabalho do usuario**: re-execucoes nao apagam resumos, flashcards
-  ou progresso; scripts que sobrescrevem artefatos fazem backup.
+  ou progresso; scripts que sobrescrevem artefatos fazem backup. **A regra nao pega
+  por analogia**: a protecao existia no `build_subject_md.py` desde a 0.6.0 e mesmo
+  assim uma auditoria achou quatro escritas destrutivas em quatro skills — flashcards
+  regerados por cima (pior de todos: o Spaced Repetition ancora o historico no TEXTO
+  DA FRENTE, entao zerar semanas de revisao nao apaga arquivo nenhum), afericao ja
+  julgada sobrescrita, `--cobertura` escrevendo sem `--aplicar` e truncando o que
+  houvesse abaixo do marcador, e o gemeo perdedor da consolidacao indo para o
+  `unlink()` com ate 10% de conteudo exclusivo. Padrao unico: **pula o existente,
+  reporta no JSON (nao so no stderr), `--forcar` faz `.md.bak`**.
 
 Ao evoluir uma skill: **plano antes de implementar** (o dono do repo aprova
 planos e listas de gaps antes de qualquer codigo), teste que reproduz cada bug

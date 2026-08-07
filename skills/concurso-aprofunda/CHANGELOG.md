@@ -2,6 +2,26 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.12.0] - 2026-08-06
+
+### Corrigido
+- **`flashcards_gen.py` apagava o baralho anterior em silêncio.** O `write_text` era
+  incondicional: rodar a mesma `--out-dir`/`--nome-base` de novo trocava os cartões
+  antigos pelos novos, sem backup, sem aviso e sem flag. O dano é pior que o do `.md`
+  justamente por ser invisível — o plugin **Spaced Repetition ancora o histórico de
+  revisão no TEXTO DA FRENTE do cartão**, então reescrever a frente zera semanas de
+  revisão *sem apagar arquivo nenhum*. Até aqui a regra "flashcards se acrescentam,
+  nunca se regeneram" existia só como prosa dirigida ao agente no `SKILL.md`.
+  Agora o baralho existente é **pulado** e reportado em `ja_existiam` (no JSON, não
+  só no stderr — quem consome o script lê o JSON); regerar exige `--forcar`, que faz
+  backup `.md.bak`/`.csv.bak` antes. É a mesma proteção que o `build_subject_md.py`
+  ganhou na 0.6.0 para o resumo escrito à mão, e que faltava aqui pelo mesmo motivo.
+
+### Testes
+- `test_flashcards_nao_regeneram_baralho_existente` e
+  `test_flashcards_forcar_regenera_com_backup`. Ambos falham contra a 0.11.0 — o
+  primeiro com "o baralho anterior foi sobrescrito".
+
 ## [0.11.0] - 2026-08-06
 
 ### Corrigido
