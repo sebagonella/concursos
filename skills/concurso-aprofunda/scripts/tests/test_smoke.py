@@ -798,6 +798,59 @@ def test_flashcards_sem_aprofundamento_mantem_nome_legado():
         assert "flashcards-crase.md" in gerados
 
 
+def _gerar_flashcards(d: Path, front: str, extra: list[str] | None = None):
+    """Roda o flashcards_gen com UM cartão, na mesma out-dir/nome-base."""
+    cards = d / "cards.json"
+    cards.write_text(json.dumps({
+        "assunto": "Crase", "cards": [{"front": front, "back": "R.", "tag": "t"}],
+    }), encoding="utf-8")
+    return subprocess.run(
+        [sys.executable, str(ROOT / "flashcards_gen.py"), "--cards", str(cards),
+         "--out-dir", str(d / "ap")] + (extra or []),
+        capture_output=True, text=True)
+
+
+def test_flashcards_nao_regeneram_baralho_existente():
+    """Regressão: o `write_text` era incondicional, então a segunda execução
+    apagava o baralho anterior — sem backup, sem aviso, sem `--forcar`.
+
+    O plugin Spaced Repetition ancora o histórico de revisão no TEXTO DA FRENTE
+    do cartão, então reescrever a frente zera semanas de revisão sem apagar
+    arquivo nenhum. Até aqui a regra "flashcards se acrescentam, nunca se
+    regeneram" existia só como prosa no SKILL.md.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        _gerar_flashcards(d, "P1?")
+        md = d / "ap" / "flashcards-crase.md"
+        assert "P1?" in md.read_text(encoding="utf-8")
+
+        r = _gerar_flashcards(d, "P2?")
+        conteudo = md.read_text(encoding="utf-8")
+        assert "P1?" in conteudo, "o baralho anterior foi sobrescrito"
+        assert "P2?" not in conteudo
+
+        rel = json.loads(r.stdout)
+        assert rel["gerados"] == [], rel["gerados"]
+        assert [Path(p).name for p in rel["ja_existiam"]] == [
+            "flashcards-crase.md", "flashcards-crase.csv"], rel["ja_existiam"]
+        assert "não regerado" in r.stderr
+
+
+def test_flashcards_forcar_regenera_com_backup():
+    """`--forcar` é a saída explícita — e mesmo ela guarda o baralho antigo."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        _gerar_flashcards(d, "P1?")
+        _gerar_flashcards(d, "P2?", ["--forcar"])
+
+        md = d / "ap" / "flashcards-crase.md"
+        assert "P2?" in md.read_text(encoding="utf-8")
+        # o backup preserva o que o histórico de revisão ancorava
+        assert "P1?" in (d / "ap" / "flashcards-crase.md.bak").read_text(encoding="utf-8")
+        assert "P1?" in (d / "ap" / "flashcards-crase.csv.bak").read_text(encoding="utf-8")
+
+
 def test_build_subject_md_gera_pasta_no_padrao_atual():
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)
