@@ -340,7 +340,7 @@ def test_materia_sem_material_e_declarada_no_catalogo():
         checar("materia_com_obra_nao_e_listada",
                "Tecnologia da Informação" not in sem.get("TECNOLOGIA", []), str(sem))
 
-        mig.atualizar_cobertura(conc)
+        mig.atualizar_cobertura(conc, aplicar=True)
         texto = (conc / "TECNOLOGIA" / "04-MATERIAIS" / "livros-recomendados.md").read_text(
             encoding="utf-8")
         checar("secao_escrita_no_catalogo", mig.MARCA_COBERTURA in texto, texto[-200:])
@@ -356,9 +356,42 @@ def test_cobertura_e_reescrita_quando_a_lacuna_some():
         cat.write_text(cat.read_text(encoding="utf-8")
                        + f"\n\n{mig.MARCA_COBERTURA}\n\n- Matéria Fantasma\n",
                        encoding="utf-8")
-        mig.atualizar_cobertura(conc)
+        mig.atualizar_cobertura(conc, aplicar=True)
         texto = cat.read_text(encoding="utf-8")
         checar("secao_obsoleta_removida", "Matéria Fantasma" not in texto, texto[-160:])
+
+
+def test_cobertura_sem_aplicar_nao_escreve_e_nao_trunca():
+    """Regressão: o `main` chamava `atualizar_cobertura` SEM consultar `--aplicar`.
+
+    O arquivo anuncia "dry-run por padrão: sem --aplicar, nada é escrito" — e este
+    caminho escrevia, sem backup. Pior: `base = texto[:corte]` DESCARTA tudo o que
+    estiver depois do marcador de cobertura, então uma nota escrita à mão no fim do
+    catálogo sumia numa execução que o usuário acreditava ser só relatório.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        conc = _montar_multicargo(Path(d))
+        cat = conc / "TECNOLOGIA" / "04-MATERIAIS" / "livros-recomendados.md"
+        cat.parent.mkdir(parents=True, exist_ok=True)
+        (conc / "TECNOLOGIA" / "03-MAPAS-MATERIAS" / "09-redes.md").write_text(
+            '---\nmateria: "Redes de Computadores"\n---\n# Mapa\n', encoding="utf-8")
+        cat.write_text(
+            "# Catálogo\n\n### Obra\n\n- **Autor:** Fulano\n- **Cobre:** Tecnologia da Informação\n\n^mat-x\n"
+            f"\n\n{mig.MARCA_COBERTURA}\n\n- lacuna velha\n\n"
+            "## Minhas observações\n\nComprei o volume 2 em sebo.\n", encoding="utf-8")
+        antes = cat.read_text(encoding="utf-8")
+
+        tocados = mig.atualizar_cobertura(conc)          # sem aplicar
+        checar("dry_run_relata_o_que_faria", "TECNOLOGIA" in tocados, str(tocados))
+        checar("dry_run_nao_escreve", cat.read_text(encoding="utf-8") == antes)
+        checar("dry_run_nao_deixa_bak", not cat.with_suffix(".md.bak").exists())
+
+        mig.atualizar_cobertura(conc, aplicar=True)
+        checar("aplicar_escreve", "Redes de Computadores" in cat.read_text(encoding="utf-8"))
+        bak = cat.with_suffix(".md.bak")
+        checar("aplicar_faz_backup", bak.exists() and "Minhas observações"
+               in bak.read_text(encoding="utf-8"),
+               "o texto abaixo do marcador é truncado; o backup é o que o recupera")
 
 
 def test_fusao_mantem_a_entrada_mais_completa():

@@ -277,6 +277,40 @@ def test_consolidar_recusa_quando_os_gemeos_divergem():
         assert (b / "AGENTE-DE-TECNOLOGIA/03-MAPAS-MATERIAS/01-lingua-portuguesa.md").exists()
 
 
+def test_consolidar_guarda_o_gemeo_divergente_em_bak():
+    """Regressão: o perdedor era `s.unlink()` — a única exclusão sem backup do repo.
+
+    Os testes vizinhos cobrem os dois extremos: gêmeos idênticos (nada se perde) e
+    gêmeos abaixo do limiar (viram pendência). Falta o meio, que é onde mora o
+    dano: com `--limiar 0.90`, divergência de até 10% é consolidada SEM pendência,
+    o primeiro em ordem alfabética de cargo vence, e o que só existia no perdedor
+    ia embora. Esses 10% podem ser exatamente o "Meu resumo" escrito à mão.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_concurso_com_duplicatas(Path(d))
+        # Mapa longo nos dois cargos: aí a anotação extra do perdedor fica ABAIXO
+        # dos 10% e o script consolida sem pendência — que é o caso perigoso.
+        longo = ('---\nmateria: "Português"\n---\n# Mapa\n\n'
+                 + "".join(f"## {i}. Tópico {i}\n\n- [ ] estudar o item {i}\n\n"
+                           for i in range(40)))
+        for cargo in ("AGENTE-COMERCIAL", "AGENTE-DE-TECNOLOGIA"):
+            (b / cargo / "03-MAPAS-MATERIAS" / "01-lingua-portuguesa.md").write_text(
+                longo, encoding="utf-8")
+        perdedor = b / "AGENTE-DE-TECNOLOGIA/03-MAPAS-MATERIAS/01-lingua-portuguesa.md"
+        perdedor.write_text(longo + "\n## Meu resumo\n\nAnotação que só existe aqui.\n",
+                            encoding="utf-8")
+
+        out = _rodar_consolidar(b, "--aplicar")
+        assert out.returncode == 0, out.stderr
+        assert (b / "_COMUM/03-MAPAS-COMUNS/01-lingua-portuguesa.md").exists()
+        assert not perdedor.exists(), "o perdedor devia ter saído do lugar"
+
+        bak = perdedor.with_suffix(".md.bak")
+        assert bak.exists(), "o gêmeo divergente foi APAGADO em vez de guardado"
+        assert "só existe aqui" in bak.read_text(encoding="utf-8")
+        assert "DIVERGENTE" in out.stdout, out.stdout
+
+
 def test_validate_soma_divergente():
     with tempfile.TemporaryDirectory() as d:
         b = _montar_vault(Path(d), total_q=100, est1=40, est2=30)  # soma 70 != 100

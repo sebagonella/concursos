@@ -510,11 +510,17 @@ def materias_sem_material(concurso_dir: Path) -> dict[str, list]:
     return dict(faltando)
 
 
-def atualizar_cobertura(concurso_dir: Path) -> dict:
+def atualizar_cobertura(concurso_dir: Path, aplicar: bool = False) -> dict:
     """(Re)escreve, em cada catálogo, a seção das matérias sem material.
 
     A seção é sempre reescrita do zero: deixá-la desatualizada seria pior do que
     não tê-la, porque uma lacuna já resolvida continuaria assustando.
+
+    `aplicar` tem default False de propósito, e não é zelo. Este arquivo anuncia
+    "dry-run por padrão: sem --aplicar, nada é escrito", mas o `main` chamava esta
+    função sem consultar a flag — e o `base = texto[:corte]` abaixo DESCARTA tudo
+    o que o usuário tenha escrito depois do marcador de cobertura. Escrita sem
+    pedir, sem backup e com truncagem, num arquivo que o usuário edita à mão.
     """
     faltando = materias_sem_material(concurso_dir)
     tocados = {}
@@ -533,7 +539,9 @@ def atualizar_cobertura(concurso_dir: Path) -> dict:
         else:
             novo = base + "\n"
         if novo != texto:
-            cat.write_text(novo, encoding="utf-8")
+            if aplicar:
+                cat.with_suffix(".md.bak").write_text(texto, encoding="utf-8")
+                cat.write_text(novo, encoding="utf-8")
             tocados[escopo] = sem
     return tocados
 
@@ -741,7 +749,7 @@ def main() -> int:
         return 0
 
     if a.cobertura:
-        tocados = atualizar_cobertura(a.concurso_dir)
+        tocados = atualizar_cobertura(a.concurso_dir, aplicar=a.aplicar)
         if not tocados:
             print("  nenhum catálogo alterado (cobertura já estava correta)")
         for escopo, sem in sorted(tocados.items()):
@@ -749,6 +757,9 @@ def main() -> int:
                   else f"  {escopo}: seção removida (todas cobertas)")
             for m in sem:
                 print(f"      · {m}")
+        if tocados:
+            print("\n(dry-run — nada foi escrito. Use --aplicar.)" if not a.aplicar
+                  else f"\n✅ {len(tocados)} catálogo(s) atualizados, com backup")
         return 0
 
     if a.fundir:
@@ -759,9 +770,18 @@ def main() -> int:
                          and f"^{remover}" in c.read_text(encoding="utf-8")), None)
             if not alvo:
                 raise SystemExit(f"ERRO: {manter} e {remover} não estão no mesmo catálogo")
+            # Mesma disciplina do resto do arquivo: sem --aplicar, só o relatório.
+            # `fundir_entradas` faz backup, mas escrever sem pedir contradiz o
+            # contrato anunciado no topo — e é dele que vem a confiança de rodar.
+            if not a.aplicar:
+                print(f"  (dry-run) fundiria em {alvo.parents[1].name}: "
+                      f"{remover.strip()} -> {manter.strip()}")
+                continue
             r = fundir_entradas(alvo, manter.strip(), remover.strip())
             print(f"  fundido em {alvo.parents[1].name}: {r['removeu']} -> {r['manteve']} "
                   f"({r['titulo_removido'][:40]!r})")
+        if not a.aplicar:
+            print("\n(dry-run — nada foi escrito. Use --aplicar.)")
         return 0
 
     itens, catalogos, materias = varrer(a.concurso_dir)

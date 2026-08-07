@@ -128,24 +128,33 @@ def main():
                     f"{pior:.0%} < {args.limiar:.0%}) — escolha qual fica antes de "
                     f"consolidar; podem ser matérias diferentes com o mesmo nome")
                 continue
-        # o primeiro (ordem alfabética de cargo) é o que fica; os demais somem
+        # o primeiro (ordem alfabética de cargo) é o que fica; os demais saem
         fica, somem = arquivos[0], arquivos[1:]
-        mover.append((fica, destino, somem))
+        # `identicos` decide o texto do relatório: com digest igual não se perde
+        # nada; divergentes carregam até `1 - limiar` de conteúdo que só existe
+        # ali, e é justamente esse caso que o backup existe para socorrer.
+        mover.append((fica, destino, somem, len(digests) == 1))
         for a in arquivos:
             de_para[f"{a.parent.parent.name}/{PASTA_CARGO}/{a.stem}"] = \
                 f"_COMUM/{PASTA_COMUM}/{a.stem}"
 
     modo = "APLICADO" if args.aplicar else "DRY-RUN (nada foi movido)"
     print(f"{modo}: {len(mover)} matéria(s) a consolidar em {PASTA_COMUM}/")
-    for fica, destino, somem in mover:
+    for fica, destino, somem, identicos in mover:
         print(f"  {fica.parent.parent.name}/{fica.name}  ->  _COMUM/{PASTA_COMUM}/")
         for s in somem:
-            print(f"      remove duplicata: {s.parent.parent.name}/{s.name}")
+            print(f"      duplicata {'idêntica' if identicos else 'DIVERGENTE'} "
+                  f"-> {s.parent.parent.name}/{s.name}.bak"
+                  + ("" if identicos else "  (conteúdo próprio só existe aí)"))
         if args.aplicar:
             destino.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(fica), str(destino))
+            # Guardar, nunca apagar. Com `--limiar 0.90` (default), um gêmeo pode
+            # divergir em até 10% — e esses 10% podem ser o "Meu resumo" escrito à
+            # mão. O `unlink()` que havia aqui era a única exclusão sem backup do
+            # repositório, contra a regra "preservar trabalho do usuário".
             for s in somem:
-                s.unlink()
+                s.rename(s.with_suffix(".md.bak"))
 
     n = reescrever_wikilinks(base, de_para, args.aplicar)
     print(f"\n{n} arquivo(s) com wikilink reescrito"

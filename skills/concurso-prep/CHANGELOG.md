@@ -5,6 +5,35 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.12.0] - 2026-08-06
+
+### Corrigido
+- **`migrar_materiais.py --cobertura` escrevia sem `--aplicar`, sem backup e truncando.**
+  O `main` chamava `atualizar_cobertura()` sem consultar a flag, enquanto o topo do
+  arquivo anuncia "dry-run por padrão: sem `--aplicar`, nada é escrito" — e todos os
+  outros caminhos de escrita do mesmo catálogo fazem backup. Agrava que
+  `base = texto[:corte]` **descarta tudo o que estiver depois do marcador de
+  cobertura**: uma nota escrita à mão no fim do catálogo sumia numa execução que o
+  usuário acreditava ser só relatório. Agora respeita `--aplicar` e faz `.md.bak`.
+- **`--fundir` também escrevia sem `--aplicar`.** Fazia backup, então o dano era
+  recuperável, mas quebrar o contrato anunciado é o que corrói a confiança de rodar o
+  script. Agora o dry-run relata o que fundiria e só age com `--aplicar`.
+- **`consolidar_mapas_comuns.py` APAGAVA o gêmeo perdedor.** `s.unlink()` era a única
+  exclusão sem backup do repositório. Com `--limiar 0.90` (o default), gêmeos que
+  divergem em até 10% são consolidados **sem pendência** e o primeiro em ordem
+  alfabética de cargo vence — e esses 10% podem ser exatamente o "Meu resumo" escrito
+  à mão, que só existe no perdedor. Agora o perdedor vira `.md.bak` e o relatório
+  distingue duplicata **idêntica** (nada se perde) de **DIVERGENTE** (conteúdo próprio
+  só existe aí).
+
+### Testes
+- `test_cobertura_sem_aplicar_nao_escreve_e_nao_trunca` — falha contra a 1.11.0 em
+  `dry_run_nao_escreve`.
+- `test_consolidar_guarda_o_gemeo_divergente_em_bak` — falha contra a 1.11.0 com "o
+  gêmeo divergente foi APAGADO em vez de guardado". Os testes vizinhos já cobriam os
+  dois extremos (gêmeos idênticos e gêmeos abaixo do limiar); faltava o meio, que é
+  onde mora o dano.
+
 ## [1.11.0] - 2026-08-03
 
 ### Adicionado
