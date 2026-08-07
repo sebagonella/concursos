@@ -35,13 +35,20 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Descobrir skills: toda subpasta de skills/ que tenha SKILL.md
+#
+# O `((${#encontradas[@]}))` não é zelo: `printf '%s\n' "${vazio[@]}"` imprime UMA
+# LINHA EM BRANCO, porque o formato é aplicado uma vez mesmo sem argumento. O
+# mapfile then devolvia `SKILLS=("")` — comprimento 1 —, o guarda de `-eq 0` logo
+# abaixo nunca disparava, e o laço de instalação montava
+# `destino="$CLAUDE_DIR/skills/"` e executava `rm -rf` NELE: o diretório inteiro,
+# incluindo skills de outros projetos que dividem o mesmo `~/.claude/`.
 descobrir_skills() {
   local encontradas=()
   for d in "$SKILLS_DIR"/*/; do
     [[ -f "${d}SKILL.md" ]] || continue
     encontradas+=("$(basename "$d")")
   done
-  printf '%s\n' "${encontradas[@]}"
+  ((${#encontradas[@]})) && printf '%s\n' "${encontradas[@]}"
 }
 
 mapfile -t SKILLS < <(descobrir_skills)
@@ -79,6 +86,7 @@ fi
 # --uninstall
 if [[ "$ACTION" == "uninstall" ]]; then
   for s in "${SKILLS[@]}"; do
+    [[ -n "$s" ]] || continue   # nome vazio => alvo é o diretório pai; ver descobrir_skills
     alvo="$CLAUDE_DIR/skills/$s"
     if [[ -d "$alvo" ]]; then
       rm -rf "$alvo"
@@ -143,6 +151,7 @@ echo ""
 mkdir -p "$CLAUDE_DIR/skills"
 
 for s in "${SKILLS[@]}"; do
+  [[ -n "$s" ]] || continue   # nome vazio => destino é o diretório pai; ver descobrir_skills
   origem="$SKILLS_DIR/$s"
   destino="$CLAUDE_DIR/skills/$s"
   ver=$(grep -m1 '^version:' "$origem/SKILL.md" 2>/dev/null | sed 's/version: *//' || echo "?")
