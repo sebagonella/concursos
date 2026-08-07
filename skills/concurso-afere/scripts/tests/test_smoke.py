@@ -455,6 +455,68 @@ def test_validador_falha_alto_sem_alvo():
 
 
 # --------------------------------------------------------------------------- #
+# build_afericao — o único script da skill que ESCREVE no vault, e o que não
+# tinha teste nenhum.
+# --------------------------------------------------------------------------- #
+def _rodar_build(conc: Path, extra: list[str] | None = None) -> dict:
+    """Roda o build_afericao sobre a fixture, com `texto()` já substituído."""
+    import build_afericao
+    sys.argv = ["b", "--concurso-dir", str(conc), "--prova", "p.pdf",
+                "--gabarito", "g.pdf", "--materia", "Língua Portuguesa"] + (extra or [])
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        build_afericao.main()
+    return json.loads(buf.getvalue())
+
+
+def test_build_afericao_nao_sobrescreve_julgamento():
+    """Regressão: `destino.write_text(doc)` era incondicional.
+
+    O `00-AFERICAO-*.md` guarda o JULGAMENTO do agente — veredicto por questão,
+    conceito decisivo, ações — e o script só sabe montar o arcabouço com `···`.
+    Regravar por cima destrói exatamente o trabalho que a skill declara não saber
+    fazer sozinha. É a mesma proteção que o build_subject_md.py dá ao resumo.
+    """
+    com_texto({"p.pdf": CADERNO_A + CAPA + CORPO, "g.pdf": GABARITO_PDF})
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault(Path(d), {"_COMUM/lingua-portuguesa":
+                                {"assuntos": 2, "niveis": ["padrao"]}})
+        r1 = _rodar_build(conc)
+        destino = Path(r1["aferições"][0]["destino"])
+        checar(destino.exists(), "primeira execução grava a aferição")
+
+        julgado = destino.read_text(encoding="utf-8").replace(
+            "···", "NOTA 9,67 — julgamento escrito à mão")
+        destino.write_text(julgado, encoding="utf-8")
+
+        r2 = _rodar_build(conc)
+        checar("julgamento escrito à mão" in destino.read_text(encoding="utf-8"),
+               "segunda execução NÃO apaga o julgamento")
+        checar(r2["aferições"][0]["pulado"] is True,
+               "o relatório JSON diz que pulou", r2["aferições"][0].get("pulado"))
+
+
+def test_build_afericao_forcar_faz_backup():
+    """`--forcar` é a saída explícita — e mesmo ela guarda o que havia."""
+    com_texto({"p.pdf": CADERNO_A + CAPA + CORPO, "g.pdf": GABARITO_PDF})
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault(Path(d), {"_COMUM/lingua-portuguesa":
+                                {"assuntos": 2, "niveis": ["padrao"]}})
+        destino = Path(_rodar_build(conc)["aferições"][0]["destino"])
+        destino.write_text("JULGAMENTO ANTIGO\n", encoding="utf-8")
+
+        r = _rodar_build(conc, ["--forcar"])
+        checar(r["aferições"][0]["pulado"] is False, "com --forcar não pula")
+        checar("JULGAMENTO ANTIGO" not in destino.read_text(encoding="utf-8"),
+               "com --forcar regenera")
+        bak = destino.with_suffix(".md.bak")
+        checar(bak.exists() and "JULGAMENTO ANTIGO" in bak.read_text(encoding="utf-8"),
+               "o backup preserva o julgamento anterior")
+
+
+# --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     testes = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in testes:
