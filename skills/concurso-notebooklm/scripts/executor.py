@@ -235,7 +235,7 @@ def _baixar_e_nomear(pac, porta, tarefa: dict, r, rel: Relatorio):
         parcial.unlink(missing_ok=True)
         return None
 
-    real = plano_mod.container_dos_bytes(parcial.open("rb").read(16))
+    real = plano_mod.container_dos_bytes(parcial.open("rb").read(16), tarefa["tipo"])
     if real == ".html":
         parcial.unlink(missing_ok=True)
         rel.falhas.append((tarefa["tipo"], "o download veio HTML, não mídia"))

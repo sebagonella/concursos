@@ -349,6 +349,56 @@ def test_container_sai_dos_bytes_nao_da_extensao():
     assert plano_mod.container_dos_bytes(b"qualquer lixo") == ""
 
 
+def test_container_de_video_nao_vira_m4a():
+    """Regressão: QUALQUER `ftyp` devolvia `.m4a`, inclusive o de um MP4.
+
+    Como `.m4a` não está em `EXTENSOES_ACEITAS["video"]`, todo vídeo baixado virava
+    `video-x.mp4.m4a.desconhecido`: sumia do site e, pior, o glob de `ja_existe`
+    passava a casar o arquivo morto — a quota tinha sido queimada e a mídia nunca
+    mais era regerada sem `--forcar`.
+
+    A caixa `ftyp` sozinha não separa áudio de vídeo: `isom`/`mp42`/`dash` servem aos
+    dois. Brand de áudio (`M4A `) decide; brand genérico é desempatado pelo tipo da
+    tarefa.
+    """
+    for brand in (b"isom", b"mp42", b"dash", b"avc1"):
+        cab = b"\x00\x00\x00\x18ftyp" + brand + b"\x00\x00\x00\x00"
+        assert plano_mod.container_dos_bytes(cab, "video") == ".mp4", brand
+        assert plano_mod.container_dos_bytes(cab, "podcast") == ".m4a", brand
+        # e o resultado tem de ser aceito pelo site, senão vira .desconhecido
+        assert ".mp4" in plano_mod.EXTENSOES_ACEITAS["video"]
+
+    # brand explícito de áudio manda, mesmo numa tarefa de vídeo
+    audio = b"\x00\x00\x00\x18ftypM4A \x00\x00\x00\x00"
+    assert plano_mod.container_dos_bytes(audio, "video") == ".m4a"
+    # sem `tipo`, o padrão histórico continua (é o caso do podcast)
+    assert plano_mod.container_dos_bytes(b"\x00\x00\x00\x18ftypdash") == ".m4a"
+
+
+def test_parcial_orfao_nao_conta_como_feito():
+    """Regressão: o glob `prefixo.*` casava `podcast-x.m4a.parcial`.
+
+    Processo morto no meio do download deixa o `.parcial`; `ja_existe` dizia True, a
+    mídia nunca era gerada e nunca aparecia — silêncio, que é o desfecho que a
+    própria skill declara pior. Vale igual para o `.desconhecido`, que é o arquivo
+    que já se sabe que o site não lê.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        pasta = Path(d)
+        pac = pac_mod.Pacote(caminho=pasta / "_fonte-notebooklm.md",
+                             campos={"arquivo_podcast": "podcast-crase.m4a"})
+
+        (pasta / "podcast-crase.m4a.parcial").write_bytes(b"meio download")
+        assert plano_mod.ja_existe(pac, "podcast") is False, "o .parcial contou como feito"
+
+        (pasta / "podcast-crase.mp4.m4a.desconhecido").write_bytes(b"container errado")
+        assert plano_mod.ja_existe(pac, "podcast") is False, "o .desconhecido contou como feito"
+
+        # o arquivo bom conta — inclusive com outra extensão da mesma família
+        (pasta / "podcast-crase.mp3").write_bytes(b"ID3")
+        assert plano_mod.ja_existe(pac, "podcast") is True
+
+
 def test_extensoes_do_podcast_sao_as_que_o_site_reconhece():
     """Guarda cruzada: se a concurso-publica mudar o catálogo, isto avisa aqui em
     vez de o arquivo sumir da página."""
