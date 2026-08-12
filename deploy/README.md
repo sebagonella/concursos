@@ -105,6 +105,30 @@ curl -I http://concursos.casa:8099/           # o site
 
 ## Solução de problemas
 
+### O envio recusa despublicar concurso
+
+Se o build tiver **menos** concursos que o servidor, o `deploy.sh` **aborta antes do
+`rsync`**, listando o que sumiria:
+
+```
+❌ ABORTADO: o envio removeria 1 concurso(s) do servidor.
+     · bb_2027_previsto
+```
+
+A causa quase sempre é a mesma: alguém apagou o `out/site/` "para forçar um build
+limpo". Ele é **espelho do que está publicado**, não cache — o plano de builds
+descobre zero manifestos, constrói só o alvo, e o `--delete` leva o resto junto.
+
+O conserto é reconstruir os concursos que faltam, não esvaziar o diretório. Quando a
+remoção é mesmo intencional (um concurso encerrado, por exemplo):
+
+```bash
+./deploy/deploy.sh --concurso-dir <...> --permitir-remocao
+```
+
+que segue em frente **listando** o que será removido. Coberto por quatro casos em
+`scripts/tests/test_deploy.sh`.
+
 ### Por que o deploy reconstrói todos os concursos, e não só o que você pediu
 
 > **Convenção inviolável.** Esta regra veio de um incidente real e está

@@ -21,10 +21,15 @@
 #   ./deploy.sh --concurso-dir <...> --dry-run      # mostra o que mudaria
 #   ./deploy.sh --concurso-dir <...> --so-build     # gera local, não envia
 #   ./deploy.sh --concurso-dir <...> --so-este      # constrói SÓ este (avisa)
+#   ./deploy.sh --concurso-dir <...> --permitir-remocao  # aceita despublicar concurso
 #   ./deploy.sh --setup                             # 1ª vez: sobe o container
 #
 # Configuração: precedência ambiente > deploy.env > padrões deste arquivo.
 
+# shellcheck disable=SC2029
+# As variáveis de config (CONCURSOS_DIR, CONCURSOS_PORTA) EXPANDEM no cliente de
+# propósito: elas vêm do `deploy.env` local e o servidor não as conhece. Trocar por
+# aspas simples quebraria todos os comandos remotos.
 set -euo pipefail
 
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -72,6 +77,7 @@ CONCURSO_DIR=""
 DRY_RUN=0
 SO_BUILD=0
 SO_ESTE=0
+PERMITIR_REMOCAO=0
 SETUP=0
 
 while [[ $# -gt 0 ]]; do
@@ -80,6 +86,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=1; shift ;;
     --so-build) SO_BUILD=1; shift ;;
     --so-este) SO_ESTE=1; shift ;;
+    --permitir-remocao) PERMITIR_REMOCAO=1; shift ;;
     --setup) SETUP=1; shift ;;
     # o bloco de ajuda é o cabeçalho até a primeira linha que não é comentário,
     # para não quebrar toda vez que o cabeçalho crescer
@@ -103,6 +110,7 @@ if [[ $SETUP -eq 1 ]]; then
     | grep -E '[:.]${CONCURSOS_PORTA}[[:space:]]' || true")
   if [[ -n "$ocupada" ]]; then
     echo "❌ A porta $CONCURSOS_PORTA já está em uso em $CONCURSOS_HOST:" >&2
+    # shellcheck disable=SC2001  # prefixar TODA linha da saída
     echo "$ocupada" | sed 's/^/     /' >&2
     echo "" >&2
     echo "   Escolha outra porta e rode de novo:" >&2
@@ -335,8 +343,54 @@ fi
 # porque so aquele arquivo estava 0600 na origem.
 # O site e artefato DERIVADO: a permissao dele nao deve depender de como o arquivo
 # acabou salvo no vault.
-RSYNC_OPTS=(-az --delete --chmod=D755,F644 --human-readable --info=stats1)
+RSYNC_OPTS=(-az --delete "--chmod=D755,F644" --human-readable --info=stats1)
 [[ $DRY_RUN -eq 1 ]] && RSYNC_OPTS+=(--dry-run --itemize-changes)
+
+# ---------------------------------------------------------------------------
+# Guarda: o envio é `rsync --delete`, então build menor DESPUBLICA concurso
+#
+# Até aqui isto era só um comentário — e a regra mais cara do projeto existia
+# apenas como prosa. O caminho para o acidente é curto e plausível: apagar o
+# `out/site/` "para forçar um build limpo" faz o plano de builds descobrir zero
+# manifestos, construir só o alvo, e o `--delete` remover TODOS os outros
+# concursos do servidor. Sem erro, sem pergunta.
+#
+# A verificação é barata: contar as pastas de concurso dos dois lados. O script
+# nunca escolhe sozinho entre publicar velho e despublicar bom.
+# ---------------------------------------------------------------------------
+mapfile -t NO_BUILD < <(find "$BUILD_DIR" -mindepth 1 -maxdepth 1 -type d \
+                          -not -name assets -printf '%f\n' 2>/dev/null | sort)
+mapfile -t NO_SERVIDOR < <(ssh "$alvo" \
+  "find '$CONCURSOS_DIR/site' -mindepth 1 -maxdepth 1 -type d -not -name assets -printf '%f\n' 2>/dev/null" \
+  | sort)
+
+SUMIRIAM=()
+for c in "${NO_SERVIDOR[@]}"; do
+  [[ -n "$c" ]] || continue
+  achou=0
+  for b in "${NO_BUILD[@]}"; do [[ "$b" == "$c" ]] && { achou=1; break; }; done
+  [[ $achou -eq 0 ]] && SUMIRIAM+=("$c")
+done
+
+if ((${#SUMIRIAM[@]})) && [[ $PERMITIR_REMOCAO -eq 0 ]]; then
+  echo "" >&2
+  echo "❌ ABORTADO: o envio removeria ${#SUMIRIAM[@]} concurso(s) do servidor." >&2
+  for c in "${SUMIRIAM[@]}"; do echo "     · $c" >&2; done
+  echo "" >&2
+  echo "   O envio é 'rsync --delete' do build inteiro, e estes estão no servidor" >&2
+  echo "   mas NÃO no build ($BUILD_DIR)." >&2
+  echo "" >&2
+  echo "   Provável causa: o out/site/ foi apagado. Ele é espelho do que está" >&2
+  echo "   publicado, não cache descartável — reconstrua os concursos que faltam" >&2
+  echo "   em vez de esvaziá-lo." >&2
+  echo "" >&2
+  echo "   Se a remoção é mesmo intencional: --permitir-remocao" >&2
+  exit 1
+fi
+if ((${#SUMIRIAM[@]})); then
+  echo "⚠️  --permitir-remocao: ${#SUMIRIAM[@]} concurso(s) serão REMOVIDOS do servidor:"
+  for c in "${SUMIRIAM[@]}"; do echo "     · $c"; done
+fi
 
 echo "🚀 Enviando para $alvo:$CONCURSOS_DIR/site/ ..."
 # a barra final em "$BUILD_DIR/" é essencial: envia o CONTEÚDO, não a pasta
