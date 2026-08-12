@@ -38,6 +38,32 @@ from textmatch import normalizar, score_match, densidade_termos, tokens_signific
 
 
 CONF_ALTA, CONF_MEDIA, CONF_BAIXA = "alta", "media", "baixa"
+
+# Fração do documento a partir da qual o ponteiro deixa de apontar para alguma
+# coisa. Medido na Lei 11.340: a densidade devolveu `pp. 1–9` para 8 dos 10
+# assuntos, num documento de 9 páginas — e saía LIMPO, sem pendência, porque só
+# `confianca: baixa` gera uma. Ponteiro que cobre o documento inteiro é ausência de
+# localização com aparência de localização, que é pior do que "não encontrado".
+FRACAO_INUTIL = 0.8
+
+
+def rebaixar_se_cobre_tudo(loc: dict, total_paginas: int) -> str:
+    """Rebaixa para `baixa` o ponteiro que abrange quase o documento todo.
+
+    Devolve o motivo (para virar pendência) ou "" quando o ponteiro é útil. Vale
+    para os dois métodos: por densidade é o caso medido, mas o `toc` também estende
+    o fim até `total_paginas` quando não há entrada seguinte.
+    """
+    pg = loc.get("paginas") or []
+    if len(pg) != 2 or not total_paginas:
+        return ""
+    abrangencia = (pg[1] - pg[0] + 1) / total_paginas
+    if abrangencia < FRACAO_INUTIL:
+        return ""
+    loc["confianca"] = CONF_BAIXA
+    loc["cobre_quase_tudo"] = round(abrangencia, 2)
+    return (f"págs {pg[0]}–{pg[1]} cobrem {abrangencia:.0%} do documento "
+            f"({total_paginas} págs) — o ponteiro não distingue nada")
 LIMIAR_TOC = 0.62      # score mínimo p/ aceitar um match de sumário
 LIMIAR_DENSIDADE = 0.15  # densidade mínima p/ considerar uma página relevante
 
@@ -303,8 +329,11 @@ def main():
             resultado["localizacoes"][assunto] = {"confianca": "nao_encontrado", "metodo": None}
             resultado["pendencias"].append(f"NÃO LOCALIZADO: {assunto}")
         else:
+            motivo = rebaixar_se_cobre_tudo(loc, total)
             resultado["localizacoes"][assunto] = loc
-            if loc["confianca"] in (CONF_BAIXA,):
+            if motivo:
+                resultado["pendencias"].append(f"CONFERIR: {assunto} -> {motivo}")
+            elif loc["confianca"] in (CONF_BAIXA,):
                 resultado["pendencias"].append(
                     f"CONFERIR (confiança baixa): {assunto} -> págs {loc['paginas']}")
 

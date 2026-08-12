@@ -471,6 +471,111 @@ def _rodar_build(conc: Path, extra: list[str] | None = None) -> dict:
     return json.loads(buf.getvalue())
 
 
+# gabarito SEM cabeçalho de seção: o fallback é legítimo, mas tem de avisar
+GAB_SEM_SECAO = """
+   BANCO DO BRASIL - Prova A - Escriturário – Agente Comercial
+                            GABARITO 4
+      1- D      2- D      3- A      4- C      5- E
+      6- B      7- A      8- D      9- B     10 - E
+     11 - A    12 - D    13 - B    14 - C    15 - E
+"""
+
+
+def test_empate_entre_materias_homonimas_nao_e_desempatado_no_palpite():
+    """Regressão: `if s > melhor_score` ficava com o primeiro da iteração.
+
+    O caso é real e está nomeado no CLAUDE.md: matéria homônima no `_COMUM` e no
+    cargo — no SEDES, `servico-social` existe nos dois — dá score IDÊNTICO, e uma
+    das duas era medida sem que nada dissesse qual. O SKILL.md promete "sem
+    casamento confiável, PERGUNTA"; medir o material errado e reportar como se
+    fosse o outro é o desfecho caro desta skill.
+    """
+    com_texto({"p.pdf": CADERNO_A + CAPA + CORPO, "g.pdf": GABARITO_PDF})
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault(Path(d), {
+            "_COMUM/lingua-portuguesa": {"assuntos": 1, "niveis": ["padrao"]},
+            "AGENTE-COMERCIAL/lingua-portuguesa": {"assuntos": 1, "niveis": ["padrao"]}})
+        cs = {c.faixa.nome: c for c in casar_materias.casar(conc and Path("p.pdf"), conc)}
+        c = cs["Língua Portuguesa"]
+        checar(len(c.empatados) == 2, "o empate é registrado, não resolvido",
+               [m.escopo for m in c.empatados])
+        checar({m.escopo for m in c.empatados} == {"_COMUM", "AGENTE-COMERCIAL"},
+               "os dois escopos aparecem", [m.escopo for m in c.empatados])
+
+        import build_afericao
+        try:
+            build_afericao.coletar(Path("p.pdf"), Path("g.pdf"), conc,
+                                   "Língua Portuguesa", None)
+            checar(False, "empate faz o build recusar")
+        except SystemExit as e:
+            checar("não dá para escolher sem palpite" in str(e),
+                   "a recusa explica o motivo", str(e))
+            checar("--escopo" in str(e), "a recusa oferece a saída", str(e))
+
+
+def test_escopo_desfaz_o_empate():
+    """A recusa só é útil se houver saída: `--escopo` restringe e o build volta."""
+    com_texto({"p.pdf": CADERNO_A + CAPA + CORPO, "g.pdf": GABARITO_PDF})
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault(Path(d), {
+            "_COMUM/lingua-portuguesa": {"assuntos": 1, "niveis": ["padrao"]},
+            "AGENTE-COMERCIAL/lingua-portuguesa": {"assuntos": 1, "niveis": ["padrao"]}})
+        import build_afericao
+        dados = build_afericao.coletar(Path("p.pdf"), Path("g.pdf"), conc,
+                                       "Língua Portuguesa", ["AGENTE-COMERCIAL"])
+        checar(dados["materia"].escopo == "AGENTE-COMERCIAL",
+               "mede o escopo pedido", dados["materia"].escopo)
+
+
+def test_sem_empate_o_casamento_segue_direto():
+    """Um candidato só continua sendo escolha legítima — a recusa é do EMPATE."""
+    com_texto({"p.pdf": CADERNO_A + CAPA + CORPO})
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault(Path(d), {"_COMUM/lingua-portuguesa":
+                                {"assuntos": 1, "niveis": ["padrao"]}})
+        c = next(c for c in casar_materias.casar(Path("p.pdf"), conc)
+                 if c.faixa.nome == "Língua Portuguesa")
+        checar(c.empatados == [], "sem empate, lista vazia", c.empatados)
+        checar(c.materia is not None, "e a matéria é casada")
+
+
+def test_fallback_do_gabarito_avisa_em_vez_de_engolir():
+    """Regressão: `except GabaritoErro: respostas(gab, caderno, None, faixa)`.
+
+    O fallback é legítimo — há gabarito sem cabeçalho de seção —, mas o `except`
+    mudo descartava justamente a mensagem que existe para ser lida ("recorte de
+    seção errado ou tabela em formato novo"). E o que se perde não é cosmético: sem
+    o recorte por seção a leitura varre a tabela INTEIRA, e a faixa numérica passa a
+    ser a única defesa contra pegar a resposta de outra matéria.
+    """
+    com_texto({"p.pdf": CADERNO_A + CAPA + CORPO, "g.pdf": GAB_SEM_SECAO})
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault(Path(d), {"_COMUM/lingua-portuguesa":
+                                {"assuntos": 2, "niveis": ["padrao"]}})
+        import build_afericao
+        dados = build_afericao.coletar(Path("p.pdf"), Path("g.pdf"), conc,
+                                       "Língua Portuguesa", None)
+        # o fallback funcionou: as respostas vieram
+        checar(dados["gabarito"].get(1) == "D", "o fallback ainda lê o gabarito",
+               dados["gabarito"])
+        av = " ".join(dados["avisos"])
+        checar("SEM recorte de seção" in av, "o fallback avisa que perdeu o recorte", av)
+        checar("1–10" in av, "o aviso diz qual faixa filtrou", av)
+
+
+def test_gabarito_com_secao_nao_gera_aviso():
+    """Ausente e vazio são coisas diferentes: leitura limpa não inventa alarme."""
+    com_texto({"p.pdf": CADERNO_A + CAPA + CORPO, "g.pdf": GABARITO_PDF})
+    with tempfile.TemporaryDirectory() as d:
+        conc = _vault(Path(d), {"_COMUM/lingua-portuguesa":
+                                {"assuntos": 2, "niveis": ["padrao"]}})
+        import build_afericao
+        dados = build_afericao.coletar(Path("p.pdf"), Path("g.pdf"), conc,
+                                       "Língua Portuguesa", None)
+        av = " ".join(dados["avisos"])
+        checar("SEM recorte" not in av, "sem defeito, sem aviso de recorte", av)
+
+
 def test_build_afericao_nao_sobrescreve_julgamento():
     """Regressão: `destino.write_text(doc)` era incondicional.
 

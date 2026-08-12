@@ -79,13 +79,36 @@ def coletar(prova: Path, gab: Path, concurso_dir: Path, materia_alvo: str,
     if c.materia is None:
         raise SystemExit(f"ERRO: '{c.faixa.nome}' não tem aprofundamento no vault "
                          f"(score {c.score:.2f}) — nada a aferir")
+    if c.empatados:
+        # O SKILL.md promete "sem casamento confiável, PERGUNTA", e o desempate era
+        # ficar com o primeiro da iteração. Matéria homônima no `_COMUM` e no cargo
+        # (`servico-social` no SEDES) dá score idêntico: escolher em silêncio mede
+        # um material e reporta como se fosse o outro.
+        onde = ", ".join(f"{m.escopo}/{m.materia_id}" for m in c.empatados)
+        raise SystemExit(
+            f"ERRO: '{c.faixa.nome}' casa igualmente com {len(c.empatados)} matérias "
+            f"do vault ({onde}) — não dá para escolher sem palpite. Use --escopo "
+            f"para dizer qual medir.")
 
     faixa = range(c.faixa.primeira, c.faixa.ultima + 1)
+    aviso_gabarito = ""
     try:
         gabs = respostas(gab, pid.caderno, c.faixa.nome, faixa)
-    except GabaritoErro:
+    except GabaritoErro as e:
+        # O fallback é legítimo — há gabarito sem cabeçalho de seção —, mas engolir
+        # a exceção descartava justamente a mensagem que existe para ser lida
+        # ("recorte de seção errado ou tabela em formato novo"). E o que se perde
+        # aqui não é cosmético: sem o recorte por seção, a leitura passa a varrer a
+        # tabela INTEIRA e a faixa numérica é a única defesa contra pegar a resposta
+        # de outra matéria.
+        aviso_gabarito = (f"gabarito lido SEM recorte de seção "
+                          f"('{c.faixa.nome}' não achada: {e}) — as respostas vieram "
+                          f"da tabela inteira, filtradas só pela faixa "
+                          f"{c.faixa.primeira}–{c.faixa.ultima}; confira antes de julgar")
         gabs = respostas(gab, pid.caderno, None, faixa)
     bloco, avisos = bloco_da_materia(prova, c.faixa)
+    if aviso_gabarito:
+        avisos = [aviso_gabarito] + list(avisos)
     return {"prova": prova, "versao": pid.versao, "caderno": pid.caderno,
             "faixa": c.faixa, "materia": c.materia, "gabarito": gabs,
             "bloco": bloco, "avisos": avisos}
@@ -183,6 +206,10 @@ def main() -> int:
     ap.add_argument("--materia", action="append",
                     help="repetível. Sem isto e sem --cargo, lista as aferíveis e sai")
     ap.add_argument("--cargo", help="todas as matérias aprofundadas do cargo (+ _COMUM)")
+    ap.add_argument("--escopo", action="append",
+                    help="restringe a estes escopos (repetível: _COMUM, EDAS-…). "
+                         "É a saída para o empate entre matéria homônima do _COMUM "
+                         "e do cargo, que a skill se recusa a desempatar sozinha.")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--bloco-out", type=Path,
                     help="grava o texto das questões, para o agente ler")
@@ -212,6 +239,15 @@ def main() -> int:
                          "Use --cargo para todas, ou --materia (repetível) para escolher.")
 
     escopos = escopos_do_cargo(a.concurso_dir, a.cargo) if a.cargo else None
+    if a.escopo:
+        # `--escopo` é mais específico que `--cargo` e por isso vence; combinados,
+        # vale a interseção — pedir um escopo fora do cargo é erro nomeado.
+        if escopos:
+            fora = [e for e in a.escopo if e not in escopos]
+            if fora:
+                raise SystemExit(f"ERRO: --escopo {', '.join(fora)} não pertence ao "
+                                 f"cargo {a.cargo} (escopos: {', '.join(escopos)})")
+        escopos = list(a.escopo)
     casados = [c for c in casar(a.prova[0], a.concurso_dir, escopos) if c.materia]
 
     if not a.materia and not a.cargo:

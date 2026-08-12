@@ -213,13 +213,21 @@ def corr_cargos_ids(meta: dict, pasta: Path) -> tuple[list | None, list[str]]:
     saida, pend = [], []
     for m in materias:
         novo = dict(m)
+        por_omissao = False
         chave = normalizar(m.get("nome"))
         if chave in por_nome:
             cargos = sorted(por_nome[chave])
         elif chave in especificas:
             cargos = sorted(especificas[chave])
         elif especificas:
-            cargos = sorted(todos)          # básica: vale para todos os cargos
+            # Inferência por OMISSÃO: a matéria não está listada como específica de
+            # cargo nenhum e existem específicas, logo seria básica. É a única
+            # atribuição do laço que não vem de um campo declarado — e o docstring
+            # deste arquivo promete "nunca escolhe no palpite". Fica, porque sem ela
+            # a migração não completa; mas passa a ser NOMEADA quando o vault não a
+            # corrobora (ver `por_omissao` abaixo).
+            cargos = sorted(todos)
+            por_omissao = True
         else:
             pend.append(f"materia {m.get('nome')!r}: escopo nao derivavel do meta")
             saida.append(novo)
@@ -238,6 +246,15 @@ def corr_cargos_ids(meta: dict, pasta: Path) -> tuple[list | None, list[str]]:
                 pend.append(
                     f"materia {m.get('nome')!r}: meta diz {sorted(cargos)} e o mapa "
                     f"mora em {sorted(do_vault)} — confira antes de gravar")
+        elif por_omissao:
+            # Sem mapa no vault, o cross-check nao roda — e a inferencia por omissao
+            # atravessa sem nada a corroborando: a materia sai gravada como comum a
+            # TODOS os cargos so' porque nao apareceu na lista de nenhum. Escrever
+            # isso calado e' exatamente o palpite silencioso que o docstring proibe.
+            pend.append(
+                f"materia {m.get('nome')!r}: marcada como basica (todos os cargos) "
+                f"por NAO constar como especifica de nenhum — inferencia por omissao, "
+                f"sem mapa no vault que a confirme; confira antes de gravar")
         novo["cargos_ids"] = cargos
         novo["tipo"] = normalizar_tipo(novo.get("tipo", ""), len(cargos))
         saida.append(novo)

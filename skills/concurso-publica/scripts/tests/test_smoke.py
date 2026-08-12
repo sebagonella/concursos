@@ -3186,6 +3186,57 @@ def test_aba_que_abre_e_a_do_nivel_padrao():
         assert painel and painel.group(1) == alvo.group(1), "aba e painel ativos divergem"
 
 
+def test_descarte_por_placeholder_e_avisado_e_contado():
+    """Regressão: documento e mapa com marcador de template sumiam da publicação
+    **em silêncio** — sem stderr, sem contagem, sem teste.
+
+    Descartar é a decisão certa (arcabouço não é conteúdo). Descartar calado não é:
+    um `.md` que apenas MENCIONE `{CONCURSO}` — uma nota que documente o template,
+    por exemplo — desaparecia do site inteiro sem sintoma. É o mesmo modo de falha
+    do `00-AFERICAO-*` da 0.20.0, e o padrão certo já existia ao lado, em
+    `avisar_rotulos_extras`: decidir E avisar.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        (base / "_COMUM" / "01-EDITAL" / "nota-sobre-templates.md").write_text(
+            '---\ntipo: documentacao\n---\n# Como o template funciona\n\n'
+            'O gerador troca {CONCURSO} pelo slug do concurso.\n', encoding="utf-8")
+
+        import io
+        from contextlib import redirect_stderr
+        err = io.StringIO()
+        with redirect_stderr(err):
+            m = sc.coletar_concurso(base)
+
+        desc = m["descartados_placeholder"]
+        assert len(desc) == 1, desc
+        assert desc[0]["tipo"] == "documento"
+        assert desc[0]["marcador"] == "{CONCURSO}"
+        assert "nota-sobre-templates.md" in desc[0]["arquivo"]
+        # e o aviso sai nomeando o arquivo e o marcador
+        assert "NÃO publicado" in err.getvalue(), err.getvalue()
+        assert "nota-sobre-templates.md" in err.getvalue()
+        assert "{CONCURSO}" in err.getvalue()
+
+        # o documento realmente não foi publicado — o descarte continua valendo
+        docs = [doc["arquivo"] for e in m["escopos"]
+                for s in e["secoes"] for doc in s["documentos"]]
+        assert "nota-sobre-templates.md" not in docs, docs
+
+
+def test_sem_placeholder_nao_ha_aviso_nem_lista():
+    """Ausente e vazio são coisas diferentes: coleta limpa não inventa aviso."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        import io
+        from contextlib import redirect_stderr
+        err = io.StringIO()
+        with redirect_stderr(err):
+            m = sc.coletar_concurso(base)
+        assert m["descartados_placeholder"] == []
+        assert "NÃO publicado" not in err.getvalue()
+
+
 def test_trilha_da_materia_e_do_assunto_apontam_para_a_mesma_capa():
     """Regressão: `pagina_materia` recebia `item["rota_escopo"]` no parâmetro
     `rota_capa`.

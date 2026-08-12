@@ -2,6 +2,23 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.5.0] - 2026-08-12
+
+### Corrigido
+- **Falha transitória de download apagava o `task_id` para sempre.** Quando
+  `porta.baixar` levantava, a tarefa entrava em `falhas` e **não** voltava para
+  `restantes`: o sidecar era reescrito sem ela, `nlm_coleta` passava a dizer "nada a
+  coletar" e a única saída virava regerar do zero — queimando quota por uma mídia
+  que **existe** no notebook. Uma queda de rede no meio de 66 assuntos perdia o dia
+  inteiro. Agora `_baixar_e_nomear` devolve `(destino, retentavel)` e separa a falha
+  de TRANSPORTE (a tarefa fica, com contador) da TERMINAL (HTML no lugar da mídia,
+  container irreconhecível — rebaixar daria os mesmos bytes). `MAX_TENTATIVAS_DOWNLOAD`
+  põe teto, para um `task_id` já morto não ficar no sidecar para sempre.
+
+### Testes
+- `test_queda_no_download_nao_apaga_o_task_id` (falha contra a 0.4.0 com "o task_id
+  foi descartado"), mais o teto e a não-retentativa do caso terminal.
+
 ## [0.4.0] - 2026-08-12
 
 ### Corrigido

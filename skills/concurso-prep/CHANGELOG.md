@@ -5,6 +5,36 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.14.0] - 2026-08-12
+
+### Corrigido
+- **`_read` engolia erro de encoding e três checks aprovavam por vacuidade.**
+  `except Exception: return ""` transformava o arquivo em string vazia:
+  `check_placeholders` não achava placeholder em nada, `check_wikilinks` não achava
+  wikilink, e `faixa_estimada` caía em "sem estimativa". Um `.md` gravado em
+  latin-1 — acontece com texto colado de PDF — era **aprovado em silêncio pelo
+  validador que existe para reprovar**. Agora lê com `errors="replace"`, o conteúdo
+  continua sendo analisado, e o encoding vira issue nomeada em `check_encoding`.
+- **Dois pontos da mesma família, achados pelo teste novo:** o mesmo arquivo
+  latin-1 **derrubava o validador inteiro** com `UnicodeDecodeError` — em
+  `validate_output._itens_de_material` e em `migrar_materiais.materias_do_concurso`,
+  que liam direto sem passar pelo helper. Traceback no lugar de relatório é pior que
+  silêncio. As leituras de ANÁLISE passaram a degradar; as que reescrevem o arquivo
+  continuam estritas de propósito — ler com `errors="replace"` e gravar de volta
+  trocaria os bytes do usuário por U+FFFD.
+- **`migrar_meta` marcava matéria como comum a TODOS os cargos no palpite.**
+  `elif especificas: cargos = sorted(todos)` é a única atribuição do laço que não
+  vem de campo declarado — a matéria vira básica só por **não** constar como
+  específica de ninguém. O cross-check com o vault existia, mas só roda quando há
+  mapa: sem mapa, o palpite atravessava calado, contra o "nunca escolhe no palpite"
+  do próprio docstring. A inferência fica (sem ela a migração não completa) e agora
+  é **nomeada** como pendência quando o vault não a confirma.
+
+### Testes
+- `test_arquivo_nao_utf8_e_acusado_em_vez_de_aprovado_em_branco`,
+  `test_inferencia_por_omissao_vira_pendencia_quando_o_vault_nao_confirma` e os dois
+  pares que travam o oposto (sem defeito, sem alarme). Falham contra a 1.13.0.
+
 ## [1.13.0] - 2026-08-12
 
 ### Corrigido

@@ -48,11 +48,40 @@ ESTIMATIVA_RE = re.compile(
 BANNER_RE = re.compile(r"CONTE[UÚ]DO PROVIS[OÓ]RIO", re.IGNORECASE)
 
 
+# Arquivos que `_read` não conseguiu ler como UTF-8, para o validador acusar.
+#
+# `except Exception: return ""` fazia o arquivo virar string vazia, e três checks
+# passavam POR VACUIDADE: `check_placeholders` não acha placeholder em nada,
+# `check_wikilinks` não acha wikilink, e `faixa_estimada` cai em "sem estimativa"
+# (que ao menos avisa). Um `.md` gravado em latin-1 — acontece com texto colado de
+# PDF — era aprovado em silêncio pelo validador que existe para reprovar.
+# dict, não lista: o mesmo arquivo é lido por vários checks e apareceria repetido
+# tantas vezes quantas fosse aberto — ruído que faz o relatório parecer pior do que é.
+_ILEGIVEIS: dict[Path, str] = {}
+
+
 def _read(md: Path) -> str:
+    """Conteúdo do `.md`, degradando em vez de sumir com o arquivo.
+
+    Lê com `errors="replace"`: melhor um caractere trocado — que os checks ainda
+    conseguem analisar — do que string vazia, que os faz aprovar em branco. O
+    problema de encoding é REGISTRADO e vira issue em `check_encoding`.
+    """
     try:
         return md.read_text(encoding="utf-8")
-    except Exception:
+    except UnicodeDecodeError as e:
+        _ILEGIVEIS[md] = f"não é UTF-8 válido ({e.reason} no byte {e.start})"
+        return md.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        _ILEGIVEIS[md] = f"não deu para ler ({type(e).__name__})"
         return ""
+
+
+def check_encoding(root: Path) -> list[str]:
+    """Acusa o que `_read` não conseguiu ler direito. Roda DEPOIS dos outros
+    checks, porque é durante eles que a lista se enche."""
+    return [f"ENCODING em {md.relative_to(root)}: {motivo}"
+            for md, motivo in sorted(_ILEGIVEIS.items())]
 
 
 def carregar_meta(root: Path) -> dict:
@@ -177,7 +206,7 @@ def check_cobertura_mapas(root: Path, meta: dict) -> list[str]:
                 continue
             fm = {}
             try:
-                txt = md.read_text(encoding="utf-8")
+                txt = _read(md)
                 m = re.match(r"^---\s*\n(.*?)\n---\s*\n", txt, re.DOTALL)
                 if m:
                     for linha in m.group(1).split("\n"):
@@ -371,7 +400,7 @@ def check_material(root: Path, meta: dict) -> list[str]:
     for cat in sorted(root.glob("*/04-MATERIAIS/livros-recomendados.md")):
         escopo = cat.parents[1].name
         catalogos[escopo] = cat
-        entradas = mid.parsear_catalogo(cat.read_text(encoding="utf-8"))
+        entradas = mid.parsear_catalogo(_read(cat))
         if not entradas:
             # O catálogo legado é uma lista de bullets sob `## Matéria`, sem
             # entrada por obra e sem âncora. Sem este aviso ele passaria como
@@ -407,7 +436,7 @@ def check_material(root: Path, meta: dict) -> list[str]:
         for escopo, ms in sorted(faltando.items()):
             cat = root / escopo / "04-MATERIAIS" / "livros-recomendados.md"
             declarado = (cat.exists()
-                         and mig.MARCA_COBERTURA in cat.read_text(encoding="utf-8"))
+                         and mig.MARCA_COBERTURA in _read(cat))
             for m in sorted(ms):
                 if declarado:
                     issues.append(f"INFO: {escopo}/{m} sem material no catálogo "
@@ -447,7 +476,7 @@ def _itens_de_material(mapa: Path) -> list[dict]:
     import material_id as mid
     itens, dentro, buf = [], False, []
     try:
-        linhas = mapa.read_text(encoding="utf-8").splitlines()
+        linhas = _read(mapa).splitlines()
     except OSError:
         return []
     for linha in linhas:
@@ -628,6 +657,9 @@ def main():
         "pdfs": check_pdfs(args.path),
         "material": check_material(args.path, meta),
     }
+    # DEPOIS dos demais: é durante eles que `_read` percorre os arquivos e a lista
+    # de ilegíveis se enche. Antes, este check sairia sempre vazio.
+    results["encoding"] = check_encoding(args.path)
     if meta.get("_erro"):
         results["meta"] = [f"ERRO: {meta['_erro']}"]
     if modo == "previsto":

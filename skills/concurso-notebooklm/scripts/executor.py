@@ -34,6 +34,10 @@ SIDECAR = "_notebooklm-estado.json"
 # para sempre por algo que já morreu.
 IDADE_MAXIMA_H = 6
 
+# Quantas vezes um download pode cair antes de a tarefa ser dada por perdida. Sem
+# teto, um `task_id` que já morreu no servidor ficaria no sidecar para sempre.
+MAX_TENTATIVAS_DOWNLOAD = 3
+
 
 @dataclass
 class Relatorio:
@@ -202,9 +206,22 @@ def coletar(pac, porta, *, hoje: str | None = None, forcar_idade: bool = False) 
             rel.falhas.append((tarefa["tipo"], r.detalhe or "geração falhou"))
             continue
 
-        destino = _baixar_e_nomear(pac, porta, tarefa, r, rel)
+        destino, retentavel = _baixar_e_nomear(pac, porta, tarefa, r, rel)
         if destino is not None:
             rel.baixadas.append(destino.name)
+        elif retentavel:
+            # Falha de TRANSPORTE não pode custar o `task_id`. Ele era descartado
+            # junto com a tarefa: o sidecar era reescrito sem ela, `nlm_coleta`
+            # passava a dizer "nada a coletar" e `nlm_run` regeraria do zero,
+            # queimando quota. A mídia existe no notebook — só o download caiu.
+            # Uma queda de rede no meio de 66 assuntos perdia o dia inteiro.
+            tarefa["tentativas"] = int(tarefa.get("tentativas") or 0) + 1
+            if tarefa["tentativas"] < MAX_TENTATIVAS_DOWNLOAD:
+                restantes.append(tarefa)
+            else:
+                rel.falhas.append(
+                    (tarefa["tipo"], f"download falhou {tarefa['tentativas']}× — "
+                                     f"desistindo; a mídia pode existir no notebook"))
 
     estado["tarefas"] = restantes
     _gravar_sidecar(pac.pasta, estado)
@@ -225,6 +242,10 @@ def _baixar_e_nomear(pac, porta, tarefa: dict, r, rel: Relatorio):
     O site casa prefixo E extensão: nome com extensão errada não vira outro tipo de
     mídia — vira invisível. Por isso a extensão sai do arquivo, não da declaração; e
     quando divergir, o pacote é corrigido para parar de mentir.
+
+    Devolve `(destino, retentavel)`. `retentavel` separa a falha de TRANSPORTE — a
+    mídia existe no notebook e o download caiu — da falha TERMINAL, em que baixar de
+    novo traria os mesmos bytes ruins. Só a primeira merece guardar o `task_id`.
     """
     declarado = tarefa.get("arquivo") or pac.arquivo_de(tarefa["tipo"])
     parcial = pac.pasta / f"{declarado}.parcial"
@@ -233,13 +254,13 @@ def _baixar_e_nomear(pac, porta, tarefa: dict, r, rel: Relatorio):
     except Exception as e:
         rel.falhas.append((tarefa["tipo"], f"download falhou: {type(e).__name__}"))
         parcial.unlink(missing_ok=True)
-        return None
+        return None, True                      # transporte: a tarefa continua viva
 
     real = plano_mod.container_dos_bytes(parcial.open("rb").read(16), tarefa["tipo"])
     if real == ".html":
         parcial.unlink(missing_ok=True)
         rel.falhas.append((tarefa["tipo"], "o download veio HTML, não mídia"))
-        return None
+        return None, False                     # terminal: rebaixar de novo daria o mesmo
 
     esperada = Path(declarado).suffix.lower()
     nome = declarado
@@ -254,11 +275,11 @@ def _baixar_e_nomear(pac, porta, tarefa: dict, r, rel: Relatorio):
             parcial.replace(destino)
             rel.falhas.append((tarefa["tipo"],
                                f"container {real} não é reconhecido pelo site"))
-            return None
+            return None, False                 # terminal: os bytes é que não servem
 
     destino = pac.pasta / nome
     parcial.replace(destino)
-    return destino
+    return destino, False
 
 
 def _dias(de: str, ate: str) -> int:

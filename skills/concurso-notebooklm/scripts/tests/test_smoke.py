@@ -603,6 +603,86 @@ def test_coleta_baixa_nomeia_e_marca_completo():
         assert pac_mod.ler(caminho).status == "completo"
 
 
+class _PortaQueCai(porta_mod.PortaFalsa):
+    """Porta que derruba o download N vezes antes de funcionar — queda de rede."""
+
+    def __init__(self, quedas: int = 99):
+        super().__init__()
+        self.quedas = quedas
+
+    def baixar(self, nb, tipo, artifact_id, destino):
+        if self.quedas > 0:
+            self.quedas -= 1
+            raise ConnectionError("a rede caiu no meio do download")
+        return super().baixar(nb, tipo, artifact_id, destino)
+
+
+def test_queda_no_download_nao_apaga_o_task_id():
+    """Regressão: falha de transporte descartava a tarefa do sidecar para sempre.
+
+    A mídia EXISTE no notebook — só o download caiu. Mas a tarefa não voltava para
+    `restantes`, o sidecar era reescrito sem ela, e `nlm_coleta` passava a dizer
+    "nada a coletar": a única saída virava regerar do zero, queimando quota. Uma
+    queda de rede no meio de 66 assuntos perdia o dia inteiro.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = _PortaQueCai(quedas=1)
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        exe_mod.executar(pac, tarefas, porta)
+
+        rel = exe_mod.coletar(pac_mod.ler(caminho), porta)
+        assert rel.baixadas == [], rel.baixadas
+        sidecar = json.loads((pac.pasta / exe_mod.SIDECAR).read_text(encoding="utf-8"))
+        assert len(sidecar["tarefas"]) == 1, "o task_id foi descartado"
+        assert sidecar["tarefas"][0]["tentativas"] == 1, sidecar["tarefas"][0]
+        assert not list(pac.pasta.glob("*.parcial")), "o parcial fica para trás"
+
+        # a rede volta: a MESMA tarefa é coletada, sem regerar nada
+        rel2 = exe_mod.coletar(pac_mod.ler(caminho), porta)
+        assert rel2.baixadas == [pac.arquivo_de("podcast")], rel2.baixadas
+        sidecar2 = json.loads((pac.pasta / exe_mod.SIDECAR).read_text(encoding="utf-8"))
+        assert sidecar2["tarefas"] == [], sidecar2
+
+
+def test_download_que_cai_sempre_desiste_com_teto():
+    """O oposto do defeito: sem teto, um `task_id` já morto ficaria para sempre."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = _PortaQueCai()                       # cai sempre
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        exe_mod.executar(pac, tarefas, porta)
+
+        for _ in range(exe_mod.MAX_TENTATIVAS_DOWNLOAD):
+            rel = exe_mod.coletar(pac_mod.ler(caminho), porta)
+        sidecar = json.loads((pac.pasta / exe_mod.SIDECAR).read_text(encoding="utf-8"))
+        assert sidecar["tarefas"] == [], "desiste depois do teto"
+        assert any("desistindo" in m for _, m in rel.falhas), rel.falhas
+
+
+def test_html_no_lugar_da_midia_nao_e_retentado():
+    """Falha TERMINAL: baixar de novo traria os mesmos bytes. Guardar o task_id
+    aqui só adiaria a mesma falha, e o teto acabaria descartando de qualquer jeito."""
+    with tempfile.TemporaryDirectory() as d:
+        caminho = _montar_pacote(Path(d))
+        if caminho is None:
+            return
+        pac = pac_mod.ler(caminho)
+        porta = porta_mod.PortaFalsa()
+        porta.conteudo = b"<!DOCTYPE html><html>erro</html>"
+        tarefas, _ = plano_mod.planejar(pac, [("podcast", "deep-dive")])
+        exe_mod.executar(pac, tarefas, porta)
+        exe_mod.coletar(pac_mod.ler(caminho), porta)
+        sidecar = json.loads((pac.pasta / exe_mod.SIDECAR).read_text(encoding="utf-8"))
+        assert sidecar["tarefas"] == [], sidecar
+
+
 def test_estados_e_uma_chamada_por_notebook():
     """A consulta relista todos os artefatos; perguntar por tarefa multiplicaria
     chamadas sem ganhar nada."""
