@@ -2,6 +2,24 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.16.0] - 2026-08-12
+
+### Corrigido
+- **`--listar` não rodava sem inventar um `--topico`.** O `SKILL.md` recomenda
+  `assuntos_do_topico.py --listar` para descobrir quais tópicos existem, mas
+  `--topico` era `required=True` no argparse e o short-circuit do `--listar` só
+  acontece **depois** do `parse_args()`. A exigência continua valendo — só passou a
+  ser cobrada onde faz sentido.
+
+### Adicionado
+- **`CONVENCOES.md`** — as 15 convenções desta skill saíram do `CLAUDE.md` da raiz
+  para cá, na íntegra e com as medições. Carregam junto com a skill em vez de em
+  todo turno de toda sessão, e o `install.sh` as leva para o destino (com teste).
+- **Documentado o par `propor_vinculos.py` → `aplicar_vinculos.py`**, que só existia
+  no changelog. É a ferramenta que conserta o vínculo de material legado, e sem ela
+  documentada não havia como saber que a cobertura "desconhecida" do site tem
+  conserto.
+
 ## [0.15.0] - 2026-08-12
 
 ### Corrigido

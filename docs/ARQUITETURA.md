@@ -108,7 +108,7 @@ Reproduzir o explorador do Obsidian no navegador não acrescentaria nada: quem a
 site vem consumir, não gerenciar.
 
 **Dois registros visuais.** As pastas numeradas do vault existem para ordenar no
-explorador de arquivos — `05-HISTORICO` vem antes de `06-SINERGIA` porque alguém
+explorador de arquivos — `05-HISTORICO-CONCURSO` vem antes de `06-SINERGIA` porque alguém
 escolheu os números. Espelhar essa numeração como *peso visual* faria "Sinergia"
 competir com "Crase". Por isso o que se **estuda** ganha card com progresso, e o que
 se **consulta** vira lista tipográfica, num registro mais quieto.
@@ -231,7 +231,14 @@ O `book_index.py` tenta casar os assuntos com o **sumário** do livro (preciso q
 
 ## Fluxo de dados entre as skills
 
-A `concurso-prep` grava `.meta.json` na raiz da pasta do concurso com o conteúdo programático integral. A `concurso-aprofunda` lê os assuntos mapeados a partir daí (ou dos mapas de matéria) para saber o que procurar no livro. O `reuse_finder.py` varre o vault inteiro procurando `(livro, assunto)` já aprofundados em **outros** concursos, para reaproveitar em vez de refazer.
+A `concurso-prep` grava duas coisas que as etapas seguintes consomem, e **cada consumidor lê a sua**:
+
+- **`.meta.json`** na raiz da pasta do concurso, com o conteúdo programático integral e o `edital_hash`. Quem o lê é a própria `concurso-prep` (motor de diff da reconciliação), a `concurso-afere` (banca e `modo: previsto`) e a `concurso-publica` (bloco `meta` do modelo).
+- **os mapas de matéria** em `03-MAPAS-MATERIAS/` e `03-MAPAS-COMUNS/`, um `.md` por matéria com frontmatter (`materia`, `materia_id`, `cargos`) e um H2 por tópico do edital. É **daqui** que a `concurso-aprofunda` tira o que procurar no livro — via `achar_mapa()` e `assuntos_do_topico.py` —, e nenhum dos seus 17 scripts abre o `.meta.json`.
+
+A distinção não é detalhe de implementação: quem for consertar vínculo de material legado precisa saber que o `topico_id` do aprofundamento aponta para um tópico do MAPA, não para uma entrada do `.meta.json`. O contrato completo, campo a campo, está em [CONTRATO-DE-DADOS.md](CONTRATO-DE-DADOS.md).
+
+O `reuse_finder.py` varre o vault inteiro procurando `(livro, assunto)` já aprofundados em **outros** concursos, para reaproveitar em vez de refazer.
 
 ## Dependências e degradação
 

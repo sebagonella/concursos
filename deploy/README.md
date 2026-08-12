@@ -107,6 +107,11 @@ curl -I http://concursos.casa:8099/           # o site
 
 ### Por que o deploy reconstrói todos os concursos, e não só o que você pediu
 
+> **Convenção inviolável.** Esta regra veio de um incidente real e está
+> indexada no [`CLAUDE.md`](../CLAUDE.md#por-skill) da raiz.
+>
+> - **Deploy é sincronização, e por isso reconstrói o build inteiro**: o container usa bind mount; atualizar o site é rsync, sem rebuild de imagem nem restart — isso não muda. O que mudou é que **o escopo do build tem de alcançar o do envio**: o `--concurso-dir` nomeia um concurso, mas o envio é `rsync --delete` do `out/site/` inteiro, e esse diretório acumula. Construir só o concurso pedido republicava os demais com o conteúdo da sessão em que foram gerados, **sem aviso** — aconteceu com o `BB_2027_PREVISTO` enquanto se publicava o `SEDES_2026`. Hoje o deploy reconstrói **todos** os concursos do build antes de enviar, achando a origem de cada um no campo `origem` do `.concurso.json`; manifesto antigo sem o campo cai na pasta irmã, **com o palpite ecoado**. Concurso cuja origem sumiu é republicado como está e **avisado duas vezes** (no começo e no fim, porque aviso no meio de saída longa não se lê) — o script nunca escolhe sozinho entre publicar velho e despublicar bom. `--so-este` pula a reconstrução dos outros, avisando. E **não** apague o `out/site/` para forçar um só: o envio é `--delete` do build inteiro, então um build com um concurso **remove os outros do servidor** — o diretório é espelho do que está publicado, não cache descartável. Coberto por `scripts/tests/test_deploy.sh`; detalhe em `deploy/README.md`.
+
 Não é desperdício: é o que impede o site de publicar conteúdo velho sem avisar.
 
 O `deploy.sh` tem duas operações com escopos que **não coincidem**:
@@ -177,7 +182,7 @@ permissão **no destino**: o site é artefato derivado e não deve herdar como o
 acabou salvo no vault. Para conferir que não há resíduo antigo no servidor:
 
 ```bash
-ssh <user>@<host> "find /opt/docker/concursos/site -type f ! -perm -o=r | wc -l"
+ssh <user>@<host> "find ${CONCURSOS_DIR:-/opt/concursos}/site -type f ! -perm -o=r | wc -l"
 # 0 = nenhum arquivo ilegível para o nginx
 ```
 
@@ -192,7 +197,7 @@ CONCURSOS_PORTA=8100 ./deploy/deploy.sh --setup   # ou fixe em deploy/deploy.env
 
 A porta interna do nginx é sempre 80 e não muda. Para ver o que ocupa uma porta no servidor: `ss -ltnp | grep 8099`.
 
-**403 Forbidden** — `site/` está vazio: não há `index.html` e o autoindex é desligado. É o estado normal entre o `--setup` e o primeiro deploy, e o `--setup` deixa lá uma página explicando isso. O container está bom — confirme com `curl -s http://concursos.casa:8099/healthz`, que responde `ok` mesmo com o site vazio. A correção é publicar:
+**403 Forbidden** — `site/` está vazio: sem `index.html` e com o autoindex desligado, o nginx recusa a listagem. **Não** é o estado normal depois do `--setup`: ele escreve um `index.html` de espera justamente para você ver uma página em vez deste erro (`deploy.sh`, bloco `PLACEHOLDER`). Um 403 na raiz significa que o `--setup` não rodou, ou que algo esvaziou o diretório — um `rsync --delete` a partir de um build vazio, por exemplo. O container está bom — confirme com `curl -s http://concursos.casa:8099/healthz`, que responde `ok` mesmo com o site vazio. A correção é publicar:
 
 ```bash
 ./deploy/deploy.sh --concurso-dir <vault>/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026

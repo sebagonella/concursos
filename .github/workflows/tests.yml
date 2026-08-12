@@ -47,7 +47,14 @@ jobs:
             n=$(basename "$d")
             v=$(grep -m1 '^version:' "$d/SKILL.md" | sed 's/version: *//')
             rv=$(grep -o 'Versão atual: \*\*[0-9.]*' "$d/README.md" | grep -o '[0-9.]*$')
-            ch=$(grep -m1 -o '\[[0-9.]*\]' "$d/CHANGELOG.md" | tr -d '[]')
+            # ancorado em '^## [': o grep solto pegava o PRIMEIRO colchete numérico
+            # do arquivo, que hoje é o título da versão mas seria uma citação no meio
+            # de um texto introdutório — e aí a comparação rodaria contra lixo
+            ch=$(grep -m1 -oE '^## \[[0-9.]+\]' "$d/CHANGELOG.md" | grep -o '[0-9.]*')
+            # `v` vazio não é erro por si: o pipeline devolve o status do sed
+            if [ -z "$v" ]; then
+              echo "::error::$n sem 'version:' no SKILL.md"; erro=1; continue
+            fi
             if [ "$v" != "$rv" ] || [ "$v" != "$ch" ]; then
               echo "::error::$n versões divergentes: SKILL=$v README=$rv CHANGELOG=$ch"
               erro=1
@@ -63,6 +70,56 @@ jobs:
             for f in README.md CLAUDE.md docs/ARQUITETURA.md; do
               grep -q "$n" "$f" || { echo "::error::$n ausente em $f"; erro=1; }
             done
+          done
+          exit $erro
+
+      # As convenções de uma skill saíram do CLAUDE.md da raiz para o
+      # CONVENCOES.md dela — carregado junto com a skill em vez de em todo turno.
+      # A troca só é segura com um guarda: sem ele, regra nova nasceria num arquivo
+      # que ninguém abre, e o índice da raiz — que é como se descobre que ela existe
+      # — envelheceria calado. Foi assim que o `.claude/CLAUDE.md` perdeu as cinco
+      # convenções inteiras da concurso-afere.
+      - name: Índice de convenções cobre todas as regras por skill
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          raiz = pathlib.Path("CLAUDE.md").read_text(encoding="utf-8")
+          problemas = []
+          for conv in sorted(pathlib.Path("skills").glob("*/CONVENCOES.md")):
+              if str(conv) not in raiz:
+                  problemas.append(f"{conv} não está linkado no CLAUDE.md da raiz")
+                  continue
+              for m in re.finditer(r"^- \*\*(.+?)\*\*", conv.read_text(encoding="utf-8"),
+                                   re.M | re.S):
+                  titulo = re.sub(r"\s+", " ", m.group(1)).rstrip(" .:—-")
+                  if titulo not in raiz:
+                      problemas.append(f"{conv}: regra fora do índice — {titulo!r}")
+          for x in problemas:
+              print(f"::error::{x}")
+          sys.exit(1 if problemas else 0)
+          PY
+
+      # `05-HISTORICO` é a forma CURTA e não existe no vault: o nome real é
+      # `05-HISTORICO-CONCURSO`, e o diagrama do README é a primeira coisa que se vê.
+      - name: Nome de pasta do vault na forma real
+        run: |
+          ! grep -rn '05-HISTORICO\b' --include='*.md' --include='*.mmd' . \
+            | grep -v '05-HISTORICO-CONCURSO' | grep . \
+            || (echo "::error::use 05-HISTORICO-CONCURSO, que é o nome real" && exit 1)
+
+      # A linha `Versão atual:` é metadado que o CI lê — não é changelog. Ela já
+      # chegou a 4.631 chars num README de 6.552: 70% do arquivo era um segundo
+      # changelog, pior que o primeiro, com parênteses desbalanceados.
+      - name: "Versão atual e uma linha de metadado, nao um changelog"
+        run: |
+          erro=0
+          for d in skills/*/; do
+            n=$(basename "$d")
+            linha=$(grep -m1 'Versão atual:' "$d/README.md" || true)
+            if [ "${#linha}" -gt 400 ]; then
+              echo "::error::$n: linha 'Versão atual' com ${#linha} chars (máx 400) — o histórico vai no CHANGELOG.md"
+              erro=1
+            fi
           done
           exit $erro
 
