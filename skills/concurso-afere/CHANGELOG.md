@@ -2,6 +2,32 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.5.0] - 2026-08-12
+
+### Corrigido
+- **Empate no casamento de matéria era resolvido em silêncio.**
+  `if s > melhor_score` ficava com o primeiro da iteração e nem contava que houvesse
+  outro igual. O caso é real e está nomeado no `CLAUDE.md`: matéria homônima no
+  `_COMUM` e no cargo — no SEDES, `servico-social` existe nos dois — dá score
+  IDÊNTICO, e uma das duas era medida sem que nada dissesse qual. O `SKILL.md`
+  promete "sem casamento confiável, PERGUNTA". Agora o empate é registrado em
+  `Casamento.empatados` e o build **recusa**, nomeando os candidatos.
+- **`--escopo` (novo)** é a saída para esse empate: sem ela, a recusa seria um beco
+  sem saída no caso real do SEDES. Combinada com `--cargo`, vale a interseção, e
+  pedir escopo fora do cargo é erro nomeado.
+- **O `except GabaritoErro` engolia a mensagem que existe para ser lida.** O
+  fallback para a tabela inteira é legítimo — há gabarito sem cabeçalho de seção —,
+  mas descartava o "recorte de seção errado ou tabela em formato novo". E o que se
+  perde não é cosmético: sem o recorte, a faixa numérica passa a ser a única defesa
+  contra pegar a resposta de outra matéria. Agora vira aviso, que já sai no stderr e
+  acompanha os dados.
+
+### Testes
+- Três para o empate (registro, recusa nomeada e `--escopo` desfazendo) e dois para
+  o fallback. Contra a 0.4.0, o de empate nem chega a falhar por asserção:
+  `AttributeError: 'Casamento' object has no attribute 'empatados'` — o empate era
+  invisível por construção.
+
 ## [0.4.0] - 2026-08-12
 
 ### Corrigido

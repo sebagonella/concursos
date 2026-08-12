@@ -2187,6 +2187,34 @@ def test_validador_falha_quando_nao_acha_nada():
         assert "nenhum aprofundamento" in r.stderr
 
 
+def test_ponteiro_que_cobre_o_documento_inteiro_vira_pendencia():
+    """Regressão: `pp. 1–9` num documento de 9 páginas saía LIMPO.
+
+    Medido na Lei 11.340: a densidade devolveu essa faixa para 8 dos 10 assuntos, e
+    nenhum virou pendência — só `confianca: baixa` gerava uma, e por densidade o
+    teto é `media` quando o score passa de 0.35. Ponteiro que aponta para tudo é
+    ausência de localização com aparência de localização, que é pior do que "não
+    encontrado": o "não encontrado" pelo menos avisa.
+    """
+    import book_index as bi
+    loc = {"paginas": [1, 9], "confianca": bi.CONF_MEDIA, "metodo": "densidade"}
+    motivo = bi.rebaixar_se_cobre_tudo(loc, 9)
+    assert motivo, "cobrir 9 de 9 páginas tem de virar pendência"
+    assert loc["confianca"] == bi.CONF_BAIXA, loc
+    assert "100%" in motivo and "9 págs" in motivo, motivo
+
+
+def test_ponteiro_util_nao_e_rebaixado():
+    """Ausente, vazio e desconhecido são três coisas: faixa estreita continua boa."""
+    import book_index as bi
+    loc = {"paginas": [10, 20], "confianca": bi.CONF_ALTA, "metodo": "toc"}
+    assert bi.rebaixar_se_cobre_tudo(loc, 300) == ""
+    assert loc["confianca"] == bi.CONF_ALTA
+    # e o limiar não é "qualquer coisa grande": 7 de 10 ainda passa
+    loc2 = {"paginas": [1, 7], "confianca": bi.CONF_MEDIA, "metodo": "densidade"}
+    assert bi.rebaixar_se_cobre_tudo(loc2, 10) == ""
+
+
 def test_copia_do_aprofundamento_id_nao_divergiu():
     """O guard existia numa skill só — e o arquivo afirmava existir nas duas.
 

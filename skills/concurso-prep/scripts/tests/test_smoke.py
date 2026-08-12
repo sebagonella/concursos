@@ -188,6 +188,43 @@ def _run_validate(path: Path):
         capture_output=True, text=True)
 
 
+def test_arquivo_nao_utf8_e_acusado_em_vez_de_aprovado_em_branco():
+    """Regressão: `_read` fazia `except Exception: return ""`.
+
+    O arquivo virava string vazia e TRÊS checks passavam por vacuidade —
+    `check_placeholders` não acha placeholder em nada, `check_wikilinks` não acha
+    wikilink, `faixa_estimada` cai em "sem estimativa". Um `.md` gravado em latin-1
+    (acontece com texto colado de PDF) era aprovado em silêncio pelo validador que
+    existe para reprovar. Agora lê com `errors="replace"` — melhor um caractere
+    trocado, que os checks ainda analisam — e o encoding vira issue nomeada.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_vault(Path(d))
+        ruim = b / "EDAS" / "03-MAPAS-MATERIAS" / "09-latin1.md"
+        # `{MATERIA_NOME}` no CORPO de um arquivo latin-1: o placeholder existe e
+        # tem de continuar sendo visto mesmo com o encoding quebrado. (No título
+        # não serve: `check_placeholders` pula linhas iniciadas por `#`.)
+        ruim.write_bytes("---\ntipo: mapa-materia\n---\n# Mapa\n\n"
+                         "Estudar {MATERIA_NOME} com aten\u00e7\u00e3o.\n".encode("latin-1"))
+
+        out = json.loads(_run_validate(b).stdout)
+        enc = out["resultados"]["encoding"]
+        assert len(enc) == 1, enc
+        assert "09-latin1.md" in enc[0] and "UTF-8" in enc[0], enc[0]
+        # e o conteúdo continua sendo analisado: o placeholder não some junto
+        assert any("09-latin1.md" in x for x in out["resultados"]["placeholders"]), \
+            out["resultados"]["placeholders"]
+        assert out["total_problemas"] > 0
+
+
+def test_vault_limpo_nao_tem_issue_de_encoding():
+    """Ausente e vazio são coisas diferentes: sem defeito, sem alarme."""
+    with tempfile.TemporaryDirectory() as d:
+        b = _montar_vault(Path(d))
+        out = json.loads(_run_validate(b).stdout)
+        assert out["resultados"]["encoding"] == [], out["resultados"]["encoding"]
+
+
 def test_validate_estrutura_ok():
     with tempfile.TemporaryDirectory() as d:
         b = _montar_vault(Path(d))
@@ -959,9 +996,54 @@ def test_cargos_ids_do_formato_do_sedes_e_do_bb():
                                     {"slug": "B", "especificos": [{"nome": "TI"}]}],
                  "materias": [{"nome": "Vendas", "topicos": ["x"]},
                               {"nome": "Português", "topicos": ["y"]}]}
-        saida2, _ = mm.corr_cargos_ids(meta2, p)
+        saida2, pend2 = mm.corr_cargos_ids(meta2, p)
         assert saida2[0]["cargos_ids"] == ["A"], saida2[0]
         assert saida2[1]["cargos_ids"] == ["A", "B"], saida2[1]
+        # "Português" só virou básica por NÃO constar como específica de ninguém —
+        # inferência por omissão, e o vault não tem mapa que a confirme
+        assert any("Português" in x and "omissao" in x for x in pend2), pend2
+
+
+def test_inferencia_por_omissao_vira_pendencia_quando_o_vault_nao_confirma():
+    """Regressão: `elif especificas: cargos = sorted(todos)` gravava a matéria como
+    comum a TODOS os cargos só porque ela não aparecia na lista de nenhum.
+
+    É a única atribuição do laço que não vem de campo declarado, e o docstring do
+    arquivo promete "nunca escolhe no palpite". O cross-check com o vault existia,
+    mas só roda quando há mapa: sem mapa, o palpite atravessava calado.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        for c in ("A", "B"):
+            (p / c).mkdir()
+        meta = {"cargos_gerados": [{"slug": "A", "especificos": [{"nome": "Vendas"}]},
+                                   {"slug": "B", "especificos": [{"nome": "TI"}]}],
+                "materias": [{"nome": "Matemática", "topicos": ["x"]}]}
+        saida, pend = mm.corr_cargos_ids(meta, p)
+        # a inferência CONTINUA: sem ela a migração não completa
+        assert saida[0]["cargos_ids"] == ["A", "B"], saida
+        # mas agora é nomeada
+        assert len(pend) == 1, pend
+        assert "Matemática" in pend[0] and "omissao" in pend[0], pend[0]
+
+
+def test_inferencia_por_omissao_confirmada_pelo_vault_nao_gera_pendencia():
+    """Corroborada pelo mapa em `_COMUM`, a inferência deixa de ser palpite —
+    ausente, vazio e desconhecido são coisas diferentes."""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        for c in ("A", "B"):
+            (p / c).mkdir()
+        (p / "_COMUM" / "03-MAPAS-COMUNS").mkdir(parents=True)
+        (p / "_COMUM" / "03-MAPAS-COMUNS" / "01-matematica.md").write_text(
+            "---\nmateria_id: matematica\n---\n", encoding="utf-8")
+        meta = {"cargos_gerados": [{"slug": "A", "especificos": [{"nome": "Vendas"}]},
+                                   {"slug": "B", "especificos": [{"nome": "TI"}]}],
+                "materias": [{"nome": "Matemática", "materia_id": "matematica",
+                              "topicos": ["x"]}]}
+        saida, pend = mm.corr_cargos_ids(meta, p)
+        assert saida[0]["cargos_ids"] == ["A", "B"], saida
+        assert pend == [], pend
 
 
 def test_comum_significa_mais_de_um_nao_todos():

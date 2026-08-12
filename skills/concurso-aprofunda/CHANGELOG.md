@@ -2,6 +2,24 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.15.0] - 2026-08-12
+
+### Corrigido
+- **Ponteiro que cobre o documento inteiro saía limpo, sem pendência.** Medido na
+  Lei 11.340: a busca por densidade devolveu `pp. 1–9` para **8 dos 10** assuntos,
+  num documento de **9 páginas** — e nenhum virou pendência, porque só
+  `confianca: baixa` gera uma e por densidade o teto é `media` sempre que o score
+  passa de 0.35. Ponteiro que aponta para tudo é ausência de localização com
+  aparência de localização, o que é pior do que "não encontrado": este ao menos
+  avisa. Agora faixa que abrange ≥80% do documento é rebaixada para `baixa` e vira
+  pendência dizendo a porcentagem. Vale para os dois métodos — o `toc` também
+  estende o fim até a última página quando não há entrada seguinte.
+
+### Testes
+- `test_ponteiro_que_cobre_o_documento_inteiro_vira_pendencia` e
+  `test_ponteiro_util_nao_e_rebaixado`, que trava o limiar (7 de 10 páginas ainda
+  passa).
+
 ## [0.14.0] - 2026-08-12
 
 ### Corrigido

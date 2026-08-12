@@ -988,6 +988,36 @@ DOCS_NAO_PUBLICAVEIS = re.compile(r"^(00-INDICE|99-Status)", re.IGNORECASE)
 # arcabouço como conteúdo.
 PLACEHOLDER_RE = re.compile(r"\{[A-Z_][A-Z0-9_]{2,}\}")
 
+# O que foi descartado por placeholder, para o aviso do fim da coleta.
+#
+# Descartar é a decisão certa — arcabouço não é conteúdo —, mas descartar CALADO
+# não é: um `.md` que apenas MENCIONE `{CONCURSO}` (um exemplo de template dentro
+# de uma nota de documentação, por exemplo) sumia da publicação inteira sem uma
+# linha de stderr, sem contagem e sem teste. É o mesmo modo de falha do
+# `00-AFERICAO-*` da 0.20.0, e o repositório já tem o padrão certo ao lado, em
+# `avisar_rotulos_extras`: decidir e AVISAR.
+_DESCARTADOS_PLACEHOLDER: list[dict] = []
+
+
+def _tem_placeholder(md: Path, corpo: str, tipo: str) -> bool:
+    achado = PLACEHOLDER_RE.search(corpo)
+    if not achado:
+        return False
+    _DESCARTADOS_PLACEHOLDER.append(
+        {"tipo": tipo, "arquivo": str(md), "marcador": achado.group(0)})
+    return True
+
+
+def avisar_placeholders() -> list[dict]:
+    """Avisa o que ficou de fora por conter marcador de template não preenchido."""
+    if _DESCARTADOS_PLACEHOLDER:
+        lista = ", ".join(f'{Path(d["arquivo"]).name} ({d["marcador"]})'
+                          for d in _DESCARTADOS_PLACEHOLDER)
+        sys.stderr.write(
+            f"AVISO: {len(_DESCARTADOS_PLACEHOLDER)} arquivo(s) NÃO publicado(s) por "
+            f"conter marcador de template não preenchido: {lista}\n")
+    return list(_DESCARTADOS_PLACEHOLDER)
+
 EXT_DOC = (".md",)
 
 
@@ -1019,7 +1049,7 @@ def titulo_doc(md: Path, fm: dict, corpo: str) -> str:
 def coletar_documento(md: Path) -> dict | None:
     fm = ler_frontmatter(md)
     corpo = fm.get("_corpo", "")
-    if PLACEHOLDER_RE.search(corpo):
+    if _tem_placeholder(md, corpo, "documento"):
         return None                     # arcabouço não preenchido não vira página
     return {
         "arquivo": md.name,
@@ -1245,7 +1275,7 @@ def coletar_mapa(md: Path) -> dict | None:
     """
     fm = ler_frontmatter(md)
     corpo = fm.get("_corpo", "")
-    if PLACEHOLDER_RE.search(corpo):
+    if _tem_placeholder(md, corpo, "mapa"):
         return None
 
     topicos, auxiliares = [], []
@@ -1632,6 +1662,7 @@ def avisar_rotulos_extras(escopos: list[dict]) -> list[str]:
 
 
 def coletar_concurso(base: Path) -> dict:
+    _DESCARTADOS_PLACEHOLDER.clear()    # a coleta é chamável mais de uma vez no processo
     meta = {}
     meta_path = base / ".meta.json"
     if meta_path.exists():
@@ -1676,6 +1707,7 @@ def coletar_concurso(base: Path) -> dict:
     herdar_secoes_comuns(escopos)
     calcular_cobertura(escopos)
     avisar_rotulos_extras(escopos)
+    descartados = avisar_placeholders()
 
     return {
         "concurso": base.name,
@@ -1689,6 +1721,9 @@ def coletar_concurso(base: Path) -> dict:
                  ("orgao", "ano", "banca", "modo", "datas_chave", "estrutura_prova",
                   "vagas_ac", "vagas_total", "salario", "cargos_validados")},
         "escopos": escopos,
+        # no modelo, não só no stderr: quem consome a coleta é o builder, e
+        # arquivo que sumiu da publicação precisa ser contável
+        "descartados_placeholder": descartados,
         # alias de compatibilidade: `--modelo site-model.json` é contrato público e
         # documentado no SKILL.md. Sai numa versão futura, com aviso.
         "cargos": escopos,

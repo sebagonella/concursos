@@ -2,6 +2,23 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.25.0] - 2026-08-12
+
+### Corrigido
+- **Documento e mapa descartados por placeholder sumiam em silêncio.**
+  `coletar_documento` e `coletar_mapa` devolviam `None` sem stderr, sem contagem e
+  sem teste. Descartar é a decisão certa — arcabouço não é conteúdo —, mas descartar
+  calado não é: um `.md` que apenas MENCIONE `{CONCURSO}` (uma nota que documente o
+  template, por exemplo) desaparecia da publicação inteira sem sintoma. É o mesmo
+  modo de falha do `00-AFERICAO-*` da 0.20.0, e o padrão certo já existia ao lado,
+  em `avisar_rotulos_extras`: decidir **e avisar**. Agora sai aviso nomeando arquivo
+  e marcador, e a lista vai em `descartados_placeholder` no modelo — no JSON, não só
+  no stderr, porque quem consome a coleta é o builder.
+
+### Testes
+- `test_descarte_por_placeholder_e_avisado_e_contado` e o par que trava o oposto
+  (coleta limpa não inventa aviso).
+
 ## [0.24.0] - 2026-08-12
 
 ### Corrigido

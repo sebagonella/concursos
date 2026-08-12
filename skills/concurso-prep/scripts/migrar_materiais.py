@@ -99,6 +99,25 @@ def _tokens(texto: str) -> frozenset:
     return frozenset(mid.tokens_titulo(texto))
 
 
+def _ler_para_analise(f: Path) -> str:
+    """Lê um `.md` do vault SÓ PARA ANALISAR, degradando em vez de derrubar.
+
+    Um `.md` gravado em latin-1 — acontece com texto colado de PDF — fazia o
+    `read_text(encoding="utf-8")` estourar `UnicodeDecodeError` e levar junto todo
+    o `validate_output.py`, que chama isto por `check_material`: um arquivo mal
+    codificado abortava a validação inteira, com traceback em vez de relatório.
+
+    Só para LEITURA de análise. Os caminhos que reescrevem o arquivo continuam com
+    `read_text` estrito de propósito: ler com `errors="replace"` e gravar de volta
+    trocaria os bytes do usuário por U+FFFD em silêncio, que é o tipo de perda que
+    este projeto trata como o pior desfecho.
+    """
+    try:
+        return f.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return f.read_text(encoding="utf-8", errors="replace")
+
+
 def materias_do_concurso(concurso_dir: Path) -> list[dict]:
     """As matérias do concurso: onde o mapa de cada uma vive e como se chama.
 
@@ -110,7 +129,7 @@ def materias_do_concurso(concurso_dir: Path) -> list[dict]:
     for escopo_dir in sorted(p for p in concurso_dir.iterdir() if p.is_dir()):
         for mapa in mapas_do_escopo(escopo_dir):
             fm = {}
-            m = _FRONTMATTER.match(mapa.read_text(encoding="utf-8"))
+            m = _FRONTMATTER.match(_ler_para_analise(mapa))
             if m:
                 fm = dict(re.findall(r'^(\w+):\s*"?([^"\n]*)"?', m.group(1), re.M))
             stem = _PREFIXO_NUM.sub("", mapa.stem)
@@ -499,7 +518,7 @@ def materias_sem_material(concurso_dir: Path) -> dict[str, list]:
     materias = materias_do_concurso(concurso_dir)
     cobertas = set()
     for cat in concurso_dir.glob("*/04-MATERIAIS/livros-recomendados.md"):
-        for e in mid.parsear_catalogo(cat.read_text(encoding="utf-8")):
+        for e in mid.parsear_catalogo(_ler_para_analise(cat)):
             m = resolver_materia(e.get("cobre", ""), materias)
             if m:
                 cobertas.add((m["escopo"], m["rotulo"]))

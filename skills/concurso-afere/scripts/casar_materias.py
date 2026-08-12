@@ -20,7 +20,7 @@ import json
 import re
 import sys
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -108,22 +108,40 @@ class Casamento:
     faixa: Faixa
     materia: MateriaVault | None
     score: float
+    # Todas as matérias que empataram no topo. Vazia quando houve um vencedor
+    # sozinho; com 2+ itens, `materia` é apenas a primeira e NÃO é uma escolha.
+    empatados: list = field(default_factory=list)
 
 
 def casar(prova: Path, concurso_dir: Path,
           escopos: list[str] | None = None) -> list[Casamento]:
+    """Casa cada faixa da prova com a matéria do vault, SEM desempatar no palpite.
+
+    `if s > melhor_score` ficava com o primeiro da iteração e não contava que
+    houvesse outro igual. O caso é real e está nomeado no CLAUDE.md: matéria
+    homônima no `_COMUM` e no cargo — no SEDES, `servico-social` existe nos dois —
+    dá score idêntico, e uma das duas era medida sem que nada dissesse qual. Aferir
+    a matéria errada gasta o trabalho do agente e produz um documento plausível,
+    que é o desfecho caro desta skill.
+
+    Aqui o empate é apenas REGISTRADO; quem decide o que fazer com ele é o
+    chamador — o `build_afericao` recusa e nomeia os candidatos.
+    """
     vault = materias_do_vault(concurso_dir, escopos)
     out: list[Casamento] = []
     for f in distribuicao(prova):
-        melhor, melhor_score = None, 0.0
+        melhor_score = 0.0
+        empatados: list[MateriaVault] = []
         for mv in vault:
             s = max(similaridade(f.nome, mv.materia_id),
                     similaridade(f.nome, mv.materia_id.replace("-", " ")))
             if s > melhor_score:
-                melhor, melhor_score = mv, s
-        out.append(Casamento(faixa=f,
-                             materia=melhor if melhor_score >= LIMIAR else None,
-                             score=melhor_score))
+                melhor_score, empatados = s, [mv]
+            elif s == melhor_score and s > 0:
+                empatados.append(mv)
+        vencedor = empatados[0] if (empatados and melhor_score >= LIMIAR) else None
+        out.append(Casamento(faixa=f, materia=vencedor, score=melhor_score,
+                             empatados=list(empatados) if vencedor and len(empatados) > 1 else []))
     return out
 
 
