@@ -498,6 +498,56 @@ def test_build_afericao_nao_sobrescreve_julgamento():
                "o relatório JSON diz que pulou", r2["aferições"][0].get("pulado"))
 
 
+def _materia_fake(niveis=("padrao",)):
+    """MateriaVault mínima: `montar` só precisa de niveis/dir/materia_id."""
+    return casar_materias.MateriaVault(
+        materia_id="lingua-portuguesa", escopo="_COMUM",
+        dir=Path(tempfile.gettempdir()) / "nao-existe", n_assuntos=3,
+        niveis=list(niveis))
+
+
+def test_tabela_usa_o_numero_real_da_questao():
+    """Regressão: a coluna Q imprimia `i + 1`, renumerando de 1 a N.
+
+    Numa faixa 21–25 a tabela saía `Q1…Q5` enquanto o `--bloco-out` que o agente lê
+    traz os números reais — o cruzamento questão↔veredicto era feito contra rótulos
+    que não existem na prova. Invisível só em Português, que começa em 1.
+    """
+    import build_afericao
+    dados = [{"versao": "A", "caderno": "4", "prova": Path("p.pdf"),
+              "gabarito": {21: "A", 22: "B", 23: "C", 24: "D", 25: "E"},
+              "faixa": extrair_questoes.Faixa("Língua Portuguesa", 21, 25),
+              "materia": _materia_fake(), "bloco": "", "avisos": []}]
+    linhas = build_afericao.montar(dados, Path("/tmp"), "CESGRANRIO").splitlines()
+    qs = [ln.split("|")[1].strip() for ln in linhas
+          if ln.startswith("|") and ln.split("|")[1].strip().isdigit()]
+    checar(qs == ["21", "22", "23", "24", "25"],
+           "a coluna Q traz o número real da questão", qs)
+
+
+def test_provas_com_faixas_diferentes_nao_estouram_nem_pareiam_errado():
+    """Regressão: `sorted(d["gabarito"])[i]` indexava CADA prova pela posição da
+    primeira. Contagens diferentes davam IndexError; faixas diferentes casavam
+    gabaritos de questões distintas em silêncio, que é o pior dos dois."""
+    import build_afericao
+    def d(versao, gab):
+        return {"versao": versao, "caderno": "4", "gabarito": gab,
+                "prova": Path(f"{versao}.pdf"),
+                "faixa": extrair_questoes.Faixa("Língua Portuguesa", 1, 3),
+                "materia": _materia_fake(), "bloco": "", "avisos": []}
+    dados = [d("A", {1: "A", 2: "B", 3: "C"}),
+             d("B", {1: "E", 3: "D"})]                      # sem a 2, e mais curta
+    linhas = [ln for ln in build_afericao.montar(dados, Path("/tmp"), "X").splitlines()
+              if ln.startswith("|") and ln.split("|")[1].strip().isdigit()]
+    celulas = {ln.split("|")[1].strip(): [c.strip() for c in ln.split("|")[2:4]]
+               for ln in linhas}
+    checar(celulas.get("1") == ["A", "E"], "questão 1 pareia com a 1", celulas.get("1"))
+    checar(celulas.get("2") == ["B", "?"],
+           "questão ausente numa prova vira '?', não a resposta da seguinte",
+           celulas.get("2"))
+    checar(celulas.get("3") == ["C", "D"], "questão 3 pareia com a 3", celulas.get("3"))
+
+
 def test_build_afericao_forcar_faz_backup():
     """`--forcar` é a saída explícita — e mesmo ela guarda o que havia."""
     com_texto({"p.pdf": CADERNO_A + CAPA + CORPO, "g.pdf": GABARITO_PDF})
