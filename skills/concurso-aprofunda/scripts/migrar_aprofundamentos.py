@@ -44,6 +44,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import (  # noqa: E402
+    PREFIXOS_NAO_PRINCIPAIS, arquivo_principal,
     slug, slug_fonte, slug_suspeito, id_aprofundamento, nome_base,
     eh_pasta_aprofundamento, parse_id, localizacoes as aid_localizacoes,
 )
@@ -103,13 +104,18 @@ def nivel_do_assunto(fm: dict) -> tuple[str, bool]:
 
 
 def _mds_principais(d: Path) -> list[Path]:
+    """Os `.md` da pasta que são conteúdo de assunto.
+
+    A lista de exclusão vem de `aprofundamento_id`: esta cópia estava sem
+    `report-`, `teste-` e `tabela-`, e uma pasta com o report do NotebookLM faria
+    `_md_principal` devolver o arquivo errado.
+    """
     return [p for p in sorted(d.glob("*.md"))
-            if not p.name.startswith(("flashcards-", "_", "00-"))]
+            if not p.name.startswith(PREFIXOS_NAO_PRINCIPAIS)]
 
 
 def _md_principal(d: Path):
-    mds = _mds_principais(d)
-    return mds[0] if mds else None
+    return arquivo_principal(d)
 
 
 def origem_dos_aprofundamentos(assunto_dir: Path):

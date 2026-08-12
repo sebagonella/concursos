@@ -2,6 +2,64 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.24.0] - 2026-08-12
+
+### Corrigido
+- **A trilha da página de matéria levava ao lugar errado.** A chamada passava
+  `item["rota_escopo"]` no parâmetro `rota_capa`, e o item do plano traz as duas
+  chaves. O primeiro nível da trilha exibe o NOME DO CONCURSO nas duas páginas: na
+  de matéria ia para o hub do escopo, na de assunto — ao lado — para a capa. Mesmo
+  texto, dois destinos em telas vizinhas, e o auditor de links não pega porque o
+  alvo errado existe. Não havia um único teste que olhasse a trilha.
+- **Um flashcard com `</script>` fazia o quiz sumir da página.** O JSON ia cru
+  dentro de `<script type="application/json">`, e o parser de HTML fecha o bloco no
+  primeiro `</script>` que encontra — mesmo dentro de uma string JSON. O
+  `JSON.parse` quebrava, o `iniciarQuiz` fazia `return` e o quiz desaparecia **sem
+  erro visível**, que é o modo de falha que este projeto proíbe; o script injetado
+  ainda por cima executava. Agora `</` sai como `<\/`, que é escape JSON válido e
+  desserializa como `/` — o dado não muda.
+- **A bússola e a aferição não reabriam na impressão.** A promessa "o `@media
+  print` reabre" está no `SKILL.md`, neste changelog (0.19.0/0.20.0) e no
+  `CLAUDE.md`, mas o `beforeprint` do `site.js` só coletava `.mais-topico`: as duas
+  dependiam de `display: block !important` num filho de `<details>` fechado, e o
+  navegador esconde o conteúdo pelo slot, que `display` no filho não vence. O
+  docstring do teste vizinho já dizia que forçar por CSS não é confiável. Agora o
+  `beforeprint` alcança `details.bussola`, `details.afericao` e `details.lacunas`.
+
+### Acessibilidade
+- **`role="tablist"` sem nenhuma aba.** Os quatro seletores do site se declaravam
+  tablist e os botões não tinham `role`, `aria-selected` nem `aria-controls`; os
+  painéis não tinham `role="tabpanel"`. Para leitor de tela era uma lista de abas
+  SEM abas, e o estado ativo — na tela, só uma classe CSS — não era anunciado.
+  Agora o contrato sai completo do gerador (`botao_aba`/`attrs_painel`, num lugar
+  só), o `site.js` mantém `aria-selected`/`tabindex` na troca, e setas, Home e End
+  navegam dentro do grupo.
+- **Espaço e Enter sequestravam os botões do quiz.** O `keydown` ficava na raiz
+  `.quiz` com `preventDefault()`, então com o foco em "Virar", "Próximo" ou
+  "Embaralhar" a tecla virava o cartão em vez de acionar o botão focado. O handler
+  passou para a carta; a seta direita segue na raiz, onde não conflita. `aria-live`
+  no cartão e na posição, que mudam sem recarregar a página.
+
+### Testes
+- **O fixture principal passou a ser o layout CANÔNICO.** `assuntos/crase/crase.md`
+  era o layout legado — medindo o vault real, **0 arquivos** assim contra **178** no
+  canônico. Como a maioria dos ~100 testes de página parte dele, a suíte exercitava
+  `legado: True`, `fontes_id: []`, `n_fontes_id: None` e id `"unico"`: o caminho que
+  a `concurso-aprofunda` **não emite**. É a terceira encarnação do mesmo defeito
+  (`_GERAL`, `notebooklm_url`), agora na dimensão do layout. A `regencia` continua
+  legada de propósito — o coletor ainda aceita esse formato, e caminho aceito sem
+  teste apodrece — e `test_assunto_da_fixture_e_o_layout_canonico` trava o fixture
+  contra a regressão.
+- **`test_build_nao_escreve_no_vault`** — a convenção nº 1 da skill não tinha teste
+  nenhum. Compara conteúdo **e** mtime da árvore inteira antes e depois do build:
+  um `touch` sem mudar bytes já é escrita.
+- Testes novos para os cinco defeitos acima, todos conferidos contra a 0.23.0.
+
+### Interno
+- `_arquivo_principal` deixou de ser a sétima reimplementação da regra de layout e
+  passou a vir de `aprofundamento_id`, que é a cópia sincronizada e travada por
+  teste — a MESMA função que a skill irmã usa para escrever.
+
 ## [0.23.0] - 2026-08-06
 
 ### Alterado

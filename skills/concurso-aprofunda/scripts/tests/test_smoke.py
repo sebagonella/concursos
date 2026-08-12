@@ -2187,6 +2187,36 @@ def test_validador_falha_quando_nao_acha_nada():
         assert "nenhum aprofundamento" in r.stderr
 
 
+def test_copia_do_aprofundamento_id_nao_divergiu():
+    """O guard existia numa skill só — e o arquivo afirmava existir nas duas.
+
+    `aprofundamento_id.py` é fonte de verdade AQUI e tem cópia sincronizada na
+    `concurso-publica`. O cabeçalho da cópia diz "há teste de smoke nas duas skills
+    que falha se as cópias divergirem"; havia em uma. Quem editasse o original e
+    rodasse só esta suíte — o caminho natural, já que o original mora aqui — passava
+    verde deixando o site lendo uma estrutura diferente da que esta skill escreve.
+
+    A comparação começa em `NIVEIS = ` porque a cópia tem 10 linhas de cabeçalho
+    próprias, dizendo que é cópia.
+    """
+    daqui = ROOT / "aprofundamento_id.py"
+    # parents: [0]=tests [1]=scripts [2]=concurso-aprofunda [3]=skills [4]=repo
+    aqui_ = Path(__file__).resolve()
+    candidatos = [aqui_.parents[3] / "concurso-publica" / "scripts" / "aprofundamento_id.py",
+                  aqui_.parents[4] / "skills" / "concurso-publica" / "scripts" / "aprofundamento_id.py"]
+    copia = next((c for c in candidatos if c.exists()), None)
+    if copia is None:
+        return                      # skill instalada sem a irmã: nada a comparar
+
+    def corpo(p):
+        txt = p.read_text(encoding="utf-8")
+        return txt[txt.find("NIVEIS = "):]
+
+    assert corpo(daqui) == corpo(copia), (
+        "aprofundamento_id.py divergiu entre concurso-aprofunda e concurso-publica; "
+        "edite o original (esta skill) e copie por cima da cópia")
+
+
 def _run_standalone():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     falhas = 0

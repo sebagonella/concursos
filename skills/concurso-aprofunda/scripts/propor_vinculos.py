@@ -41,7 +41,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from aprofundamento_id import eh_pasta_aprofundamento, slug  # noqa: E402
+from aprofundamento_id import (  # noqa: E402
+    PREFIXOS_NAO_PRINCIPAIS, eh_pasta_aprofundamento, slug,
+)
 
 PASTAS_MAPA = ("03-MAPAS-MATERIAS", "03-MAPAS-COMUNS")
 NAO_PUBLICAVEL = re.compile(r"^(00-INDICE|99-Status)", re.IGNORECASE)
@@ -128,7 +130,10 @@ def assuntos_da_materia(materia_dir: Path) -> list[dict]:
             if not (sub.is_dir() and eh_pasta_aprofundamento(sub.name)):
                 continue
             for md in sorted(sub.glob("*.md")):
-                if md.name.startswith(("flashcards-", "_", "00-")):
+                # a lista de exclusão vem de `aprofundamento_id`: esta cópia
+                # estava sem `report-`/`teste-`/`tabela-` e lia o report do
+                # NotebookLM como se fosse um assunto
+                if md.name.startswith(PREFIXOS_NAO_PRINCIPAIS):
                     continue
                 fm = ler_frontmatter(md)
                 titulo = titulo or fm.get("title", "")

@@ -30,7 +30,9 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from aprofundamento_id import eh_pasta_aprofundamento, localizacoes  # noqa: E402
+from aprofundamento_id import (  # noqa: E402
+    arquivo_principal, eh_pasta_aprofundamento, localizacoes,
+)
 from renomear_aprof import frontmatter_sem_linha_vazia  # noqa: E402
 
 
@@ -61,15 +63,10 @@ def ler_frontmatter(md: Path) -> dict:
     return fm
 
 
-def arquivo_principal(pasta: Path) -> Path | None:
-    """Acha o .md principal: '{pasta}.md' (legado) ou '{assunto}--{aprof}.md' (novo)."""
-    exato = pasta / f"{pasta.name}.md"
-    if exato.exists():
-        return exato
-    candidatos = [p for p in sorted(pasta.glob("*.md"))
-                  if not p.name.startswith(("flashcards-", "_", "00-", "report-",
-                                            "teste-", "tabela-"))]
-    return candidatos[0] if candidatos else None
+# `arquivo_principal` mudou de casa para `aprofundamento_id`, que é o módulo com
+# cópia sincronizada na concurso-publica — assim a skill irmã usa a MESMA função em
+# vez de manter a sétima cópia. Segue importável daqui porque é por este nome que os
+# outros scripts (e a concurso-afere) a alcançam.
 
 
 def pastas_de_aprofundamento(assunto_dir: Path) -> list[Path]:
