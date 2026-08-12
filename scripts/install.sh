@@ -163,6 +163,10 @@ for s in "${SKILLS[@]}"; do
   cp "$origem/SKILL.md" "$destino/"
   [[ -f "$origem/README.md" ]] && cp "$origem/README.md" "$destino/"
   [[ -f "$origem/CHANGELOG.md" ]] && cp "$origem/CHANGELOG.md" "$destino/"
+  # CONVENCOES.md é o motivo de as regras terem saído do CLAUDE.md da raiz: elas
+  # carregam JUNTO com a skill, quando são relevantes. Sem esta linha o arquivo
+  # ficaria só no repositório e a mudança teria sido pura perda.
+  [[ -f "$origem/CONVENCOES.md" ]] && cp "$origem/CONVENCOES.md" "$destino/"
   [[ -f "$origem/requirements.txt" ]] && cp "$origem/requirements.txt" "$destino/"
   [[ -d "$origem/assets" ]] && cp -r "$origem/assets" "$destino/"
   [[ -d "$origem/scripts" ]] && cp -r "$origem/scripts" "$destino/"

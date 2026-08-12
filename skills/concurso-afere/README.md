@@ -3,7 +3,7 @@
 Mede o material aprofundado do vault contra a **prova real**: quantas questões o
 conteúdo escrito responde, onde falha e o que corrigir.
 
-Versão atual: **0.5.0** (empate no casamento de matéria deixa de ser resolvido em silêncio — matéria homônima no `_COMUM` e no cargo dava score idêntico e uma era medida sem que nada dissesse qual; agora o build recusa nomeando os candidatos, com `--escopo` como saída — e o `except GabaritoErro` deixou de engolir a mensagem sobre o recorte de seção). Na 0.4.0: (a coluna Q passa a trazer o número real da questão em vez de renumerar 1..N — numa faixa 21–25 a tabela dizia Q1–Q5 enquanto o bloco que o agente lê traz 21–25 —, e o pareamento entre provas passa a ser pelo número da questão, não pela posição, que estourava IndexError ou casava gabaritos de questões distintas em silêncio). Na 0.3.0: (`build_afericao.py` deixa de sobrescrever a aferição já julgada — o nome do destino é fixo e o `write_text` era incondicional, então reexecutar trocava o julgamento do agente pelo arcabouço com `···`; agora pula, reporta `pulado: true` e só regera com `--forcar`, com backup. Primeira cobertura de teste do script, que era o único da skill que escreve no vault). Na 0.2.0: (o validador passou a **conferir a aritmética da nota**: recalcula RESPONDE/PARCIAL/NÃO RESPONDE pelo critério declarado da própria skill e compara com a nota escrita, por nível, e confere que as contagens somam as `questoes_aferidas` — o `SEM MATERIAL` fica fora do denominador, como manda o critério. Era um check anunciado no docstring que nunca existiu no código, e por isso a aritmética da primeira aferição de Vendas e Negociação foi conferida à mão. Na 0.1.1: (afere uma ou mais matérias (`--materia`) ou todas as matérias
+Versão atual: **0.5.0** — empate no casamento de matéria deixa de ser resolvido em silêncio: o build recusa nomeando os candidatos, com `--escopo` como saída. O histórico completo está no [CHANGELOG.md](CHANGELOG.md).
 aprofundadas de um cargo (`--cargo`), com nota por nível `padrao` e `detalhado`, nota por
 prova e distribuição das questões por assunto; o script prepara o determinístico e **o
 agente julga**, com quatro vereditos em que `SEM MATERIAL` fica fora do denominador —
@@ -54,7 +54,7 @@ python3 $S/validar_afericao.py --concurso-dir $V
 ## Testes
 
 ```bash
-python3 scripts/tests/test_smoke.py     # 20 testes, sem pytest
+python3 scripts/tests/test_smoke.py     # 35 testes, sem pytest
 ```
 
 Documentação do fluxo completo: [`SKILL.md`](SKILL.md) · histórico: [`CHANGELOG.md`](CHANGELOG.md)

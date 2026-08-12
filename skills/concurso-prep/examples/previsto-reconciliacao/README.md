@@ -71,8 +71,8 @@ Use a skill concurso-prep:
 
 ```bash
 python3 scripts/diff_editais.py \
-  --v1 TJDFT_2026_V1-PREVISTO/.meta.json \
-  --v2 TJDFT_2026_V2-OFICIAL/.meta.json
+  --v1 meta-exemplo/meta-v1-previsto.json \
+  --v2 meta-exemplo/meta-v2-oficial.json
 ```
 
 Saída esperada: contagem de mantidos/removidos/novos/alterados + listas.

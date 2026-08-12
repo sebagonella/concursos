@@ -166,12 +166,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--concurso-dir", type=Path, required=True)
     ap.add_argument("--materia-id", required=True)
-    ap.add_argument("--topico", required=True,
-                    help="número, slug ou trecho do título do tópico")
+    # `--topico` NÃO é required no argparse: com `--listar` não há tópico a
+    # escolher, e o `required=True` obrigava a inventar um valor descartável só para
+    # rodar o comando que o SKILL.md recomenda para descobrir quais existem. A
+    # exigência continua valendo — só é cobrada abaixo, depois do short-circuit.
+    ap.add_argument("--topico", default="",
+                    help="número, slug ou trecho do título do tópico "
+                         "(dispensável com --listar)")
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--listar", action="store_true",
                     help="só lista os tópicos da matéria e sai")
     args = ap.parse_args()
+    if not args.listar and not args.topico:
+        ap.error("--topico é obrigatório (ou use --listar para ver os disponíveis)")
 
     md = achar_mapa(args.concurso_dir, args.materia_id)
     if not md:

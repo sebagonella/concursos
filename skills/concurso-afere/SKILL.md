@@ -121,7 +121,7 @@ matérias aferíveis e sai** — nunca assume "todas" por omissão.
 - `divergencia_niveis.py` — % dos conceitos do `padrao` ausentes no `detalhado`
 - `build_afericao.py` — arcabouço (não julga)
 - `validar_afericao.py` — recusa aferição incompleta ou incoerente
-- `tests/test_smoke.py` — 20 testes, standalone
+- `tests/test_smoke.py` — 35 testes, standalone
 
 **Reúso** (não reimplementar): `arquivo_principal()` da `concurso-aprofunda` —
 `glob("*.md")[0]` pega o `_fonte-notebooklm.md`, porque `_` ordena antes das letras.

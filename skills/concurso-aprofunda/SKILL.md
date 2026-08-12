@@ -1,6 +1,6 @@
 ---
 name: concurso-aprofunda
-version: 0.15.0
+version: 0.16.0
 description: Use quando o usuário já tem uma preparação de concurso montada no vault (pela skill concurso-prep) e quer APROFUNDAR uma matéria a partir de um material denso — tipicamente um livro de referência (PDF/EPUB) que está no vault. A skill localiza no livro cada assunto já mapeado daquela matéria (via sumário ou busca por densidade de termos), gera um arquivo .md por assunto no vault com resumo completo próprio + ponteiros de página + trechos-âncora curtos citados (Modelo 2, sem copiar a obra), e produz flashcards nativos (Obsidian + Anki). Prepara também o insumo para a Etapa NotebookLM (podcast, mapa mental), tratada separadamente. Suporta DOIS NÍVEIS de profundidade (padrao = resumo de revisão; detalhado = tratamento exaustivo com exemplos resolvidos e questões comentadas) e VÁRIOS APROFUNDAMENTOS por assunto (fontes diferentes convivem lado a lado). Triggers - "aprofundar português com o livro X", "pegar os assuntos do livro", "mapear o livro de referência", "gerar flashcards do assunto", "extrair assuntos do material para o vault", "aprofundar mais/mais detalhado esse assunto", "aprofundar com outro livro/outra fonte", "versão detalhada do assunto".
 ---
 
@@ -517,7 +517,25 @@ Em `scripts/`:
 - `ampliar_aprofundamento.py` — **acrescenta fonte(s) a um aprofundamento existente** (modos `ampliar`/`derivar`), renomeando pasta, arquivos, mídia e wikilinks e preservando o notebook já criado (dry-run por padrão)
 - `renomear_aprof.py` — máquina de renomeação compartilhada pelo migrador e pelo ampliador: quais arquivos viajam e como o wikilink é reescrito. **Não reimplemente**: há teste que trava a identidade das funções
 - `migrar_aprofundamentos.py` — move material antigo para o padrão de pastas atual e reescreve os wikilinks (dry-run por padrão)
+- `propor_vinculos.py` → `aplicar_vinculos.py` — **conserta o vínculo de material legado**: o primeiro varre os aprofundamentos e propõe `materia_id`/`topico_id` para os que estão sem, num JSON para revisão humana; o segundo grava o que foi aprovado. Existem porque o link mapa↔assunto **nunca** é inferido por slug (casa em ~18% dos tópicos), e sem `topico_id` gravado a cobertura do site fica desconhecida — não zero
+- `migrar_fontes_notebook.py` — declara `fontes_notebook:` nos aprofundamentos já escritos (dry-run por padrão, `--completar` reexamina acrescentando sem nunca remover)
 - `tests/test_smoke.py` — smoke tests
+
+### Consertar vínculo de material legado
+
+Assunto escrito antes de a convenção existir não tem `topico_id`, e o site então
+mostra a matéria com cobertura **desconhecida** (nunca zero — falso zero esconde
+trabalho feito). O conserto é em dois passos, com revisão humana no meio:
+
+```bash
+python3 scripts/propor_vinculos.py --concurso-dir <...> --materia-id <slug> \
+    --out vinculos.json          # propõe; NÃO grava
+# abra o vinculos.json, confira e corrija à mão o que estiver errado
+python3 scripts/aplicar_vinculos.py --vinculos vinculos.json --aplicar
+```
+
+O passo do meio não é cerimônia: o casamento por slug erra em 4 de 5 tópicos, e um
+vínculo errado afirma cobertura que não existe.
 
 ## Comportamento e princípios
 

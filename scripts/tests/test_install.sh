@@ -47,6 +47,20 @@ else
   fail "install_instala_os_subagents" "instalou $n_agents, esperado $esperado_agents"
 fi
 
+# --- CONVENCOES.md acompanha a skill -----------------------------------------
+# As regras de uma skill sairam do CLAUDE.md da raiz para o CONVENCOES.md dela,
+# justamente para carregarem junto com a skill em vez de em todo turno. Se o
+# instalador nao copiar o arquivo, a mudanca vira perda liquida: a regra some do
+# raiz e nao chega ao destino.
+esperado_conv=$(find "$REPO_ROOT/skills" -maxdepth 2 -name CONVENCOES.md | wc -l)
+instalado_conv=$(find "$TMP/.claude/skills" -maxdepth 2 -name CONVENCOES.md | wc -l)
+if [[ "$instalado_conv" -eq "$esperado_conv" && "$esperado_conv" -gt 0 ]]; then
+  ok "install_leva_o_convencoes_de_cada_skill ($instalado_conv)"
+else
+  fail "install_leva_o_convencoes_de_cada_skill" \
+       "instalou $instalado_conv, esperado $esperado_conv"
+fi
+
 # --- agent de terceiro: o uninstall NÃO pode encostar ------------------------
 mkdir -p "$TMP/.claude/agents"
 echo "# agent de outro projeto" > "$TMP/.claude/agents/zz-agent-de-terceiro.md"

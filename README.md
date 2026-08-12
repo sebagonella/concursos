@@ -1,5 +1,7 @@
 # concursos-vault-skills
 
+[![tests](https://github.com/sebagonella/concursos/actions/workflows/tests.yml/badge.svg)](https://github.com/sebagonella/concursos/actions/workflows/tests.yml)
+
 Skills do [Claude Code](https://claude.com/claude-code) que automatizam a preparação para **concursos públicos brasileiros**, gerando material de estudo estruturado direto num **vault Obsidian** — e publicando tudo como site navegável.
 
 ## As skills
@@ -31,7 +33,7 @@ flowchart TB
         a2 ~~~ a3 ~~~ a4 ~~~ a5
     end
 
-    vaultA["🗂️ <b>Vault · estrutura</b><br/><code>.meta.json</code> (programa integral + edital_hash)<br/><b>_COMUM/</b> 01-EDITAL · 03-MAPAS-COMUNS · 04-MATERIAIS · 05-HISTORICO · 06-SINERGIA<br/><b>{CARGO}/</b> 02-CRONOGRAMA · 03-MAPAS-MATERIAS · 07-DISCURSIVA · 08-TITULOS · 99-Status"]
+    vaultA["🗂️ <b>Vault · estrutura</b><br/><code>.meta.json</code> (programa integral + edital_hash)<br/><b>_COMUM/</b> 01-EDITAL · 03-MAPAS-COMUNS · 04-MATERIAIS · 05-HISTORICO-CONCURSO · 06-SINERGIA<br/><b>{CARGO}/</b> 02-CRONOGRAMA · 03-MAPAS-MATERIAS · 07-DISCURSIVA · 08-TITULOS · 99-Status"]
 
     livro["📚 <b>Livro de referência</b><br/>PDF · EPUB, em 40_RECURSOS/LIVROS"]
 
@@ -172,6 +174,7 @@ bash scripts/install.sh --list
 - Python 3.10+
 - `poppler-utils` (`pdftotext`) — para ler editais e livros em PDF
 - Opcionais: `reportlab` (leis em PDF), `tesseract-ocr` (livros escaneados), `python-docx` (editais .docx)
+- Só para a **automação** do NotebookLM (Etapa 4), que é opcional: `notebooklm-py>=0.7.3,<0.8` — cliente **não-oficial**, que roda sobre endpoints internos do Google e quebra sem aviso. A faixa é pinada de propósito, e a credencial dá acesso à **conta inteira**: use uma conta dedicada e nunca guarde o arquivo de sessão no repositório nem no vault, que sincroniza com o Drive. Detalhe em [`skills/concurso-notebooklm/requirements.txt`](skills/concurso-notebooklm/requirements.txt)
 
 ```bash
 pip install -r skills/concurso-prep/requirements.txt
@@ -235,8 +238,10 @@ O container usa **bind mount**, então atualizar o site é só sincronizar arqui
 |---|---|
 | [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) | **As decisões de projeto e o porquê de cada uma**: por que uma skill por ciclo de vida e não uma só, por que o site é derivado, por que a automação do NotebookLM é camada opcional, como funciona a identidade de um aprofundamento, e a arquitetura de informação do site |
 | [`docs/SETUP-VAULT.md`](docs/SETUP-VAULT.md) | Preparar o vault Obsidian: estrutura esperada em `30_AREAS/CARREIRA/CONCURSOS/`, plugins e fluxo de trabalho |
-| [`CLAUDE.md`](CLAUDE.md) | **Convenções invioláveis** — a maioria veio de bug real, e quebrá-las quebra coisa de novo. Leitura obrigatória antes de mexer no código |
+| [`CLAUDE.md`](CLAUDE.md) | **Convenções invioláveis** — todas vieram de bug real, e o número medido que acompanha cada uma é o que impede a regressão. As transversais estão lá na íntegra; as de uma skill só, no `CONVENCOES.md` dela, indexadas em [Por skill](CLAUDE.md#por-skill) |
 | [`deploy/README.md`](deploy/README.md) | Servir o site num servidor doméstico: Docker, rsync, DNS local, troca de porta e troubleshooting |
+| [`docs/CONTRATO-DE-DADOS.md`](docs/CONTRATO-DE-DADOS.md) | **O que uma skill escreve e a seguinte lê**, campo a campo: `.meta.json`, frontmatter do mapa e do assunto, contrato do pacote NotebookLM e o modelo do site. As skills não se chamam — conversam pelo vault, e por isso os nomes de campo são contrato público |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | O ciclo de contribuição, como rodar os testes e **o que cada guarda do CI barra** |
 | [`docs/fluxo-concurso.mmd`](docs/fluxo-concurso.mmd) | Fonte Mermaid do diagrama acima, com as notas de layout que o bloco renderizado não mostra |
 
 ### Por skill
