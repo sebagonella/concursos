@@ -58,12 +58,25 @@
     if (btnProxima) btnProxima.addEventListener("click", proxima);
     if (btnEmbaralhar) btnEmbaralhar.addEventListener("click", embaralhar);
 
-    // teclado: espaço vira, seta direita avança
-    raiz.addEventListener("keydown", function (ev) {
+    /* Teclado: espaço/Enter viram, seta direita avança.
+       O handler fica na CARTA, não na raiz do quiz. Na raiz ele capturava a tecla
+       com o foco em qualquer lugar de dentro — inclusive nos botões "Virar",
+       "Próximo" e "Embaralhar" —, e o `preventDefault()` impedia o botão focado de
+       ser acionado: quem navegasse por Tab apertava Espaço em "Embaralhar" e o
+       cartão virava. Seta direita segue valendo no quiz inteiro, que não conflita
+       com botão nenhum. */
+    carta.addEventListener("keydown", function (ev) {
       if (ev.key === " " || ev.key === "Enter") { ev.preventDefault(); virar(); }
+    });
+    raiz.addEventListener("keydown", function (ev) {
       if (ev.key === "ArrowRight") { ev.preventDefault(); proxima(); }
     });
     carta.setAttribute("tabindex", "0");
+    /* A posição e o texto mudam sem recarregar a página: sem `aria-live`, quem usa
+       leitor de tela vira o cartão e não ouve nada. */
+    carta.setAttribute("aria-live", "polite");
+    var pos = raiz.querySelector(".posicao");
+    if (pos) pos.setAttribute("aria-live", "polite");
 
     mostrar();
   }
@@ -133,12 +146,41 @@
   function iniciarSeletorAprof() {
     document.querySelectorAll(".seletor-aprof").forEach(function (seletor) {
       var abas = seletor.querySelectorAll(".aba");
+
+      /* O HTML já sai com o contrato ARIA; aqui ele é MANTIDO na troca. Sem isto,
+         `aria-selected` congelaria no estado inicial e o leitor de tela anunciaria
+         a aba errada como aberta — pior que não ter ARIA nenhum, porque afirma. */
+      function marcar(ativa) {
+        abas.forEach(function (b) {
+          var e = b === ativa;
+          b.classList.toggle("ativa", e);
+          b.setAttribute("aria-selected", e ? "true" : "false");
+          b.setAttribute("tabindex", e ? "0" : "-1");
+        });
+      }
+
+      /* Setas andam dentro do grupo, Home/End vão às pontas — o que se espera de um
+         tablist. Sem isso o roving tabindex prenderia o foco na aba ativa. */
+      seletor.addEventListener("keydown", function (ev) {
+        var i = Array.prototype.indexOf.call(abas, document.activeElement);
+        if (i < 0) return;
+        var j = null;
+        if (ev.key === "ArrowRight" || ev.key === "ArrowDown") j = (i + 1) % abas.length;
+        else if (ev.key === "ArrowLeft" || ev.key === "ArrowUp") j = (i - 1 + abas.length) % abas.length;
+        else if (ev.key === "Home") j = 0;
+        else if (ev.key === "End") j = abas.length - 1;
+        if (j === null) return;
+        ev.preventDefault();
+        abas[j].focus();
+        abas[j].click();
+      });
+
       abas.forEach(function (aba) {
         aba.addEventListener("click", function () {
           var alvo = aba.getAttribute("data-alvo");
           var visao = aba.getAttribute("data-visao-alvo");
           var eixo = aba.getAttribute("data-eixo-alvo");
-          abas.forEach(function (b) { b.classList.toggle("ativa", b === aba); });
+          marcar(aba);
 
           if (eixo) {
             /* O seletor de eixo vive DENTRO da visão Estudo. Alternar `.eixo`
@@ -223,7 +265,18 @@
      página, e quem manda imprimir quer o plano inteiro, não só os títulos.
      Nada é persistido — é preferência de leitura, e o progresso mora no vault. */
   function iniciarDetalhesDoPlano() {
+    /* `.mais-topico` são as caixas do plano — as únicas que o botão "Expandir
+       tudo" controla. Na impressão, porém, TODO <details> de conteúdo tem de
+       abrir: a bússola e a aferição dependiam só do `@media print` do CSS, e o
+       docstring do teste vizinho já dizia que forçar por CSS não é confiável entre
+       navegadores — o conteúdo é escondido pelo slot do <details>, que `display`
+       no filho não vence. A promessa "o @media print reabre" está escrita no
+       SKILL.md, no CHANGELOG e no CLAUDE.md; aqui ela passa a ser cumprida pelo
+       mecanismo que o projeto já confia. */
     var caixas = document.querySelectorAll(".mais-topico");
+    var paraImprimir = document.querySelectorAll(
+      ".mais-topico, details.bussola, details.afericao, details.lacunas");
+    if (paraImprimir.length) iniciarReaberturaNaImpressao(paraImprimir);
     if (!caixas.length) return;
 
     var botao = document.querySelector("[data-expandir]");
@@ -236,6 +289,12 @@
       });
     }
 
+  }
+
+  /* Abre os <details> para imprimir e devolve o estado depois. Separado de
+     `iniciarDetalhesDoPlano` porque vale para páginas que não têm plano nenhum —
+     a página de matéria com bússola e sem aba Plano é o caso real. */
+  function iniciarReaberturaNaImpressao(caixas) {
     var antes = [];
     window.addEventListener("beforeprint", function () {
       antes = [];

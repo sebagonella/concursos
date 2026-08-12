@@ -499,10 +499,47 @@ def parsear_flashcards(caminho: Path) -> list[dict]:
     return cards
 
 
+def id_aba(especie: str, chave: str) -> tuple[str, str]:
+    """(id do botão, id do painel) de uma aba. Uma página pode ter mais de um
+    tablist — a de matéria tem Visão e Eixo —, então a espécie entra no id."""
+    limpo = re.sub(r"[^A-Za-z0-9_-]", "-", chave)
+    return f"tab-{especie}-{limpo}", f"painel-{especie}-{limpo}"
+
+
+def botao_aba(especie: str, chave: str, rotulo: str, ativo: bool,
+              attr_alvo: str) -> str:
+    """Um botão de aba, com o contrato ARIA completo.
+
+    O contêiner já se declarava `role="tablist"` e os botões não tinham `role`
+    nenhum: para um leitor de tela era uma lista de abas SEM abas, e o estado ativo
+    — que na tela é só uma classe CSS — não era anunciado. `tabindex` roving deixa
+    o Tab entrar no grupo uma vez e as setas andarem dentro dele, que é o
+    comportamento esperado de um tablist.
+    """
+    bid, pid = id_aba(especie, chave)
+    return (f'<button class="aba{" ativa" if ativo else ""}" id="{bid}" '
+            f'role="tab" aria-selected="{"true" if ativo else "false"}" '
+            f'aria-controls="{pid}" tabindex="{"0" if ativo else "-1"}" '
+            f'{attr_alvo}="{esc(chave)}" type="button">{esc(rotulo)}</button>')
+
+
+def attrs_painel(especie: str, chave: str) -> str:
+    """`role="tabpanel"` + amarração com o botão que o controla."""
+    bid, pid = id_aba(especie, chave)
+    return f' id="{pid}" role="tabpanel" aria-labelledby="{bid}"'
+
+
 def bloco_quiz(cards: list[dict], link_vault: str | None) -> str:
     if not cards:
         return ""
-    dados = json.dumps(cards, ensure_ascii=False)
+    # `</` escapado como `<\/`: o JSON vai CRU dentro de um `<script>`, e o parser
+    # de HTML fecha o bloco no primeiro `</script>` que encontrar, sem se importar
+    # que ele esteja dentro de uma string JSON. Um cartão cujo texto contenha
+    # `</script>` — vindo do vault, então conteúdo do próprio usuário — quebra o
+    # `JSON.parse`, o `iniciarQuiz` faz `return` e **o quiz some da página sem erro
+    # visível**, que é o modo de falha que este projeto proíbe. `<\/` é escape
+    # válido em JSON (desserializa como `/`), então o dado não muda.
+    dados = json.dumps(cards, ensure_ascii=False).replace("</", "<\\/")
     # id âncora: os flashcards não são página própria, então os wikilinks que
     # apontam para o `.md` do baralho são resolvidos para cá (ver Rotas)
     return f"""<section class="cartao quiz" id="flashcards">
@@ -702,7 +739,8 @@ def bloco_aprofundamento(ap: dict, materia: dict, assunto: dict, destino_dir: Pa
                      '<div class="meta">conferido · nenhuma lei a subir</div>'
                      '</dd></div>')
 
-    corpo = (f'<article class="papel {cls}" data-aprof="{esc(ident)}">'
+    corpo = (f'<article class="papel {cls}" data-aprof="{esc(ident)}"'
+             f'{attrs_painel("aprof", ident)}>'
              f'<dl class="ficha">{"".join(ficha)}</dl>'
              f'{corpo_html}</article>')
     lateral = (f'<div class="{cls}" data-aprof="{esc(ident)}">'
@@ -725,8 +763,7 @@ def pagina_assunto(assunto: dict, materia: dict, concurso: str,
         corpos.append(c)
         laterais.append(l)
         ident = ident_aprof(ap, i)
-        abas.append(f'<button class="aba{" ativa" if ativo else ""}" '
-                    f'data-alvo="{esc(ident)}" type="button">{esc(rotulo_aprof(ap))}</button>')
+        abas.append(botao_aba("aprof", ident, rotulo_aprof(ap), ativo, "data-alvo"))
 
     seletor = ""
     if len(aprofs) > 1:
@@ -830,7 +867,7 @@ def bloco_pack(pack: dict, ap: dict, ativo: bool, ident: str) -> str:
                 f'<button class="copiar" type="button" data-copiar>⧉</button></p>')
 
     cls = "aprof" + (" ativo" if ativo else "")
-    return f"""<div class="{cls}" data-aprof="{esc(ident)}">
+    return f"""<div class="{cls}" data-aprof="{esc(ident)}"{attrs_painel("aprof", ident)}>
   <section class="papel">
     <h2 id="fontes">1 · Fontes para subir no notebook</h2>
     {nome}
@@ -866,9 +903,7 @@ def pagina_notebooklm(assunto: dict, materia: dict, concurso: str, rotas: "Rotas
     for i, (ap, p) in enumerate(packs):
         ident = ident_aprof(ap, i)
         corpos.append(bloco_pack(p, ap, i == 0, ident))
-        abas.append(f'<button class="aba{" ativa" if i == 0 else ""}" '
-                    f'data-alvo="{esc(ident)}" type="button">'
-                    f'{esc(rotulo_aprof(ap))}</button>')
+        abas.append(botao_aba("aprof", ident, rotulo_aprof(ap), i == 0, "data-alvo"))
 
     seletor = ""
     if len(packs) > 1:
@@ -1253,7 +1288,7 @@ def bloco_plano(materia: dict, rotas: "Rotas", rota: str) -> str:
                   f'esta matéria é compartilhada.</p>')
     expandir = ('<button class="expandir" type="button" data-expandir="abrir">'
                 'Expandir tudo</button>') if not aberto else ""
-    return f"""<div class="visao plano ativo" data-visao="plano">
+    return f"""<div class="visao plano ativo" data-visao="plano"{attrs_painel("visao", "plano")}>
   <section class="papel">
     <div class="cabeca-plano"><p class="meta">{esc(resumo)}</p>{expandir}</div>
     {origem}
@@ -1604,10 +1639,9 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
     if plano and tem_estudo:
         seletor = ('<div class="seletor-aprof" role="tablist" aria-label="Visões">'
                    '<span class="rotulo">Visão</span>'
-                   '<button class="aba ativa" data-visao-alvo="plano" type="button">'
-                   'Plano</button>'
-                   '<button class="aba" data-visao-alvo="estudo" type="button">'
-                   'Estudo</button></div>')
+                   + botao_aba("visao", "plano", "Plano", True, "data-visao-alvo")
+                   + botao_aba("visao", "estudo", "Estudo", False, "data-visao-alvo")
+                   + '</div>')
 
     # Dois eixos de leitura para o mesmo conjunto: pela ordem do edital (o que a
     # prova cobra) e por prioridade (por onde começar). Só aparece quando os dois
@@ -1628,7 +1662,7 @@ def pagina_materia(materia: dict, concurso: str, materia_dir: Path,
     estudo = ""
     if tem_estudo:
         ativo = " ativo" if not plano else ""
-        estudo = (f'<div class="visao{ativo}" data-visao="estudo">'
+        estudo = (f'<div class="visao{ativo}" data-visao="estudo"{attrs_painel("visao", "estudo")}>'
                   f'{bloco_banca}{bloco_afericao}{cob_edital}{eixo}{corpo_estudo}{herdado}'
                   f'{docs}{cobertura}</div>')
     elif cobertura:
@@ -2257,9 +2291,15 @@ def construir(modelo: dict, destino: Path, com_raiz: bool = True) -> dict:
             if item.get("colapsada"):
                 copiar_anexos(item["secao"], destino, rota)
         elif tipo == "materia":
+            # `rota_capa`, não `rota_escopo`: o parâmetro se chama capa e o item do
+            # plano traz as duas chaves. Passando a do escopo, o primeiro nível da
+            # trilha da MATÉRIA — que exibe o nome do concurso — levava ao hub do
+            # escopo, enquanto o mesmo rótulo na página do assunto, ao lado, levava
+            # à capa. Mesmo texto, dois destinos em telas vizinhas; e o auditor de
+            # links não pega, porque o alvo errado existe.
             html_pag = pagina_materia(item["materia"], concurso,
                                       Path(item["materia"]["dir"]),
-                                      rotas, rota, item["rota_escopo"])
+                                      rotas, rota, item["rota_capa"])
         elif tipo == "notebooklm":
             html_pag = pagina_notebooklm(item["assunto"], item["materia"], concurso,
                                          rotas, rota, item["rota_assunto"], rota_capa)
