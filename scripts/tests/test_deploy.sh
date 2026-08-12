@@ -236,15 +236,14 @@ else
   fail "so_build_nao_chama_ssh_nem_rsync" "rsync=$(log_de rsync) ssh=$(log_de ssh)"
 fi
 
-rodar_deploy
-if [[ $? -ne 0 ]] && grep -q -- "--concurso-dir" "$TMP/saida.log"; then
+if ! rodar_deploy && grep -q -- "--concurso-dir" "$TMP/saida.log"; then
   ok "sem_concurso_dir_falha_claro"
 else
   fail "sem_concurso_dir_falha_claro" "$(cat "$TMP/saida.log")"
 fi
 
-rodar_deploy --concurso-dir "$TMP/nao-existe"
-if [[ $? -ne 0 ]] && grep -q "não encontrada" "$TMP/saida.log"; then
+if ! rodar_deploy --concurso-dir "$TMP/nao-existe" \
+     && grep -q "não encontrada" "$TMP/saida.log"; then
   ok "concurso_dir_inexistente_falha_claro"
 else
   fail "concurso_dir_inexistente_falha_claro" "$(cat "$TMP/saida.log")"
@@ -302,6 +301,54 @@ if log_de ssh | grep -q "docker compose up -d" && log_de ssh | grep -q "CONCURSO
   ok "setup_sobe_o_container_e_grava_a_porta"
 else
   fail "setup_sobe_o_container_e_grava_a_porta" "$(log_de ssh)"
+fi
+
+# --- guarda: build menor que o servidor DESPUBLICA -----------------------------
+#
+# O envio é `rsync --delete` do build inteiro. Apagar o `out/site/` "para forçar um
+# build limpo" faz o plano descobrir zero manifestos, construir só o alvo e o
+# `--delete` remover TODOS os outros concursos do servidor — sem erro e sem
+# pergunta. Até aqui a regra existia só como comentário no script.
+#
+# O stub de `ssh` devolve `$STUB_SSH_SAIDA`, que é como se simula o que há lá.
+if STUB_SSH_SAIDA=$'alfa_2026\nbeta_2027_previsto\ngama_2028' \
+     rodar_deploy --concurso-dir "$ALFA"; then
+  fail "aborta_quando_o_envio_removeria_concurso" "saiu com 0 — o gama sumiria"
+else
+  if grep -q "ABORTADO" "$TMP/saida.log" && grep -q "gama_2028" "$TMP/saida.log"; then
+    ok "aborta_quando_o_envio_removeria_concurso"
+  else
+    fail "aborta_quando_o_envio_removeria_concurso" "$(cat "$TMP/saida.log")"
+  fi
+fi
+
+if ! chamou rsync; then
+  ok "guarda_aborta_antes_do_rsync"
+else
+  fail "guarda_aborta_antes_do_rsync" "o envio rodou mesmo assim: $(log_de rsync)"
+fi
+
+# a recusa só é útil com saída: `--permitir-remocao` é a decisão explícita
+if STUB_SSH_SAIDA=$'alfa_2026\nbeta_2027_previsto\ngama_2028' \
+     rodar_deploy --concurso-dir "$ALFA" --permitir-remocao; then
+  if chamou rsync && grep -q "serão REMOVIDOS" "$TMP/saida.log"; then
+    ok "permitir_remocao_segue_avisando"
+  else
+    fail "permitir_remocao_segue_avisando" "$(cat "$TMP/saida.log")"
+  fi
+else
+  fail "permitir_remocao_segue_avisando" "abortou mesmo com a flag"
+fi
+
+# e o caminho normal — servidor com o mesmo conjunto do build — não é barrado
+if STUB_SSH_SAIDA=$'alfa_2026\nbeta_2027_previsto' rodar_deploy --concurso-dir "$ALFA"; then
+  if chamou rsync && ! grep -q "ABORTADO" "$TMP/saida.log"; then
+    ok "build_completo_nao_dispara_a_guarda"
+  else
+    fail "build_completo_nao_dispara_a_guarda" "$(cat "$TMP/saida.log")"
+  fi
+else
+  fail "build_completo_nao_dispara_a_guarda" "$(cat "$TMP/saida.log")"
 fi
 
 echo ""

@@ -23,7 +23,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 # O modo --local instala em ./.claude relativo ao CWD, então basta rodar de
 # dentro de um diretório temporário para não tocar no ambiente real.
-cd "$TMP"
+cd "$TMP" || exit 1
 if bash "$REPO_ROOT/scripts/install.sh" --local > "$TMP/install.log" 2>&1; then
   ok "install_local_roda_sem_erro"
 else
@@ -116,7 +116,7 @@ semear_casa() {
 }
 
 semear_casa
-cd "$CASA"
+cd "$CASA" || exit 1
 if bash "$FALSO/scripts/install.sh" --local > "$TMP/vazio.log" 2>&1; then
   fail "install_sem_skills_falha" "saiu com 0 tendo skills/ sem SKILL.md"
 else
@@ -137,7 +137,7 @@ else
 fi
 
 semear_casa
-cd "$CASA"
+cd "$CASA" || exit 1
 bash "$FALSO/scripts/install.sh" --local --uninstall > "$TMP/vazio-un.log" 2>&1
 if [[ -f "$CASA/.claude/skills/skill-de-outro-projeto/SKILL.md" ]]; then
   ok "uninstall_sem_skills_nao_apaga_skill_de_outro_projeto"

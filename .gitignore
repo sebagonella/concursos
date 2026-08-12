@@ -12,8 +12,13 @@ venv/
 
 # Conteúdo gerado no vault NÃO pertence a este repo
 # (o repo guarda as SKILLS, não o material produzido por elas)
+#
+# `out*/` com o glob, não `out/`: um build de trabalho foi para `out2/`, escapou do
+# ignore e levou 101 MB de mídia para o histórico — um podcast de 66,5 MB e um vídeo
+# de 34,7 MB, removidos no commit seguinte mas presos no `.git` para sempre. Todo
+# clone paga isso. O guarda de tamanho no CI cobre o resto dos casos.
 vault/
-out/
+out*/
 *.zip
 
 # Versões antigas e pacotes de entrega (artefatos locais, não fonte)

@@ -30,6 +30,15 @@ jobs:
           # existia só a do install, e uma suíte que não compila passaria batido
           for f in scripts/*.sh scripts/tests/*.sh; do bash -n "$f"; done
 
+      # `bash -n` só vê sintaxe. São 566 linhas de shell que mexem em `~/.claude` e
+      # num `rsync --delete` para um servidor — o defeito que apagou o diretório de
+      # skills inteiro era semântico (array vazio virando string vazia), e passaria
+      # aqui sem o shellcheck.
+      - name: shellcheck
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck -x scripts/*.sh scripts/tests/*.sh deploy/deploy.sh
+
       - name: Higiene do pacote (sem caches nem nomes estranhos)
         run: |
           ! find skills -name "__pycache__" | grep . || (echo "cache commitado" && exit 1)
@@ -39,6 +48,24 @@ jobs:
         run: |
           python -c "import yaml; yaml.safe_load(open('deploy/docker-compose.yml'))"
           bash -n deploy/deploy.sh
+
+      # 101 MB de mídia entraram no histórico por um build que foi para `out2/` e
+      # escapou do `out/` do .gitignore. Removidos no commit seguinte, seguem presos
+      # no `.git` — todo clone paga. O `.gitignore` virou `out*/`, e este guarda
+      # cobre o resto dos casos: binário grande não entra sem alguém decidir.
+      - name: Arquivo grande não entra sem decisão
+        run: |
+          limite=$((2 * 1024 * 1024))
+          erro=0
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            n=$(wc -c < "$f")
+            if [ "$n" -gt "$limite" ]; then
+              echo "::error::$f tem $((n / 1024)) kB (limite $((limite / 1024)) kB) — se for mesmo fonte, suba o limite nesta etapa junto com o motivo"
+              erro=1
+            fi
+          done < <(git ls-files)
+          exit $erro
 
       - name: Consistência de versões (SKILL.md / README / CHANGELOG)
         run: |

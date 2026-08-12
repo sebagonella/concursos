@@ -9,9 +9,17 @@ set -uo pipefail   # sem -e: queremos rodar TODAS as suítes mesmo se uma falhar
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKILLS_DIR="$REPO_ROOT/skills"
-ONLY="${2:-}"
-
-[[ "${1:-}" == "--only" ]] && ONLY="${2:-}"
+# `ONLY` só é preenchido pela flag. Antes ele lia `$2` incondicionalmente, então
+# `test-all.sh foo bar` filtrava por "bar" em silêncio — argumento errado virando
+# filtro é a forma mais fácil de rodar menos teste do que se pensa ter rodado.
+ONLY=""
+if [[ "${1:-}" == "--only" ]]; then
+  ONLY="${2:-}"
+  [[ -n "$ONLY" ]] || { echo "❌ --only exige o nome da skill" >&2; exit 1; }
+elif [[ $# -gt 0 ]]; then
+  echo "❌ argumento desconhecido: $1 (use --only <skill>)" >&2
+  exit 1
+fi
 
 falhas=0
 total=0
@@ -39,9 +47,12 @@ for d in "$SKILLS_DIR"/*/; do
       echo "▶️  $skill · $nome"
     fi
     if saida=$(python3 "$suite" 2>&1); then
+      # shellcheck disable=SC2001  # prefixar TODA linha da saída
       echo "$saida" | tail -1 | sed 's/^/   /'
     else
-      echo "$saida" | sed 's/^/   /'
+      # shellcheck disable=SC2001  # prefixar TODA linha; ${//} não faz isso legível
+      # shellcheck disable=SC2001  # idem
+    echo "$saida" | sed 's/^/   /'
       falhas=$((falhas + 1))
     fi
     echo ""
@@ -58,16 +69,20 @@ for suite_sh in "$REPO_ROOT"/scripts/tests/test_*.sh; do
   echo "▶️  $nome_sh"
   total=$((total + 1))
   if saida=$(bash "$suite_sh" 2>&1); then
+    # shellcheck disable=SC2001  # prefixar TODA linha da saída
     echo "$saida" | tail -1 | sed 's/^/   /'
   else
+    # shellcheck disable=SC2001  # idem
     echo "$saida" | sed 's/^/   /'
     falhas=$((falhas + 1))
   fi
   echo ""
 done
 
-# Limpar caches gerados pelos testes
-find "$SKILLS_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+# Limpar caches gerados pelos testes (inclui a cópia instalada em .claude/skills:
+# ela também roda smoke test no install, e o cache sobrava lá)
+find "$SKILLS_DIR" "$REPO_ROOT/.claude/skills" -type d -name "__pycache__" \
+     -exec rm -rf {} + 2>/dev/null || true
 
 if [[ $falhas -eq 0 ]]; then
   echo "✅ Todas as $total suíte(s) passaram."

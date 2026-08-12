@@ -59,7 +59,10 @@ if [[ ${#SKILLS[@]} -eq 0 ]]; then
 fi
 
 if [[ -n "$ONLY" ]]; then
-  if [[ ! " ${SKILLS[*]} " =~ " ${ONLY} " ]]; then
+  # `==` com glob, não `=~`: o comportamento é o mesmo (trecho quotado no RHS de
+  # `=~` já casa literal desde o bash 3.2), mas aqui a intenção fica explícita em
+  # vez de depender dessa sutileza — e o shellcheck para de avisar sobre ela.
+  if [[ " ${SKILLS[*]} " != *" $ONLY "* ]]; then
     echo "❌ Skill '$ONLY' não encontrada. Disponíveis: ${SKILLS[*]}"
     exit 1
   fi
@@ -176,7 +179,8 @@ for s in "${SKILLS[@]}"; do
   if [[ -d "$origem/agents" ]]; then
     mkdir -p "$CLAUDE_DIR/agents"
     cp "$origem/agents"/*.md "$CLAUDE_DIR/agents/" 2>/dev/null || true
-    n_agents=$(ls -1 "$origem/agents"/*.md 2>/dev/null | wc -l | tr -d ' ')
+    agentes=("$origem/agents"/*.md)
+    n_agents=${#agentes[@]}
     echo "   ↳ $n_agents subagent(s) instalado(s) em $CLAUDE_DIR/agents/"
   fi
 
