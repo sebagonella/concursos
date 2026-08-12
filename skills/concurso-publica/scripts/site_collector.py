@@ -49,6 +49,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aprofundamento_id import (  # noqa: E402
+    arquivo_principal,
     eh_pasta_aprofundamento, parse_id, localizacoes_por_fonte, FONTE_PROPRIA,
     # com alias: o `site_builder` tem uma `nome_legivel` PRÓPRIA, que traduz slug
     # de CONCURSO ("SEDES_2026" -> "SEDES 2026"). São coisas diferentes com o
@@ -457,16 +458,12 @@ def detectar_midias(subdir: Path, slug: str) -> dict:
 # --------------------------------------------------------------------------- #
 # coleta de um assunto
 # --------------------------------------------------------------------------- #
-def _arquivo_principal(pasta: Path) -> Path | None:
-    """Acha o .md principal de uma pasta de aprofundamento (ou de assunto legado).
-    Aceita '{pasta}.md' (legado) e '{assunto}--{aprof}.md' (novo)."""
-    exato = pasta / f"{pasta.name}.md"
-    if exato.exists():
-        return exato
-    candidatos = [p for p in sorted(pasta.glob("*.md"))
-                  if not p.name.startswith(("flashcards-", "_", "00-"))
-                  and not p.name.startswith(("report-", "teste-", "tabela-"))]
-    return candidatos[0] if candidatos else None
+# A regra de qual `.md` é o do assunto mora em `aprofundamento_id`, que é a cópia
+# sincronizada da convenção — a mesma função que a concurso-aprofunda usa para
+# ESCREVER. Aqui era uma sétima reimplementação, e reimplementá-la já custou caro:
+# `_` ordena antes das minúsculas, então um filtro incompleto devolve o
+# `_fonte-notebooklm.md` no lugar do assunto.
+_arquivo_principal = arquivo_principal
 
 
 def coletar_aprofundamento(subdir: Path, slug_assunto: str,

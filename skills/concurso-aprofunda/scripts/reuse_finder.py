@@ -32,7 +32,9 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from aprofundamento_id import eh_pasta_aprofundamento  # noqa: E402
+from aprofundamento_id import (  # noqa: E402
+    PREFIXOS_NAO_PRINCIPAIS, eh_pasta_aprofundamento,
+)
 
 
 def norm(texto: str) -> str:
@@ -98,7 +100,10 @@ def candidatos_assunto(vault: Path):
             yield md
     for padrao in ("assuntos/*/*/*.md", "assuntos/*/aprofundamentos/*/*.md"):
         for md in sorted(vault.rglob(padrao)):
-            if md.name.startswith(("flashcards-", "_", "00-")):
+            # a lista de exclusão vem de `aprofundamento_id`: esta cópia estava
+            # sem `report-`/`teste-`/`tabela-` e devolvia o report do NotebookLM
+            # como se fosse um aprofundamento aproveitável
+            if md.name.startswith(PREFIXOS_NAO_PRINCIPAIS):
                 continue
             pasta = md.parent
             if not (eh_pasta_aprofundamento(pasta.name)

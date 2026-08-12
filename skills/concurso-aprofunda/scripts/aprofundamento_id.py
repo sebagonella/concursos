@@ -233,6 +233,32 @@ def eh_proprio(aprof_id: str) -> bool:
     return bool(info) and info["fontes"] == [FONTE_PROPRIA]
 
 
+# Prefixos dos `.md` que convivem com o do assunto na mesma pasta e NÃO são ele.
+# `_` é o mais traiçoeiro: ordena antes das minúsculas (95 < 97), então um
+# `sorted(glob("*.md"))[0]` ingênuo devolve `_fonte-notebooklm.md` — foi assim que
+# uma comparação ad-hoc entre escopos afirmou 17 artigos ausentes onde havia 8.
+PREFIXOS_NAO_PRINCIPAIS = ("flashcards-", "_", "00-", "report-", "teste-", "tabela-")
+
+
+def arquivo_principal(pasta):
+    """O `.md` do assunto dentro de uma pasta de aprofundamento (ou do legado plano).
+
+    Mora aqui, junto da convenção que ela implementa, porque é a MESMA regra em duas
+    skills instaladas de forma independente — e este módulo é o que já tem cópia
+    sincronizada e travada por teste. Reimplementá-la já custou caro três vezes; a
+    última medição achou **seis** cópias, três delas sem `report-`/`teste-`/`tabela-`
+    na lista de exclusão, prontas para escolher o arquivo errado.
+
+    Aceita `{pasta}.md` (legado plano) e `{assunto}--{aprof}--{CONCURSO}.md` (atual).
+    """
+    exato = pasta / f"{pasta.name}.md"
+    if exato.exists():
+        return exato
+    candidatos = [p for p in sorted(pasta.glob("*.md"))
+                  if not p.name.startswith(PREFIXOS_NAO_PRINCIPAIS)]
+    return candidatos[0] if candidatos else None
+
+
 def rotulo(aprof_id: str) -> str:
     """Rótulo legível para exibir no site/índice: 'Detalhado — pestana'."""
     info = parse_id(aprof_id)

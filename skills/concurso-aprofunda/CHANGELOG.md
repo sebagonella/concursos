@@ -2,6 +2,28 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.14.0] - 2026-08-12
+
+### Corrigido
+- **Três varreduras liam o arquivo errado como se fosse o assunto.**
+  `migrar_aprofundamentos.py`, `propor_vinculos.py` e `reuse_finder.py` traziam a
+  lista de exclusão copiada e **desatualizada** — só `flashcards-`, `_` e `00-`,
+  sem `report-`, `teste-` e `tabela-`. Uma pasta com o report do NotebookLM fazia as
+  três ingerirem o report no lugar do aprofundamento. É exatamente o defeito que a
+  regra "varredura usa `arquivo_principal()`, até em script descartável" existe para
+  impedir, e havia **seis** cópias da regra no repositório.
+- **O guard da cópia sincronizada existia numa skill só** — e o cabeçalho do arquivo
+  afirmava existir "nas duas". Quem editasse `aprofundamento_id.py` (que mora aqui) e
+  rodasse só esta suíte, o caminho natural, passava verde deixando a
+  `concurso-publica` lendo uma estrutura diferente da que esta skill escreve.
+
+### Interno
+- `arquivo_principal()` e `PREFIXOS_NAO_PRINCIPAIS` mudaram de casa para
+  `aprofundamento_id.py`, junto da convenção que implementam. É o módulo que já tem
+  cópia sincronizada na `concurso-publica`, então a skill irmã passou a usar a MESMA
+  função em vez de manter a sétima cópia. `notebooklm_pack.arquivo_principal` segue
+  importável — é por esse nome que os outros scripts e a `concurso-afere` a alcançam.
+
 ## [0.13.0] - 2026-08-12
 
 ### Corrigido
