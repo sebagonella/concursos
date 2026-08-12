@@ -1648,6 +1648,57 @@ def test_ampliar_em_lote_grava_a_localizacao_de_cada_assunto():
         assert 'localizacao_2: "B.pdf — págs. 300–340"' in reg, reg[:500]
 
 
+def test_ampliar_em_lote_recusa_localizacao_unica():
+    """Regressão: o modo em lote ACEITAVA `--localizacao` e gravava o mesmo ponteiro
+    em todos os assuntos.
+
+    O teste vizinho cobre o caminho certo (`--mapa`, página por assunto); este cobre
+    o errado, que era o único não barrado. Verificado antes da correção: dois
+    assuntos numa `--assuntos-dir` recebiam `localizacao_2` idêntica em `crase` e
+    `regencia` — a página certa de um e errada do outro. O código só sugeria o
+    `--mapa` no texto de ajuda, e sugestão não segura ninguém: é página inventada
+    entrando no vault sem virar pendência.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        aprof = _vault_aprof(d)
+        assuntos = aprof.parents[1]
+        outro = assuntos / "regencia" / "padrao--alfa"
+        outro.mkdir(parents=True)
+        (outro / "regencia--padrao--alfa--X_2026.md").write_text(
+            '---\ntitle: "Regência"\nconcurso: "X_2026"\nnivel: padrao\n'
+            'aprofundamento: "padrao--alfa"\nfontes: "Livro A (Alfa)"\n---\nTexto.\n',
+            encoding="utf-8")
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "ampliar_aprofundamento.py"),
+             "--assuntos-dir", str(assuntos), "--aprofundamento", "padrao--alfa",
+             "--fonte", "Livro B (Beta)",
+             "--localizacao", "B.pdf — págs. 100–120", "--aplicar"],
+            capture_output=True, text=True)
+        assert r.returncode != 0, r.stdout
+        assert "--localizacao não vale no modo em lote" in r.stderr, r.stderr
+        assert "--mapa" in r.stderr, r.stderr
+        # e nada foi movido: a recusa é ANTES de qualquer escrita
+        assert (assuntos / "crase" / "padrao--alfa").is_dir()
+        assert not (assuntos / "crase" / "padrao--alfa+beta").exists()
+
+
+def test_ampliar_alvo_unico_ainda_aceita_localizacao():
+    """A recusa é do LOTE. Com `--aprof-dir` há um assunto só, e aí o atalho é
+    legítimo — barrar os dois tiraria o caminho que a própria ajuda oferece."""
+    with tempfile.TemporaryDirectory() as d:
+        aprof = _vault_aprof(Path(d))
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "ampliar_aprofundamento.py"),
+             "--aprof-dir", str(aprof), "--fonte", "Livro B (Beta)",
+             "--localizacao", "B.pdf — págs. 100–120", "--aplicar"],
+            capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        txt = next((aprof.parent / "padrao--alfa+beta").glob("crase--*.md")).read_text(
+            encoding="utf-8")
+        assert 'localizacao_2: "B.pdf — págs. 100–120"' in txt, txt[:400]
+
+
 def test_ampliar_nao_inventa_pagina_para_assunto_fora_do_mapa():
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)

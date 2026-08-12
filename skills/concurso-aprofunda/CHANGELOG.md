@@ -2,6 +2,25 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.13.0] - 2026-08-12
+
+### Corrigido
+- **`--localizacao` era aceito no modo em lote e gravava a mesma página em todos os
+  assuntos.** O ponteiro é POR ASSUNTO: verificado, dois assuntos numa
+  `--assuntos-dir` recebiam `localizacao_2` idêntica em `crase` e `regencia` — a
+  página certa de um e errada do outro. É o que o `CLAUDE.md` proíbe em prosa ("o
+  ponteiro vem do `--mapa`, **nunca** do `--localizacao`"), e o código só *sugeria* o
+  `--mapa` no texto de ajuda. Sugestão não segura ninguém: era página inventada
+  entrando no vault sem virar pendência, contra "nunca fingir precisão". Agora
+  `--assuntos-dir` com `--localizacao` sai com erro nomeado, **antes** de qualquer
+  escrita, apontando o `--mapa`. Com `--aprof-dir` (um alvo só) o atalho continua
+  valendo.
+
+### Testes
+- `test_ampliar_em_lote_recusa_localizacao_unica` (falha contra a 0.12.0) e
+  `test_ampliar_alvo_unico_ainda_aceita_localizacao`, que trava o que **não** pode
+  ser barrado junto.
+
 ## [0.12.0] - 2026-08-06
 
 ### Corrigido
