@@ -15,6 +15,14 @@ para o deploy seria a terceira vez. Por isso: um só, aqui.
 import json
 from pathlib import Path
 
+# Identidade do aprofundamento principal do fixture. Exportadas porque a suíte
+# monta nomes de arquivo a partir delas — o nome-base é `{assunto}--{id}--{CONCURSO}`
+# e repetir a string em 20 testes é como o fixture antigo saiu do lugar sem ninguém
+# notar.
+CONCURSO_FIX = "TESTE_2026"
+APROF_CRASE = "padrao--pestana"
+NOME_BASE_CRASE = f"crase--{APROF_CRASE}--{CONCURSO_FIX}"
+
 
 def _mat_vault(base: Path, materia: str = "portugues",
                escopo: str = "CARGO-X") -> Path:
@@ -93,29 +101,57 @@ def _montar_concurso(base: Path, com_midias=True, com_url_nb=False, meta=None):
         meta or {"orgao": "TESTE", "ano": 2026, "banca": "Banca X"}),
         encoding="utf-8")
 
-    # assunto completo: crase
-    crase = mat / "assuntos" / "crase"
+    # ------------------------------------------------------------------ #
+    # assunto completo: crase — no layout CANÔNICO
+    #
+    # Era `assuntos/crase/crase.md`, um `.md` solto na pasta do assunto. Esse é o
+    # layout LEGADO, e medindo o vault real ele não existe mais: 0 arquivos assim
+    # contra 178 no canônico. Como a maioria dos ~100 testes de página parte daqui,
+    # a suíte inteira exercitava `legado: True`, `fontes_id: []`, `n_fontes_id:
+    # None` e id `"unico"` — o caminho que a `concurso-aprofunda` NÃO emite. É a
+    # terceira encarnação do mesmo defeito (`_GERAL`, `notebooklm_url`), agora na
+    # dimensão do layout: fixture divergente é teste que se autoconfirma.
+    #
+    # O nome-base repete o identificador porque o Obsidian resolve wikilink por
+    # NOME de arquivo — e todo artefato do aprofundamento (o `.md`, os flashcards,
+    # as mídias) carrega o mesmo nome-base, como no vault.
+    # ------------------------------------------------------------------ #
+    NOME_BASE = f"crase--{APROF_CRASE}--{CONCURSO_FIX}"
+    crase = mat / "assuntos" / "crase" / APROF_CRASE
     crase.mkdir(parents=True)
-    (crase / "crase.md").write_text(
-        '---\ntitle: "Crase"\nstatus: concluido\n'
-        'materia_id: portugues\n'
-        'topico_id: [emprego-do-acento-indicativo-de-crase]\n'
-        'topico: ["1. Emprego do acento indicativo de crase"]\n'
-        'localizacao_livro: "Livro.pdf — págs. 10–20"\n---\n'
+    (crase / f"{NOME_BASE}.md").write_text(
+        # frontmatter na ordem e com as chaves do `assunto.md.tpl` real
+        f'---\ntitle: "Crase"\nmateria: "Português"\nmateria_id: portugues\n'
+        f'topico_id: [emprego-do-acento-indicativo-de-crase]\n'
+        f'topico: ["1. Emprego do acento indicativo de crase"]\n'
+        f'concurso: "{CONCURSO_FIX}"\ntipo: assunto-aprofundado\n'
+        f'localizacao_livro: "Livro.pdf — págs. 10–20"\n'
+        f'confianca_localizacao: alta\nprioridade: alta\n'
+        f'aprofundamento: "{APROF_CRASE}"\nnivel: padrao\nfontes: "Pestana"\n'
+        f'tags: [concurso/aprofundamento, portugues, crase]\nstatus: concluido\n'
+        f'fontes_notebook: []\n---\n'
         "Resumo.\n- [x] Ler\n- [ ] Revisar\n- [ ] Questões\n", encoding="utf-8")
-    (crase / "flashcards-crase.md").write_text(
+    (crase / f"flashcards-{NOME_BASE}.md").write_text(
         "---\ntipo: flashcards\n---\n#flashcards\n\nP1\n??\nR1\n\nP2\n??\nR2\n",
         encoding="utf-8")
-    (crase / "flashcards-crase.csv").write_text("P1;R1;t\nP2;R2;t\n", encoding="utf-8")
+    (crase / f"flashcards-{NOME_BASE}.csv").write_text("P1;R1;t\nP2;R2;t\n",
+                                                       encoding="utf-8")
     url = 'notebooklm_url: "https://notebooklm.google.com/notebook/x"\n' if com_url_nb else ""
     (crase / "_fonte-notebooklm.md").write_text(
-        f"---\ntipo: fonte-notebooklm\n{url}---\n" + _pack_como_a_aprofunda_gera("crase"),
-        encoding="utf-8")
+        f"---\ntipo: fonte-notebooklm\n{url}---\n"
+        + _pack_como_a_aprofunda_gera(NOME_BASE), encoding="utf-8")
     if com_midias:
-        (crase / "podcast-crase.m4a").write_bytes(b"AAA")
-        (crase / "mapa-mental-crase.png").write_bytes(b"PNG")
+        (crase / f"podcast-{NOME_BASE}.m4a").write_bytes(b"AAA")
+        (crase / f"mapa-mental-{NOME_BASE}.png").write_bytes(b"PNG")
 
-    # assunto sem mídias e com flashcard de nome divergente: regencia
+    # ------------------------------------------------------------------ #
+    # assunto no layout LEGADO, de propósito: `regencia-verbal-e-nominal`
+    #
+    # O vault não tem mais nenhum, mas o coletor ainda aceita (`_arquivo_principal`
+    # trata `{pasta}.md`), e caminho aceito sem teste é caminho que apodrece. Fica
+    # UM — o secundário —, para o canônico ser o que a suíte exercita por padrão.
+    # Traz também o flashcard de nome mais curto que o slug, que é outro caso real.
+    # ------------------------------------------------------------------ #
     reg = mat / "assuntos" / "regencia-verbal-e-nominal"
     reg.mkdir(parents=True)
     (reg / "regencia-verbal-e-nominal.md").write_text(
@@ -221,5 +257,18 @@ def _montar_secoes(base: Path):
              '## ✅ Checklist Final\n\n- [ ] Revisar crase\n- [ ] Simulado\n')
 
 
-# Nome público, para quem importa de fora da suíte da skill.
+def dir_aprof_crase(base: Path, materia: str = "portugues",
+                    escopo: str = "CARGO-X") -> Path:
+    """A pasta do aprofundamento principal — onde moram o `.md`, os flashcards, as
+    mídias e o pacote.
+
+    Existe porque `assuntos/crase` deixou de ser a pasta que guarda arquivos: no
+    layout canônico ela só contém pastas de aprofundamento. Teste que escreve mídia
+    ou lê o pacote quer ESTA pasta, e apontar para a de cima faz o arquivo ser
+    ignorado em silêncio — que é o modo de falha mais caro desta suíte.
+    """
+    return _mat_vault(base, materia, escopo) / "assuntos" / "crase" / APROF_CRASE
+
+
+# Nomes públicos, para quem importa de fora da suíte da skill.
 montar_concurso = _montar_concurso

@@ -52,6 +52,7 @@ def _dir_assunto(out: Path, concurso: str, assunto: str,
 from fixture_concurso import (  # noqa: E402
     _mat_vault, _montar_concurso, _montar_secoes,
     _pack_como_a_aprofunda_gera, _template_pack,
+    APROF_CRASE, NOME_BASE_CRASE, dir_aprof_crase,
 )
 
 
@@ -137,8 +138,8 @@ def test_midias_por_presenca():
         m = _rodar(base)
         assuntos = {a["slug"]: a for a in _materias(m)[0]["assuntos"]}
         crase = assuntos["crase"]
-        assert crase["midias"]["podcast"] == "podcast-crase.m4a"
-        assert crase["midias"]["mapa_mental"] == "mapa-mental-crase.png"
+        assert crase["midias"]["podcast"] == f"podcast-{NOME_BASE_CRASE}.m4a"
+        assert crase["midias"]["mapa_mental"] == f"mapa-mental-{NOME_BASE_CRASE}.png"
         assert crase["midias"]["video"] is None      # ausente = None, sem quebrar
         reg = assuntos["regencia-verbal-e-nominal"]
         assert all(v is None for v in reg["midias"].values())
@@ -441,6 +442,45 @@ def test_parsear_flashcards_multiline_e_singleline():
 # --------------------------------------------------------------------------- #
 # site_builder (integração)
 # --------------------------------------------------------------------------- #
+def _impressao_da_arvore(raiz: Path) -> dict:
+    """Caminho -> (tamanho, mtime_ns, sha256) de todo arquivo sob `raiz`."""
+    import hashlib
+    out = {}
+    for f in sorted(raiz.rglob("*")):
+        if f.is_file():
+            st = f.stat()
+            out[str(f.relative_to(raiz))] = (
+                st.st_size, st.st_mtime_ns,
+                hashlib.sha256(f.read_bytes()).hexdigest())
+    return out
+
+
+def test_build_nao_escreve_no_vault():
+    """A convenção nº 1 da skill — "o site é derivado, o vault é a fonte" — não
+    tinha um único teste.
+
+    Ela é o que autoriza rodar o build sem medo sobre um vault com meses de resumo
+    escrito à mão, e estava garantida só por disciplina: toda escrita passar por
+    `--out`. Uma regressão aqui não daria erro nenhum; daria um vault alterado.
+
+    Compara conteúdo E mtime: `touch` sem mudar bytes já seria escrita, e um
+    `write_text` que gravasse o mesmo conteúdo passaria por um diff de hash só.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=True)
+        antes = _impressao_da_arvore(base)
+        assert antes, "fixture vazia não prova nada"
+        _construir(base, Path(d) / "site")
+        depois = _impressao_da_arvore(base)
+
+        criados = sorted(set(depois) - set(antes))
+        sumidos = sorted(set(antes) - set(depois))
+        mudados = sorted(k for k in set(antes) & set(depois) if antes[k] != depois[k])
+        assert not criados, f"o build criou arquivo no vault: {criados}"
+        assert not sumidos, f"o build apagou arquivo do vault: {sumidos}"
+        assert not mudados, f"o build alterou arquivo do vault: {mudados}"
+
+
 def _construir(base: Path, out: Path):
     r = subprocess.run(
         [sys.executable, str(ROOT / "site_builder.py"),
@@ -491,10 +531,10 @@ def test_builder_embute_midia_presente_e_omite_ausente():
         _construir(base, out)
         crase = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
         assert "<audio controls" in crase          # tem podcast
-        assert "media/unico/podcast-crase.m4a" in crase
+        assert f"media/{APROF_CRASE}/podcast-{NOME_BASE_CRASE}.m4a" in crase
         assert "<video" not in crase               # não tem vídeo -> seção ausente
         assert (_dir_assunto(out, "teste_2026", "crase")
-                / "media" / "unico" / "podcast-crase.m4a").exists()
+                / "media" / APROF_CRASE / f"podcast-{NOME_BASE_CRASE}.m4a").exists()
 
 
 def test_builder_quiz_com_cards_embutidos():
@@ -669,10 +709,10 @@ def test_rotas_tem_tres_classes_de_alvo():
         # página
         assert rotas.rota_de("crase") == f"{raiz_a}/index.html"
         # artefato embutido -> âncora na página que o hospeda
-        assert rotas.rota_de("flashcards-crase") == f"{raiz_a}/index.html#flashcards"
+        assert rotas.rota_de(f"flashcards-{NOME_BASE_CRASE}") == f"{raiz_a}/index.html#flashcards"
         # arquivo copiado -> caminho da mídia dentro do site
-        assert rotas.rota_de("podcast-crase.m4a") \
-            == f"{raiz_a}/media/unico/podcast-crase.m4a"
+        assert rotas.rota_de(f"podcast-{NOME_BASE_CRASE}.m4a") \
+            == f"{raiz_a}/media/{APROF_CRASE}/podcast-{NOME_BASE_CRASE}.m4a"
         # anexo de seção -> caminho do arquivo dentro do site
         assert rotas.rota_de("lei-1234-1990.pdf") \
             == "teste_2026/comum/materiais/arquivos/leis-baixadas/lei-1234-1990.pdf"
@@ -688,10 +728,9 @@ def test_wikilink_de_flashcards_aponta_para_a_ancora_do_quiz():
     """Antes, TODO wikilink morto do site real apontava para flashcards."""
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        alvo = _mat_vault(base) / "assuntos" / "crase"
-        md = alvo / "crase.md"
+        md = dir_aprof_crase(base) / f"{NOME_BASE_CRASE}.md"
         md.write_text(md.read_text(encoding="utf-8")
-                      + "\nVer [[flashcards-crase]].\n", encoding="utf-8")
+                      + f"\nVer [[flashcards-{NOME_BASE_CRASE}]].\n", encoding="utf-8")
         out = Path(d) / "site"
         _construir(base, out)
         h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(
@@ -737,14 +776,13 @@ def test_midia_do_assunto_e_uniao_dos_aprofundamentos():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026", com_midias=False)
         alvo = _mat_vault(base) / "assuntos" / "crase"
-        # padrao (que ordena primeiro) SEM mídia; detalhado COM mídia
-        for nome, tem_midia in (("padrao--pestana", False), ("detalhado--pestana", True)):
-            p = alvo / nome
-            p.mkdir(parents=True)
-            (p / f"crase--{nome}.md").write_text(
-                f'---\ntitle: "Crase"\nfontes: "Pestana"\n---\nx\n', encoding="utf-8")
-            if tem_midia:
-                (p / f"podcast-crase--{nome}.m4a").write_bytes(b"A")
+        # o `padrao--pestana` da fixture ordena primeiro e está SEM mídia
+        # (`com_midias=False`); o detalhado, criado aqui, é quem a carrega
+        p = alvo / "detalhado--pestana"
+        p.mkdir(parents=True)
+        (p / "crase--detalhado--pestana.md").write_text(
+            '---\ntitle: "Crase"\nfontes: "Pestana"\n---\nx\n', encoding="utf-8")
+        (p / "podcast-crase--detalhado--pestana.m4a").write_bytes(b"A")
 
         a = sc.coletar_assunto(alvo)
         assert a["aprofundamentos"][0]["nivel"] == "padrao"         # principal
@@ -2379,7 +2417,7 @@ def test_todo_geravel_tem_roteiro_e_nome_de_arquivo():
     afirmava que roteiro vazio é defeito."""
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        pack = sc.coletar_pack_notebooklm(_mat_vault(base) / "assuntos" / "crase")
+        pack = sc.coletar_pack_notebooklm(dir_aprof_crase(base))
         assert pack is not None
         for p in pack["prompts"]:
             assert p["roteiro"], f'{p["chave"]}: roteiro vazio'
@@ -2389,13 +2427,15 @@ def test_todo_geravel_tem_roteiro_e_nome_de_arquivo():
 def test_pack_nomeia_o_notebook_e_os_arquivos():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        pack = sc.coletar_pack_notebooklm(_mat_vault(base) / "assuntos" / "crase")
+        pack = sc.coletar_pack_notebooklm(dir_aprof_crase(base))
         assert pack["nome_notebook"] == "TESTE_2026 — Crase", "nome do notebook"
         por_chave = {p["chave"]: p["arquivo_saida"] for p in pack["prompts"]}
-        assert por_chave.get("podcast") == "podcast-crase.m4a", "arquivo do podcast"
-        assert por_chave.get("mapa_mental") == "mapa-mental-crase.png", "arquivo do mapa mental"
-        assert por_chave.get("video") == "video-crase.mp4", "arquivo do vídeo"
-        assert por_chave.get("report") == "report-crase.md", "arquivo do report"
+        # o nome do arquivo repete o identificador do aprofundamento: dois `crase`
+        # em pastas diferentes seriam wikilink ambíguo no Obsidian
+        assert por_chave.get("podcast") == f"podcast-{NOME_BASE_CRASE}.m4a", "arquivo do podcast"
+        assert por_chave.get("mapa_mental") == f"mapa-mental-{NOME_BASE_CRASE}.png", "arquivo do mapa mental"
+        assert por_chave.get("video") == f"video-{NOME_BASE_CRASE}.mp4", "arquivo do vídeo"
+        assert por_chave.get("report") == f"report-{NOME_BASE_CRASE}.md", "arquivo do report"
 
 
 def test_frontmatter_do_pack_vence_a_prosa():
@@ -2441,10 +2481,10 @@ def test_pagina_notebooklm_mostra_nome_do_notebook_e_arquivo_por_geravel():
         h = (_dir_assunto(out, "teste_2026", "crase") / "notebooklm"
              / "index.html").read_text(encoding="utf-8")
         assert "TESTE_2026 — Crase" in h, "nome do notebook na página"
-        assert "podcast-crase.m4a" in h, "arquivo do podcast"
-        assert "mapa-mental-crase.png" in h, "arquivo do mapa mental"
-        assert "video-crase.mp4" in h, "arquivo do vídeo"
-        assert "report-crase.md" in h, "arquivo do report"
+        assert f"podcast-{NOME_BASE_CRASE}.m4a" in h, "arquivo do podcast"
+        assert f"mapa-mental-{NOME_BASE_CRASE}.png" in h, "arquivo do mapa mental"
+        assert f"video-{NOME_BASE_CRASE}.mp4" in h, "arquivo do vídeo"
+        assert f"report-{NOME_BASE_CRASE}.md" in h, "arquivo do report"
         assert h.count('class="arquivo-saida"') == 4, "um por gerável"
         assert "Salve nesta pasta como" in h, "roteiro completo, não só os bullets"
 
@@ -2479,11 +2519,11 @@ def test_pacote_notebooklm_vira_pagina_com_prompts():
     para dar o prompt a um toque."""
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        pack = _mat_vault(base) / "assuntos" / "crase" / "_fonte-notebooklm.md"
+        pack = dir_aprof_crase(base) / "_fonte-notebooklm.md"
         pack.write_text(
             "---\ntipo: fonte-notebooklm\nnotebooklm_status: nao-criado\n---\n"
             "# Pacote\n\n## 1. Fontes para subir no notebook\n\n"
-            "1. **`crase.md`** — o resumo curado.\n\n"
+            f"1. **`{NOME_BASE_CRASE}.md`** — o resumo curado.\n\n"
             "## 2. 🎧 Podcast (Audio Overview)\n\n"
             # NÃO é bullet no template real — era essa a ficção do fixture
             "Studio → **Audio Overview** → **Customize**.\n"
@@ -2523,24 +2563,24 @@ def test_pacote_notebooklm_e_por_assunto_com_abas():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
         alvo = _mat_vault(base) / "assuntos" / "crase"
-        for nome in ("padrao--pestana", "detalhado--pestana"):
-            p = alvo / nome
-            p.mkdir(parents=True)
-            (p / f"crase--{nome}.md").write_text(
-                '---\ntitle: "Crase"\nfontes: "Pestana"\n---\nx\n', encoding="utf-8")
-            (p / "_fonte-notebooklm.md").write_text(
-                "---\ntipo: fonte-notebooklm\n---\n# P\n\n"
-                "## 2. 🎧 Podcast\n\n```\nprompt " + nome + "\n```\n",
-                encoding="utf-8")
+        # a fixture já traz `padrao--pestana` com pacote; aqui entra o segundo
+        p = alvo / "detalhado--pestana"
+        p.mkdir(parents=True)
+        (p / "crase--detalhado--pestana.md").write_text(
+            '---\ntitle: "Crase"\nfontes: "Pestana"\n---\nx\n', encoding="utf-8")
+        (p / "_fonte-notebooklm.md").write_text(
+            "---\ntipo: fonte-notebooklm\n---\n# P\n\n"
+            "## 2. 🎧 Podcast\n\n```\nprompt detalhado--pestana\n```\n",
+            encoding="utf-8")
         out = Path(d) / "site"
         _construir(base, out)
         h = (_dir_assunto(out, "teste_2026", "crase") / "notebooklm"
              / "index.html").read_text(encoding="utf-8")
-        # três abas: os dois aprofundamentos novos + o legado (arquivo solto na pasta
-        # do assunto), que a skill continua lendo de propósito
-        assert h.count('data-alvo="') == 3
-        assert 'data-alvo="original"' in h
-        assert "prompt padrao--pestana" in h and "prompt detalhado--pestana" in h
+        # duas abas, uma por aprofundamento: o da fixture e o criado aqui
+        assert h.count('data-alvo="') == 2, h.count('data-alvo="')
+        assert f'data-alvo="{APROF_CRASE}"' in h
+        assert 'data-alvo="detalhado--pestana"' in h
+        assert "prompt detalhado--pestana" in h
         # uma página só para o assunto, não uma por pacote
         assert len(list((_dir_assunto(out, "teste_2026", "crase")
                          / "notebooklm").glob("**/index.html"))) == 1
@@ -2694,8 +2734,7 @@ def test_prioridade_derivada_do_guia():
 def test_prioridade_do_frontmatter_tem_precedencia():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        crase = _mat_vault(base) / "assuntos" / "crase"
-        (crase / "crase.md").write_text(
+        (dir_aprof_crase(base) / f"{NOME_BASE_CRASE}.md").write_text(
             '---\ntitle: "Crase"\nprioridade: base\nstatus: concluido\n---\ntexto\n',
             encoding="utf-8")
         m = _rodar(base)
@@ -2706,10 +2745,10 @@ def test_prioridade_do_frontmatter_tem_precedencia():
 def test_detecta_todas_as_midias_do_notebooklm():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        crase = _mat_vault(base) / "assuntos" / "crase"
-        for nome in ("video-crase.mp4", "slides-crase.pdf", "infografico-crase.png",
-                     "report-crase.md", "teste-crase.md", "tabela-crase.csv"):
-            (crase / nome).write_bytes(b"x")
+        crase = dir_aprof_crase(base)
+        for gab, ext in (("video", "mp4"), ("slides", "pdf"), ("infografico", "png"),
+                         ("report", "md"), ("teste", "md"), ("tabela", "csv")):
+            (crase / f"{gab}-{NOME_BASE_CRASE}.{ext}").write_bytes(b"x")
         m = _rodar(base)
         a = next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == "crase")
         for chave in ("podcast", "video", "slides", "mapa_mental",
@@ -2888,7 +2927,7 @@ def test_downloads_e_tema_presentes():
         out = Path(d) / "site"
         _construir(base, out)
         h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(encoding="utf-8")
-        assert 'class="baixar"' in h and 'download="podcast-crase.m4a"' in h
+        assert 'class="baixar"' in h and f'download="podcast-{NOME_BASE_CRASE}.m4a"' in h
         assert "tema-troca" in h           # botão de tema
         assert "data-tema" in h            # script anti-flash
 
@@ -2950,12 +2989,31 @@ def test_varios_aprofundamentos_por_assunto():
 
 
 def test_legado_continua_funcionando_sozinho():
+    """O `.md` solto na pasta do assunto não existe mais no vault (medido: 0 contra
+    178 no canônico), mas o coletor ainda o aceita — e caminho aceito sem teste é
+    caminho que apodrece. O assunto legado da fixture é a `regencia`; a `crase`
+    passou a ser canônica, que é o que a skill irmã de fato emite."""
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
         m = _rodar(base)
-        a = next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == "crase")
+        a = next(x for x in _materias(m)[0]["assuntos"]
+                 if x["slug"] == "regencia-verbal-e-nominal")
         assert a["n_aprofundamentos"] == 1
         assert a["aprofundamentos"][0]["aprofundamento"] == "unico"
+
+
+def test_assunto_da_fixture_e_o_layout_canonico():
+    """Guarda do próprio fixture: se ele voltar ao layout legado, a suíte inteira
+    volta a exercitar um caminho que a `concurso-aprofunda` não emite — o defeito
+    que já ficou verde por anos três vezes neste repositório."""
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        a = _assunto_do_modelo(_rodar(base), "crase")
+        ap = a["aprofundamentos"][0]
+        assert ap["aprofundamento"] == APROF_CRASE, ap["aprofundamento"]
+        assert ap.get("legado") is not True, "a fixture voltou ao layout legado"
+        assert ap["nivel"] == "padrao", ap.get("nivel")
+        assert ap["fontes_id"] == ["pestana"], ap.get("fontes_id")
 
 
 def test_site_gera_seletor_quando_ha_varios():
@@ -3043,7 +3101,7 @@ def test_frontmatter_ignora_comentario_inline_do_yaml():
 def test_niveis_distintos_geram_selo_combinado():
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        _add_aprof(base, "crase", "padrao--aaa", "padrao", "Fonte A")
+        # a fixture já traz `padrao--pestana`; basta o detalhado para combinar
         _add_aprof(base, "crase", "detalhado--bbb", "detalhado", "Fonte B")
         out = Path(d) / "site"
         _construir(base, out)
@@ -3053,7 +3111,11 @@ def test_niveis_distintos_geram_selo_combinado():
 
 
 # --------------------------------------------------------------------------- #
-# padrão de pastas atual: {assunto}/{nivel}--{N}f--f1-{fonte}/
+# padrão de pastas atual: {assunto}/{nivel}--{fonte1}[+{fonte2}]/
+#
+# O contador de fontes e o índice posicional (`2f`, `f1-`) saíram da convenção por
+# serem deriváveis — e a suíte os manteve por versões, ensinando um formato que a
+# skill não emite mais.
 # --------------------------------------------------------------------------- #
 def _assunto_do_modelo(m, slug):
     return next(x for x in _materias(m)[0]["assuntos"] if x["slug"] == slug)
@@ -3071,16 +3133,22 @@ def _add_aprof_atual(base: Path, assunto: str, ident: str, fontes: str = ""):
 
 
 def test_coleta_no_padrao_de_pastas_atual():
+    """Ordenação com os três casos juntos: `padrao` primeiro (é o principal), o
+    legado — sem identidade de fonte — atrás dos identificados do mesmo nível, e
+    `detalhado` por último.
+
+    O assunto usado é a `regencia`, que é o legado da fixture; a `crase` passou a ser
+    canônica e não tem mais o `.md` solto que este teste precisa no meio.
+    """
     with tempfile.TemporaryDirectory() as d:
         base = _montar_concurso(Path(d) / "TESTE_2026")
-        _add_aprof_atual(base, "crase", "detalhado--1f--f1-pestana")
-        _add_aprof_atual(base, "crase", "padrao--1f--f1-pestana")
-        a = _assunto_do_modelo(_rodar(base), "crase")
-        assert a["n_aprofundamentos"] == 3, a["n_aprofundamentos"]   # 2 novos + legado da fixture
-        # padrao vem primeiro (é o principal); o legado, sem identidade de fonte,
-        # fica atrás dos identificados do mesmo nível; detalhado por último
+        alvo = "regencia-verbal-e-nominal"
+        _add_aprof_atual(base, alvo, "detalhado--pestana")
+        _add_aprof_atual(base, alvo, "padrao--pestana")
+        a = _assunto_do_modelo(_rodar(base), alvo)
+        assert a["n_aprofundamentos"] == 3, a["n_aprofundamentos"]   # 2 novos + o legado
         assert [x["aprofundamento"] for x in a["aprofundamentos"]] == [
-            "padrao--1f--f1-pestana", "original", "detalhado--1f--f1-pestana"]
+            "padrao--pestana", "original", "detalhado--pestana"]
 
 
 def test_aba_que_abre_e_a_do_nivel_padrao():
@@ -3108,12 +3176,139 @@ def test_aba_que_abre_e_a_do_nivel_padrao():
         ativas = [rot for marca, rot in abas if marca]
         assert len(ativas) == 1, f"exatamente uma aba ativa, achei {len(ativas)}"
         assert "Padrão" in ativas[0], f"a aba aberta deveria ser a do padrão: {ativas[0]!r}"
-        # a aba ativa aponta para o painel do padrão (data-alvo casa com data-aprof)
-        alvo = re.search(r'class="aba ativa" data-alvo="([^"]+)"', h)
+        # a aba ativa aponta para o painel do padrão (data-alvo casa com data-aprof).
+        # A busca é agnóstica à ordem dos atributos: o botão carrega o contrato ARIA
+        # entre a classe e o `data-alvo`, e regex posicional aqui já quebrou uma vez.
+        alvo = re.search(r'<button class="aba ativa"[^>]*data-alvo="([^"]+)"', h)
         assert alvo, "a aba ativa precisa nomear o painel que abre"
         assert alvo.group(1).startswith("padrao--"), f"aba aberta: {alvo.group(1)}"
         painel = re.search(r'class="aprof ativo" data-aprof="([^"]+)"', h)
         assert painel and painel.group(1) == alvo.group(1), "aba e painel ativos divergem"
+
+
+def test_trilha_da_materia_e_do_assunto_apontam_para_a_mesma_capa():
+    """Regressão: `pagina_materia` recebia `item["rota_escopo"]` no parâmetro
+    `rota_capa`.
+
+    O primeiro nível da trilha exibe o NOME DO CONCURSO nas duas páginas. Na de
+    matéria ele levava ao hub do escopo; na de assunto, à capa. Mesmo texto, dois
+    destinos em telas vizinhas — e o auditor de links não pega, porque o alvo errado
+    existe.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        out = Path(d) / "site"
+        _construir(base, out)
+
+        def destino(pagina: Path) -> Path:
+            h = pagina.read_text(encoding="utf-8")
+            trilha = re.search(r'<nav class="trilha">(.*?)</nav>', h, re.S) \
+                or re.search(r'class="trilha"[^>]*>(.*?)<', h, re.S)
+            assert trilha, f"sem trilha em {pagina}"
+            href = re.search(r'href="([^"]+)"', trilha.group(1))
+            assert href, f"o primeiro nível da trilha não é link em {pagina}"
+            return (pagina.parent / href.group(1)).resolve()
+
+        pag_mat = out / "teste_2026" / "cargo-x" / "materias" / "portugues" / "index.html"
+        pag_ass = _dir_assunto(out, "teste_2026", "crase") / "index.html"
+        capa = (out / "teste_2026" / "index.html").resolve()
+
+        assert destino(pag_mat) == capa, destino(pag_mat)
+        assert destino(pag_ass) == capa, destino(pag_ass)
+
+
+def test_quiz_sobrevive_a_cartao_que_contem_fecha_script():
+    r"""Regressão: o JSON ia cru dentro de `<script>`, e o parser de HTML fecha o
+    bloco no primeiro `</script>` — mesmo dentro de uma string JSON.
+
+    Um cartão com esse texto (vindo do vault, conteúdo do próprio usuário) quebrava
+    o `JSON.parse`, o `iniciarQuiz` fazia `return` e **o quiz sumia da página sem
+    erro visível**. O escape `<\/` é JSON válido e desserializa como `/`.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        (dir_aprof_crase(base) / f"flashcards-{NOME_BASE_CRASE}.md").write_text(
+            "---\ntipo: flashcards\n---\n#flashcards\n\n"
+            "O que faz </script><script>alert(1)</script>?\n??\nNada de bom.\n",
+            encoding="utf-8")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(
+            encoding="utf-8")
+
+        bloco = re.search(r'<script type="application/json">(.*?)</script>', h, re.S)
+        assert bloco, "o bloco de dados do quiz sumiu da página"
+        cards = json.loads(bloco.group(1))          # não pode estar truncado
+        assert len(cards) == 1, cards
+        assert "</script>" in cards[0]["f"], "o texto do cartão foi corrompido"
+        # e nada de script injetado solto no documento
+        assert "<script>alert(1)</script>" not in h
+
+
+def test_impressao_reabre_bussola_e_afericao_por_js():
+    """A promessa "o `@media print` reabre" está no SKILL.md, no CHANGELOG e no
+    CLAUDE.md — e dependia só do CSS, que o docstring do teste vizinho já declara
+    não confiável entre navegadores (o conteúdo é escondido pelo slot do
+    `<details>`, que `display` no filho não vence). O `beforeprint` do site.js
+    cobria apenas `.mais-topico`."""
+    js = (ROOT.parent / "assets" / "site.js").read_text(encoding="utf-8")
+    alvo = re.search(r'querySelectorAll\(\s*"([^"]*details\.bussola[^"]*)"', js)
+    assert alvo, "o beforeprint não alcança details.bussola"
+    for classe in ("details.bussola", "details.afericao", ".mais-topico"):
+        assert classe in alvo.group(1), (classe, alvo.group(1))
+    assert "beforeprint" in js and "afterprint" in js
+
+
+def test_teclado_do_quiz_nao_sequestra_os_botoes():
+    """Regressão: o `keydown` de Espaço/Enter ficava na raiz `.quiz` com
+    `preventDefault()`, então com o foco em "Virar", "Próximo" ou "Embaralhar" a
+    tecla virava o cartão em vez de acionar o botão focado."""
+    js = (ROOT.parent / "assets" / "site.js").read_text(encoding="utf-8")
+    m = re.search(r'(carta|raiz)\.addEventListener\("keydown".*?\}\);', js, re.S)
+    assert m and m.group(1) == "carta", "o primeiro handler de tecla é o da raiz"
+    assert 'ev.key === " "' in m.group(0), m.group(0)[:200]
+    # a seta direita pode ficar na raiz: não conflita com botão nenhum
+    raiz_h = re.search(r'raiz\.addEventListener\("keydown".*?\}\);', js, re.S)
+    assert raiz_h and "ArrowRight" in raiz_h.group(0)
+    assert '" "' not in raiz_h.group(0), "espaço ainda é capturado na raiz"
+
+
+def test_abas_tem_contrato_aria_completo():
+    """O contêiner se declarava `role="tablist"` e os botões não tinham `role`
+    nenhum: para leitor de tela, uma lista de abas SEM abas — e o estado ativo, que
+    na tela é só uma classe CSS, não era anunciado em lugar nenhum.
+
+    Confere o triângulo: botão com `role=tab`/`aria-selected`/`aria-controls`,
+    painel com `role=tabpanel`/`aria-labelledby`, e os ids casando nos dois sentidos.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = _montar_concurso(Path(d) / "TESTE_2026")
+        _add_aprof(base, "crase", "detalhado--abreu", "detalhado", "Abreu")
+        out = Path(d) / "site"
+        _construir(base, out)
+        h = (_dir_assunto(out, "teste_2026", "crase") / "index.html").read_text(
+            encoding="utf-8")
+
+        botoes = re.findall(r'<button class="aba[^"]*"[^>]*>', h)
+        assert botoes, "sem abas não há o que conferir"
+        selecionados = 0
+        for b in botoes:
+            assert 'role="tab"' in b, b
+            m_sel = re.search(r'aria-selected="(true|false)"', b)
+            assert m_sel, b
+            selecionados += m_sel.group(1) == "true"
+            # roving tabindex: só a ativa entra na ordem de tabulação
+            esperado = "0" if m_sel.group(1) == "true" else "-1"
+            assert f'tabindex="{esperado}"' in b, b
+            pid = re.search(r'aria-controls="([^"]+)"', b)
+            assert pid, b
+            # o painel existe, é tabpanel e aponta de volta para este botão
+            bid = re.search(r'id="([^"]+)"', b).group(1)
+            painel = re.search(rf'<[a-z]+[^>]*id="{re.escape(pid.group(1))}"[^>]*>', h)
+            assert painel, f"painel {pid.group(1)} não existe (botão {bid})"
+            assert 'role="tabpanel"' in painel.group(0), painel.group(0)
+            assert f'aria-labelledby="{bid}"' in painel.group(0), painel.group(0)
+        assert selecionados == 1, f"exatamente uma aba selecionada, achei {selecionados}"
 
 
 def test_desempate_entre_dois_padrao_e_alfabetico():
