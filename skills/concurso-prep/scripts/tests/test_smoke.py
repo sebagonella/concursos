@@ -75,6 +75,63 @@ def test_diff_estrutural():
     assert "Total de questões" in campos
 
 
+def test_diff_estrutural_le_a_forma_do_schema_da_discursiva():
+    """Regressão: `bool(_get(m, "estrutura_prova", "discursiva"))` avaliava o DICT.
+
+    O schema exige `{"presente": bool}` (`schema-edital.json`, required), e
+    `bool({"presente": False})` é **True** — então ligar ou desligar a discursiva
+    devolvia zero mudanças, no campo que o B.4 aponta como o que retificação mexe.
+    O teste anterior passava contra o código quebrado porque usava a forma dos
+    exemplos (`None -> {"tipo": "x"}`), não a que o schema permite: fixture que não
+    espelha o contrato é teste que se autoconfirma.
+    """
+    liga = de.diff_estrutural(
+        {"estrutura_prova": {"discursiva": {"presente": False}}},
+        {"estrutura_prova": {"discursiva": {"presente": True}}})
+    assert [m["campo"] for m in liga] == ["Tem discursiva?"], liga
+    assert (liga[0]["de"], liga[0]["para"]) == (False, True)
+
+    desliga = de.diff_estrutural(
+        {"estrutura_prova": {"discursiva": {"presente": True}}},
+        {"estrutura_prova": {"discursiva": {"presente": False}}})
+    assert [m["campo"] for m in desliga] == ["Tem discursiva?"], desliga
+
+    igual = de.diff_estrutural(
+        {"estrutura_prova": {"discursiva": {"presente": True, "tipo": "redação"}}},
+        {"estrutura_prova": {"discursiva": {"presente": True, "tipo": "redação"}}})
+    assert igual == [], igual
+
+
+def test_diff_estrutural_pega_titulos():
+    """A Etapa 9b virou central na 1.8.0 e `titulos` não entrava no diff:
+    retificação que TIRASSE a prova de títulos passava em silêncio."""
+    mud = de.diff_estrutural(
+        {"estrutura_prova": {"titulos": {"presente": True}}},
+        {"estrutura_prova": {"titulos": {"presente": False}}})
+    assert [m["campo"] for m in mud] == ["Tem prova de títulos?"], mud
+
+
+def test_diff_estrutural_por_cargo_da_prova():
+    """`estrutura_prova_por_cargo` é o campo que o próprio schema diz alimentar o
+    diff — e o diff nunca o leu. No SEDES é o único lugar onde se sabe que títulos
+    valem só para o ASSISTENTE-SOCIAL e que a discursiva dele é estudo de caso."""
+    v1 = {"estrutura_prova_por_cargo": {
+        "AGENTE-SOCIAL": {"titulos": {"presente": False},
+                          "discursiva": {"presente": True, "tipo": "redação"}},
+        "ASSISTENTE-SOCIAL": {"titulos": {"presente": True},
+                              "discursiva": {"presente": True, "tipo": "estudo de caso"}}}}
+    v2 = {"estrutura_prova_por_cargo": {
+        "AGENTE-SOCIAL": {"titulos": {"presente": False},
+                          "discursiva": {"presente": True, "tipo": "redação"}},
+        "ASSISTENTE-SOCIAL": {"titulos": {"presente": False},          # retificação tirou
+                              "discursiva": {"presente": True, "tipo": "redação"}}}}
+    campos = {m["campo"] for m in de.diff_estrutural(v1, v2)}
+    assert "Tem prova de títulos? [ASSISTENTE-SOCIAL]" in campos, campos
+    assert "Tipo da discursiva [ASSISTENTE-SOCIAL]" in campos, campos
+    # o cargo que não mudou não pode aparecer
+    assert not any("AGENTE-SOCIAL]" in c for c in campos), campos
+
+
 # --------------------------------------------------------------------------- #
 # validate_output (via subprocess, testa o CLI de ponta a ponta)
 # --------------------------------------------------------------------------- #
