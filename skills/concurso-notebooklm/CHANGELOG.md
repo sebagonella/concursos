@@ -2,6 +2,31 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.4.0] - 2026-08-12
+
+### Corrigido
+- **Todo vídeo baixado virava `.desconhecido` e sumia.** `container_dos_bytes`
+  devolvia `.m4a` para **qualquer** caixa `ftyp`, inclusive o `ftypisom`/`ftypmp42`
+  de um MP4 — e `.m4a` não está em `EXTENSOES_ACEITAS["video"]`, então o arquivo era
+  renomeado para `video-x.mp4.m4a.desconhecido`. Pior que perder o vídeo: a quota já
+  tinha sido queimada, o arquivo morto passava a casar o glob de `ja_existe`, e a
+  mídia nunca mais era regerada sem `--forcar`. A caixa `ftyp` sozinha não separa
+  áudio de vídeo (`isom`, `mp42`, `dash` servem aos dois); agora brand de áudio
+  (`M4A `, `M4B `…) decide, `qt  ` vira `.mov`, e brand genérico é desempatado pelo
+  **tipo da tarefa**. O `ftypdash` real do podcast, observado em 2026-07-31, continua
+  saindo `.m4a`.
+- **`.parcial` órfão contava como mídia feita.** Um processo morto no meio do
+  download deixa `podcast-x.m4a.parcial`, e o glob `prefixo.*` de `ja_existe` casava:
+  a mídia nunca era gerada e nunca aparecia no site, sem erro em lugar nenhum — o
+  desfecho silencioso que esta skill declara ser o pior. `.parcial` e `.desconhecido`
+  saíram do glob.
+
+### Testes
+- `test_container_de_video_nao_vira_m4a` e `test_parcial_orfao_nao_conta_como_feito`.
+  O segundo falha contra a 0.3.0 com "o .parcial contou como feito"; o primeiro
+  demonstra o antigo devolvendo `.m4a` para `ftypisom`, destino
+  `video-x.mp4.m4a.desconhecido`.
+
 ## [0.3.0] - 2026-08-06
 
 ### Corrigido

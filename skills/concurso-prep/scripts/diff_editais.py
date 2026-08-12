@@ -223,11 +223,58 @@ def _por_cargo_estrutural(meta: dict) -> dict[str, dict]:
     return out
 
 
+def _presente_de(bloco):
+    """`presente` de um bloco {discursiva,titulos,objetiva}, ou None se nao da' para saber.
+
+    O que havia aqui era `bool(_get(m, "estrutura_prova", "discursiva"))` — e o
+    schema exige a forma `{"presente": bool}`, entao o `bool()` avaliava o DICT:
+    `{"presente": false}` e truthy. Resultado: retificacao que LIGA ou DESLIGA a
+    discursiva devolvia zero mudancas, exatamente no campo que o B.4 diz ser o que
+    retificacao mexe. Verificado: `presente False -> True` dava `[]`.
+
+    As tres formas que convivem no vault:
+      - bloco ausente/None  -> None (desconhecido; nao se afirma nada)
+      - {"presente": bool}  -> o valor (a forma do schema)
+      - dict sem `presente` -> True (legado: existir o bloco ja e' declarar que tem)
+    """
+    if bloco is None:
+        return None
+    if isinstance(bloco, dict):
+        return bool(bloco.get("presente")) if "presente" in bloco else True
+    return bool(bloco)
+
+
+def _por_cargo_prova(meta: dict) -> dict:
+    """Estrutura da prova POR CARGO, de `estrutura_prova_por_cargo`.
+
+    O proprio schema diz que este campo "alimenta o diff estrutural da
+    retificacao" — e o diff nunca o leu. No SEDES ele e' o unico lugar onde se
+    sabe que titulos valem so' para o ASSISTENTE-SOCIAL e que a discursiva dele e'
+    "estudo de caso" enquanto a dos outros dois e' "redacao": uma retificacao que
+    tirasse os titulos de um cargo, ou trocasse o tipo da discursiva, passava em
+    silencio.
+    """
+    out = {}
+    pc = meta.get("estrutura_prova_por_cargo")
+    if not isinstance(pc, dict):
+        return out
+    for sigla, bloco in pc.items():
+        if not isinstance(bloco, dict):
+            continue
+        out[sigla] = {
+            "Tem discursiva?": _presente_de(bloco.get("discursiva")),
+            "Tipo da discursiva": _get(bloco, "discursiva", "tipo"),
+            "Tem prova de títulos?": _presente_de(bloco.get("titulos")),
+        }
+    return out
+
+
 def diff_estrutural(m1: dict, m2: dict) -> list[dict]:
     """Item 16: compara campos estruturais da prova entre as duas versoes."""
     campos = [
         ("Total de questões", ["estrutura_prova", "objetiva", "total_questoes"]),
         ("Data da prova", ["datas_chave", "prova_data"]),
+        ("Tipo da discursiva", ["estrutura_prova", "discursiva", "tipo"]),
     ]
     alias = {
         "Vagas (AC imediatas)": [("vagas_ac",), ("cargo", "vagas_ac"),
@@ -242,10 +289,14 @@ def diff_estrutural(m1: dict, m2: dict) -> list[dict]:
         if (v1 is not None or v2 is not None) and v1 != v2:
             mudancas.append({"campo": nome, "de": v1, "para": v2})
 
-    d1, d2 = bool(_get(m1, "estrutura_prova", "discursiva")), \
-        bool(_get(m2, "estrutura_prova", "discursiva"))
-    if d1 != d2:
-        mudancas.append({"campo": "Tem discursiva?", "de": d1, "para": d2})
+    # `titulos` entra junto: a Etapa 9b virou central na 1.8.0 e o validador confere
+    # os dois lados, mas a retificacao que TIRA titulos de um cargo nao aparecia.
+    for nome, chave in (("Tem discursiva?", "discursiva"),
+                        ("Tem prova de títulos?", "titulos")):
+        d1 = _presente_de(_get(m1, "estrutura_prova", chave))
+        d2 = _presente_de(_get(m2, "estrutura_prova", chave))
+        if (d1 is not None or d2 is not None) and d1 != d2:
+            mudancas.append({"campo": nome, "de": d1, "para": d2})
 
     for nome, caminhos in alias.items():
         v1, v2 = _primeiro(m1, caminhos), _primeiro(m2, caminhos)
@@ -258,6 +309,14 @@ def diff_estrutural(m1: dict, m2: dict) -> list[dict]:
     for sigla in sorted(set(pc1) | set(pc2)):
         for campo in ("Vagas (AC imediatas)", "Vagas totais", "Salário"):
             v1, v2 = pc1.get(sigla, {}).get(campo), pc2.get(sigla, {}).get(campo)
+            if (v1 is not None or v2 is not None) and v1 != v2:
+                mudancas.append({"campo": f"{campo} [{sigla}]", "de": v1, "para": v2})
+
+    # Estrutura da prova por cargo: discursiva, tipo dela e titulos.
+    ep1, ep2 = _por_cargo_prova(m1), _por_cargo_prova(m2)
+    for sigla in sorted(set(ep1) | set(ep2)):
+        for campo in ("Tem discursiva?", "Tipo da discursiva", "Tem prova de títulos?"):
+            v1, v2 = ep1.get(sigla, {}).get(campo), ep2.get(sigla, {}).get(campo)
             if (v1 is not None or v2 is not None) and v1 != v2:
                 mudancas.append({"campo": f"{campo} [{sigla}]", "de": v1, "para": v2})
     return mudancas

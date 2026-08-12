@@ -363,6 +363,19 @@ def main():
     if args.aprof_dir:
         alvos = [args.aprof_dir]
     else:
+        # O ponteiro é POR ASSUNTO: um `--localizacao` único no modo em lote grava a
+        # página certa de um assunto e ERRADA de todos os outros. Verificado: dois
+        # assuntos numa `--assuntos-dir` recebiam `localizacao_2` idêntica em `crase`
+        # e `regencia`. Até aqui o código só SUGERIA o `--mapa` no texto de ajuda, e
+        # sugestão não segura ninguém — isto é página inventada entrando no vault sem
+        # virar pendência, contra "nunca fingir precisão".
+        if args.localizacao:
+            sys.exit(
+                "erro: --localizacao não vale no modo em lote (--assuntos-dir), "
+                "porque grava o MESMO ponteiro em todos os assuntos. Use --mapa "
+                "(mapa-localizacao.json), que resolve a página por assunto; assunto "
+                "ausente do mapa fica sem ponteiro e vira pendência. Para um alvo "
+                "só, use --aprof-dir com --localizacao.")
         alvos = sorted(
             p / args.aprofundamento
             for p in args.assuntos_dir.iterdir()

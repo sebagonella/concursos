@@ -5,6 +5,35 @@ Todas as mudanças notáveis da skill `concurso-prep` são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.13.0] - 2026-08-12
+
+### Corrigido
+- **O diff estrutural era cego à discursiva — na forma que o schema exige.**
+  `bool(_get(m, "estrutura_prova", "discursiva"))` avaliava o **dict**, e
+  `bool({"presente": false})` é `True`. O `schema-edital.json` exige exatamente
+  `{"presente": bool}` (required), então uma retificação que **liga ou desliga** a
+  discursiva devolvia `[]` — zero mudanças, no campo que o B.4 aponta como o que
+  retificação mexe. O teste que "cobria" isso usava `None -> {"tipo": "x"}`, a forma
+  dos exemplos e não a do schema: fixture que não espelha o contrato é teste que se
+  autoconfirma. Agora a leitura passa por `_presente_de()`, que trata as três formas
+  que convivem no vault (ausente = desconhecido, `{"presente": bool}`, e dict legado
+  sem a chave = presente).
+- **`titulos` não entrava no diff.** A Etapa 9b virou central na 1.8.0 e o validador
+  confere os dois lados, mas a retificação que **tira** a prova de títulos passava em
+  silêncio.
+- **`estrutura_prova_por_cargo` nunca foi lido pelo diff** — sendo que a descrição do
+  campo no próprio schema diz que ele "alimenta o diff estrutural da retificação".
+  No SEDES é o único lugar onde se sabe que títulos valem só para o
+  ASSISTENTE-SOCIAL e que a discursiva dele é "estudo de caso" enquanto a dos outros
+  dois é "redação". Agora entram no diff, por cargo: presença da discursiva, **tipo**
+  dela e presença dos títulos.
+
+### Testes
+- `test_diff_estrutural_le_a_forma_do_schema_da_discursiva`,
+  `test_diff_estrutural_pega_titulos` e `test_diff_estrutural_por_cargo_da_prova`.
+  Os três falham contra a 1.12.0 devolvendo `[]` / `set()` — literalmente "nenhuma
+  mudança" onde há mudança.
+
 ## [1.12.0] - 2026-08-06
 
 ### Corrigido

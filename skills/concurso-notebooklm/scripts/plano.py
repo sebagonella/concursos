@@ -116,7 +116,13 @@ def ja_existe(pac: Pacote, tipo: str) -> bool:
     if not nome:
         return False
     prefixo = nome.split(".")[0]
-    return any(p.is_file() for p in pac.pasta.glob(f"{prefixo}.*"))
+    # `.parcial` e `.desconhecido` NÃO contam como feito. Um processo morto no meio
+    # do download deixa `podcast-x.m4a.parcial`, e o glob cru casava: `ja_existe`
+    # dizia True, a mídia nunca era gerada e nunca aparecia no site — o desfecho
+    # silencioso que esta skill declara ser o pior. Mesmo raciocínio para o
+    # `.desconhecido`, que é o arquivo que já se sabe que o site não lê.
+    return any(p.is_file() and not p.name.endswith((".parcial", ".desconhecido"))
+               for p in pac.pasta.glob(f"{prefixo}.*"))
 
 
 def planejar(pac: Pacote, midias: list, forcar: bool = False) -> tuple[list, list]:
@@ -158,14 +164,38 @@ def extensao_de(nome: str) -> str:
     return Path(nome).suffix.lower()
 
 
-def container_dos_bytes(cabecalho: bytes) -> str:
+# Brands do `ftyp` que identificam ÁUDIO puro dentro da família MP4. O resto da
+# família (`isom`, `mp42`, `avc1`, `dash`…) é genérico e serve para os dois, então
+# não decide sozinho — quem decide é o tipo da tarefa.
+BRANDS_AUDIO = (b"M4A ", b"M4B ", b"F4A ", b"M4P ")
+BRANDS_QUICKTIME = (b"qt  ",)
+
+
+def container_dos_bytes(cabecalho: bytes, tipo: str = "") -> str:
     """Adivinha o container por assinatura, para não confiar na extensão declarada.
 
     A biblioteca grava no caminho que recebe: se pedirmos `.m4a` e vier MP3, o
     arquivo fica com nome errado e o site — que casa prefixo E extensão — não o vê.
     Silêncio é o pior desfecho, então a extensão sai dos bytes.
+
+    `tipo` é a tarefa que originou o download (`podcast`/`video`/`report`), e existe
+    porque a caixa `ftyp` sozinha NÃO separa áudio de vídeo: até aqui qualquer `ftyp`
+    devolvia `.m4a`, inclusive o `ftypisom`/`ftypmp42` de um MP4. Como `.m4a` não está
+    em `EXTENSOES_ACEITAS["video"]`, **todo vídeo baixado** virava
+    `video-x.mp4.m4a.desconhecido`: sumia do site, e pior, o glob de `ja_existe`
+    passava a casar o arquivo morto e a mídia nunca mais era regerada — quota
+    queimada por um resultado invisível. Brand de áudio decide; brand genérico
+    devolve o container coerente com a tarefa.
     """
     if len(cabecalho) >= 12 and cabecalho[4:8] == b"ftyp":
+        brand = cabecalho[8:12]
+        if brand in BRANDS_AUDIO:
+            return ".m4a"
+        if brand in BRANDS_QUICKTIME:
+            return ".mov"
+        # família MP4 genérica: o tipo da tarefa desempata
+        if tipo == "video":
+            return ".mp4"
         return ".m4a"
     if cabecalho[:3] == b"ID3" or cabecalho[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
         return ".mp3"

@@ -109,10 +109,20 @@ def montar(dados: list[dict], concurso_dir: Path, banca: str) -> str:
               + " | Assunto cobrado | " + " | ".join(f"`{n}`" for n in niveis) + " |",
               "|:-:|" + "|".join([":-:"] * len(dados)) + "|---|"
               + "|".join([":-:"] * len(niveis)) + "|"]
-    for i, q in enumerate(sorted(dados[0]["gabarito"])):
-        gab_cols = " | ".join(d["gabarito"].get(sorted(d["gabarito"])[i], "?")
-                              for d in dados)
-        linhas.append(f"| {i + 1} | {gab_cols} | {VAZIO} | "
+    # A coluna Q leva o NÚMERO REAL da questão, e cada prova é indexada por ele.
+    #
+    # Dois defeitos moravam nestas três linhas. O `i + 1` renumerava de 1 a N: numa
+    # faixa 21–25 a tabela saía `Q1…Q5` enquanto o `--bloco-out` que o agente lê
+    # traz 21–25, então o cruzamento questão↔veredicto era feito contra rótulos que
+    # não existem na prova — invisível só em Língua Portuguesa, que começa em 1. E
+    # `sorted(d["gabarito"])[i]` indexava CADA prova pela posição da primeira:
+    # estourava `IndexError` quando as contagens diferiam e, pior, casava
+    # silenciosamente gabaritos de questões distintas quando as faixas diferiam.
+    # O número da questão é a chave comum entre as versões — é ele que pareia.
+    numeros = sorted(set().union(*(set(d["gabarito"]) for d in dados))) if dados else []
+    for q in numeros:
+        gab_cols = " | ".join(d["gabarito"].get(q, "?") for d in dados)
+        linhas.append(f"| {q} | {gab_cols} | {VAZIO} | "
                       + " | ".join([VAZIO] * len(niveis)) + " |")
 
     div = "_Só um nível aprofundado nesta matéria — nada a comparar._"

@@ -2,6 +2,27 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.4.0] - 2026-08-12
+
+### Corrigido
+- **A coluna Q renumerava as questões de 1 a N.** `for i, q in enumerate(...)`
+  descartava `q` e imprimia `i + 1`: numa faixa 21–25 a tabela saía `Q1…Q5` enquanto
+  o `--bloco-out` que o agente lê traz os números reais. O cruzamento
+  questão↔veredicto era feito contra rótulos que não existem na prova — invisível só
+  em Língua Portuguesa, que começa em 1.
+- **O pareamento entre provas era posicional, não por número de questão.**
+  `sorted(d["gabarito"])[i]` indexava CADA prova pela posição da primeira:
+  `IndexError` quando as contagens diferiam e, pior, casamento **silencioso** de
+  gabaritos de questões distintas quando as faixas diferiam. O número da questão é a
+  chave comum entre as versões — é ele que pareia, e questão ausente numa prova vira
+  `?` em vez de puxar a resposta da seguinte.
+
+### Testes
+- `test_tabela_usa_o_numero_real_da_questao` (falha contra a 0.3.0 devolvendo
+  `['1','2','3','4','5']` onde a prova tem 21–25) e
+  `test_provas_com_faixas_diferentes_nao_estouram_nem_pareiam_errado` (falha com
+  `IndexError`).
+
 ## [0.3.0] - 2026-08-06
 
 ### Corrigido
