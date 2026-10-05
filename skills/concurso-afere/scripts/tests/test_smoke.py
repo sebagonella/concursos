@@ -1014,6 +1014,25 @@ def test_montar_preenche_anulada_e_nao_vaza_placeholder_na_cesgranrio():
     checar("**Anuladas** (fora do denominador)" in qx, "e a linha de anuladas aparece")
 
 
+def test_valor_em_reais_nao_e_nota_em_outra_formatacao():
+    """Regressão: a evidência de uma questão do SEDES cita "R$ 1,00 / R$ 0,50" (preços
+    do Restaurante Comunitário), e o check de formatação dupla os casava com o "1,0" e
+    o "0,5" do critério declarado. Dinheiro sai da comparação; a nota continua nela."""
+    with tempfile.TemporaryDirectory() as d:
+        base = CAB.replace("questoes_aferidas: 30", "questoes_aferidas: 2") + (
+            "Critério: RESPONDE = 1,0 · PARCIAL = 0,5\n\n"
+            "| | `padrao` |\n|---|---:|\n| Questões plenamente respondidas | 2 |\n"
+            "| Respondidas em parte | 0 |\n| Não respondidas | 0 |\n| **Nota** | **10,00** |\n")
+        com_preco = base + "\nEvidência: os preços são R$ 1,00 / R$ 0,50 / R$ 0,50.\n"
+        checar(validar_afericao.conferir(_af(com_preco, Path(d))) == [],
+               "preço em reais não conta como nota",
+               validar_afericao.conferir(_af(com_preco, Path(d))))
+        sem_rs = base + "\nNota de outra tabela: 1,00\n"
+        checar(any("formatações diferentes" in e
+                   for e in validar_afericao.conferir(_af(sem_rs, Path(d)))),
+               "o mesmo número sem R$ continua sendo pego")
+
+
 def test_gabarito_com_tres_digitos():
     """Prova de 100+ questões: a regex `\\d{1,2}` lia "100 - B" como "00 - B"."""
     com_texto({"g.pdf": "GABARITO 1\n 99 - A   100 - B   101 - C\n"})

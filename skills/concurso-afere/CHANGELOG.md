@@ -2,6 +2,20 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.6.1] - 2026-10-04
+
+### Corrigido
+- **Valor em reais era lido como nota.** A primeira aferição real da Quadrix (SEDES,
+  Específicos Comuns do TDAS) citava na evidência de uma questão os preços do
+  Restaurante Comunitário do DF — "R$ 1,00 / R$ 0,50" —, e o check de formatação dupla
+  os casava com o "1,0" e o "0,5" do critério declarado, recusando uma aferição correta
+  por um fato do próprio conteúdo aferido. Dinheiro sai da comparação; o mesmo número
+  sem `R$` continua sendo pego.
+
+### Testes
+- Um novo (53 no total). Contra a 0.6.0 ele falha com a mesma mensagem que recusou o
+  documento real: "0,5 parece o arredondamento de 0,50".
+
 ## [0.6.0] - 2026-10-04
 
 ### Adicionado

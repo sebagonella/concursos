@@ -200,7 +200,12 @@ def conferir(md: Path) -> list[str]:
     def casas(s: str) -> int:
         return len(s.split(",")[1])
 
-    brutos = sorted(set(re.findall(r"\b\d+,\d+\b", txt)))
+    # Valor em reais não é nota. O primeiro documento da Quadrix citava os preços do
+    # Restaurante Comunitário do DF ("R$ 1,00 / R$ 0,50") na evidência de uma questão,
+    # e o check os casava com o "1,0" e o "0,5" do critério declarado — recusando uma
+    # aferição correta por um fato do conteúdo aferido.
+    sem_dinheiro = re.sub(r"R\$\s?[\d.]*\d,\d+", " ", txt)
+    brutos = sorted(set(re.findall(r"\b\d+,\d+\b", sem_dinheiro)))
     for i, a in enumerate(brutos):
         for b in brutos[i + 1:]:
             if casas(a) == casas(b):

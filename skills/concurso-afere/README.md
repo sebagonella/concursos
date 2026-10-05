@@ -3,7 +3,7 @@
 Mede o material aprofundado do vault contra a **prova real**: quantas questões o
 conteúdo escrito responde, onde falha e o que corrigir.
 
-Versão atual: **0.6.0** — afere prova da **Quadrix**: gabarito em grade, tipos A/B/C como as mesmas questões em rodízio, divisão por área com o vínculo questão → matéria julgado pelo agente, e questão anulada fora do denominador. O histórico completo está no [CHANGELOG.md](CHANGELOG.md).
+Versão atual: **0.6.1** — valor em reais na evidência ("R$ 1,00") deixa de ser confundido com nota escrita em outra formatação. A 0.6.0 trouxe a prova da **Quadrix**. O histórico completo está no [CHANGELOG.md](CHANGELOG.md).
 
 ## Por que existe
 
@@ -80,7 +80,7 @@ python3 $S/comparar_gabaritos.py --antes <preliminar> --depois <definitivo> \
 ## Testes
 
 ```bash
-python3 scripts/tests/test_smoke.py     # 52 testes, sem pytest
+python3 scripts/tests/test_smoke.py     # 53 testes, sem pytest
 ```
 
 Documentação do fluxo completo: [`SKILL.md`](SKILL.md) · histórico: [`CHANGELOG.md`](CHANGELOG.md)
