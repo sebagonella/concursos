@@ -1,6 +1,6 @@
 ---
 name: concurso-afere
-version: 0.6.0
+version: 0.6.1
 description: >
   Use quando o usuário tiver a PROVA REAL de um concurso (PDF do caderno + gabarito
   oficial) e quiser medir o material já aprofundado no vault contra ela — descobrindo
@@ -180,7 +180,7 @@ Três premissas da CESGRANRIO não valem na Quadrix, e o fluxo muda por causa de
 - `quadrix.py` — perfil Quadrix: grade do gabarito, tabela de divisão, cargo pelo rodapé, tipo pela ordem dos blocos
 - `mapa_questoes.py` — esqueleto, validação e agrupamento do mapa questão → matéria
 - `comparar_gabaritos.py` — preliminar × definitivo: as questões a rejulgar
-- `tests/test_smoke.py` — 52 testes, standalone; fixtures da Quadrix em `tests/fixtures/quadrix/` (saída real do `pdftotext`)
+- `tests/test_smoke.py` — 53 testes, standalone; fixtures da Quadrix em `tests/fixtures/quadrix/` (saída real do `pdftotext`)
 
 **Reúso** (não reimplementar): `arquivo_principal()` da `concurso-aprofunda` —
 `glob("*.md")[0]` pega o `_fonte-notebooklm.md`, porque `_` ordena antes das letras.
