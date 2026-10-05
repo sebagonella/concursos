@@ -57,6 +57,10 @@ _LINHAS = (
     ("parc", re.compile(r"respondidas?\s+em\s+parte")),
     ("nao", re.compile(r"^n[ãa]o\s+respondidas")),
     ("sem", re.compile(r"^sem\s+material")),
+    # Só existe quando a prova teve anulada (Quadrix marca `X` no gabarito). Fica fora
+    # do denominador como o SEM MATERIAL, mas entra na soma da amostra: a questão foi
+    # aferida, e some da conta se não for contada em lugar nenhum.
+    ("anul", re.compile(r"^anuladas?$")),
     ("nota", re.compile(r"^nota$")),
 )
 
@@ -128,6 +132,7 @@ def conferir_aritmetica(txt: str, questoes: int | None) -> list[str]:
         if None in (resp, parc, nao) or nota is None:
             continue
         sem = val("sem") or Decimal(0)
+        anul = val("anul") or Decimal(0)
 
         denom = resp + parc + nao
         if denom == 0:
@@ -140,11 +145,13 @@ def conferir_aritmetica(txt: str, questoes: int | None) -> list[str]:
                 f"{resp}·1,0 + {parc}·0,5 + {nao}·0,2 = {pontos} sobre {denom} "
                 f"dá {esperada}, mas o documento diz {nota}".replace(".", ","))
 
-        if questoes is not None and denom + sem != questoes:
+        if questoes is not None and denom + sem + anul != questoes:
+            extra = f" + {anul} (anuladas)" if anul else ""
             erros.append(
                 f"contagens de `{rotulos[i]}` não somam a amostra declarada: "
-                f"{resp} + {parc} + {nao} + {sem} (sem material) = {denom + sem}, "
-                f"mas o frontmatter diz questoes_aferidas: {questoes}")
+                f"{resp} + {parc} + {nao} + {sem} (sem material){extra} = "
+                f"{denom + sem + anul}, mas o frontmatter diz questoes_aferidas: "
+                f"{questoes}")
     return erros
 
 

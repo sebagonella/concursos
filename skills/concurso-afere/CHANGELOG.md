@@ -2,6 +2,48 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.6.0] - 2026-10-04
+
+### Adicionado
+- **Prova da Quadrix.** A skill só lia a CESGRANRIO: cargos do BB fixos em
+  `prova_id.py`, caderno identificado por "GABARITO [1-4]", gabarito no formato
+  `N - X`. Rodada contra a prova Quadrix do CRESS-RS que já estava no vault do SEDES,
+  saía com `exit 2` — e o SEDES, cuja prova real foi em 06/09/2026, não podia ser
+  aferido. Novo `quadrix.py`:
+  - gabarito em **grade** (linha de números, linha de letras), uma seção por cargo e
+    tipo, `X` como anulada e PRELIMINAR/DEFINITIVO lidos do cabeçalho;
+  - **tabela de divisão por área** — com uma coluna por tipo (SEDES), uma tabela por
+    cargo (CRESS-MG) ou, quando ela é por nível e nada diz o nível do cargo
+    (CRESS-RS), recusa nomeada em vez de faixa inventada;
+  - **cargo pelo rodapé** do caderno, casado com as seções do gabarito; empate é erro;
+  - **tipo pela ordem dos blocos**, já que nenhuma página imprime "TIPO A".
+- **Mapa questão → matéria, em duas etapas** (`mapa_questoes.py`). A prova Quadrix
+  divide por ÁREA: "Conhecimentos Gerais, 1 a 20" mistura Português, legislação do DF
+  e primeiros socorros. A matéria de cada questão é julgamento do agente; o
+  `build_afericao.py --area` grava o esqueleto e o `--mapa` gera uma aferição por
+  matéria, recusando questão esquecida, matéria inexistente e gabarito editado no mapa.
+- **`comparar_gabaritos.py`**: do preliminar ao definitivo, lista só as questões
+  alteradas ou anuladas de cada aferição, para rejulgar. Não reescreve julgamento.
+- Frontmatter da aferição Quadrix: `cargo_prova`, `tipo_caderno`, `area_prova`,
+  `questoes_anuladas`; `gabarito_fonte` passa a dizer `preliminar` ou `definitivo`, e o
+  documento sobre o preliminar ganha a ressalva.
+
+### Corrigido
+- **Números de questão com três dígitos** (`\d{1,2}` → `\d{1,3}` em `gabarito.py`,
+  `prova_id.py` e `extrair_questoes.py`): "100 - B" era lido como "00 - B".
+- **Anulada fora do denominador e dentro da amostra** no validador: a soma das
+  contagens ignorava a linha e acusava a amostra de não fechar.
+- `SKILL.md` documenta `--escopo`, `--out` e `--forcar`, que existiam sem menção; o
+  README perdeu um parágrafo órfão que sobrara de edição.
+
+### Testes
+- 17 novos (52 no total), com fixtures da **saída real do `pdftotext`**: os três
+  gabaritos Quadrix inteiros e o recorte estrutural de dois cadernos do SEDES (sem o
+  texto das questões). Contra a 0.5.0, o de três dígitos falha com `GabaritoErro`, o
+  da anulada acusa "não somam a amostra", e o de banca — lida antes só nas duas
+  primeiras páginas — classificava como CESGRANRIO o gabarito do SEDES, que só assina
+  "INSTITUTO QUADRIX" na oitava.
+
 ## [0.5.0] - 2026-08-12
 
 ### Corrigido

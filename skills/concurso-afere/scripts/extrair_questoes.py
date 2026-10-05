@@ -189,7 +189,7 @@ def secoes(pdf: Path, so_materias: bool = True) -> list[Secao]:
         # FOLGA_FIM cobre a questão que a diagramação empurrou para depois do
         # cabeçalho seguinte (ver defeito 3 no topo do arquivo)
         s.bloco = t[s.inicio:min(fim + FOLGA_FIM, len(t))]
-        s.questoes = sorted({int(q) for q in re.findall(r"\n(\d{1,2})\n", s.bloco)})
+        s.questoes = sorted({int(q) for q in re.findall(r"\n(\d{1,3})\n", s.bloco)})
     return ordenadas
 
 

@@ -1,0 +1,116 @@
+# Recorte ESTRUTURAL da saída real de `pdftotext` (sem -layout) do caderno
+# B_200_TDAS - Agente Social_QUADRIX_2026_SEDES_Prova.pdf, Instituto Quadrix, SEDES/DF 2026.
+# Só as linhas que a skill lê — cabeçalhos de área, marcadores 'QUESTÃO N',
+# rodapé com o cargo —, na ordem original. O texto das questões ficou de fora
+# de propósito: é obra da banca, e o repositório é público.
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+PROVA OBJETIVA
+CONHECIMENTOS ESPECÍFICOS COMUNS ÀS ESPECIALIDADES DO CARGO TDAS
+QUESTÃO 1
+QUESTÃO 4
+QUESTÃO 2
+QUESTÃO 3
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 5
+QUESTÃO 8
+QUESTÃO 6
+QUESTÃO 9
+QUESTÃO 7
+QUESTÃO 10
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 11
+QUESTÃO 14
+QUESTÃO 12
+QUESTÃO 15
+QUESTÃO 13
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+QUESTÃO 19
+QUESTÃO 17
+QUESTÃO 16
+Quadrix | 2026
+QUESTÃO 18
+QUESTÃO 20
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+CONHECIMENTOS ESPECÍFICOS DA ESPECIALIDADE
+QUESTÃO 21
+QUESTÃO 23
+QUESTÃO 22
+QUESTÃO 24
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 25
+QUESTÃO 28
+QUESTÃO 26
+QUESTÃO 27
+QUESTÃO 29
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 30
+QUESTÃO 32
+QUESTÃO 31
+QUESTÃO 33
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 34
+QUESTÃO 36
+QUESTÃO 37
+QUESTÃO 35
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 38
+QUESTÃO 40
+QUESTÃO 39
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+CONHECIMENTOS GERAIS
+QUESTÃO 43
+Texto para as questões de 41 a 43.
+Texto para as questões de 44 a 46.
+QUESTÃO 41
+QUESTÃO 42
+QUESTÃO 44
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 45
+QUESTÃO 47
+QUESTÃO 46
+QUESTÃO 48
+Texto para as questões 47 e 48.
+QUESTÃO 49
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 50
+QUESTÃO 54
+QUESTÃO 51
+QUESTÃO 55
+QUESTÃO 52
+QUESTÃO 53
+QUESTÃO 56
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+QUESTÃO 57
+QUESTÃO 59
+QUESTÃO 58
+QUESTÃO 60
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+SECRETARIA DE ESTADO DE DESENVOLVIMENTO SOCIAL DO DISTRITO FEDERAL
+Quadrix | 2026
+PROVA DISCURSIVA
+Técnico em Desenvolvimento e Assistência Social (TDAS) | Especialidade: Agente Social
+

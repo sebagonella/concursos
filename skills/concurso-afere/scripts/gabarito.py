@@ -57,7 +57,7 @@ def respostas(pdf: Path, caderno: str, secao: str | None = None,
         m = re.search(r"\n\s*[A-ZÁÂÃÉÊÍÓÔÕÚÇ][A-ZÁÂÃÉÊÍÓÔÕÚÇ \-]{7,}\s*\n", resto)
         bloco = resto[:m.start()] if m else resto
 
-    achado = {int(q): r.upper() for q, r in re.findall(r"(\d{1,2})\s*-\s*([A-Ea-e])\b", bloco)}
+    achado = {int(q): r.upper() for q, r in re.findall(r"(\d{1,3})\s*-\s*([A-Ea-e])\b", bloco)}
     if not achado:
         raise GabaritoErro(f"nenhuma resposta legível no caderno {caderno}"
                            + (f", seção '{secao}'" if secao else ""))

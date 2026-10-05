@@ -94,7 +94,7 @@ def identificar(pdf: Path) -> ProvaID:
     # O gabarito oficial abre com "BANCO DO BRASIL - Prova X - <cargo>" seguido da
     # tabela; o caderno abre com o cabeçalho de instruções. O marcador confiável é
     # a tabela de respostas ("1 - B" e afins) logo nas primeiras páginas.
-    e_gab = bool(re.search(r"\b\d{1,2}\s*-\s*[A-E]\b.*\b\d{1,2}\s*-\s*[A-E]\b", t, re.S))
+    e_gab = bool(re.search(r"\b\d{1,3}\s*-\s*[A-E]\b.*\b\d{1,3}\s*-\s*[A-E]\b", t, re.S))
 
     # No CADERNO, "GABARITO n" no cabeçalho é a versão daquele exemplar — informação
     # decisiva, é ela que escolhe a tabela. No PDF de GABARITO, o mesmo texto aparece
@@ -143,7 +143,25 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("prova", type=Path)
     ap.add_argument("gabarito", type=Path, nargs="?")
+    ap.add_argument("--cargo-prova", help="Quadrix: força a seção do gabarito")
     a = ap.parse_args()
+
+    # Quadrix tem outro formato de caderno e de gabarito (ver quadrix.py). Import
+    # local: o quadrix importa o `texto` daqui, e no topo seria import circular.
+    from quadrix import banca_do_pdf, identificar_par
+    if a.gabarito and "quadrix" in (banca_do_pdf(a.prova), banca_do_pdf(a.gabarito)):
+        par = identificar_par(a.prova, a.gabarito, a.cargo_prova)
+        print(f"prova    : {a.prova.name}\ngabarito : {a.gabarito.name}\n"
+              f"  {par.descricao()}")
+        for f in par.faixas:
+            print(f"    {f.nome:<46} Q{f.primeira}–{f.ultima}")
+        if par.problemas:
+            print("  ⚠️  DIVERGÊNCIA — NÃO use este par: " + " · ".join(par.problemas))
+            return 2
+        if par.secao and par.secao.anuladas:
+            print(f"  anuladas: {sorted(par.secao.anuladas)}")
+        print("  ✓ par confiável")
+        return 0
 
     p = identificar(a.prova)
     print(f"prova    : {a.prova.name}\n  {p.descricao()}")

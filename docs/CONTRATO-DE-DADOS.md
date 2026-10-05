@@ -200,3 +200,21 @@ legitimamente **várias** — a segunda rodada usa `--out` com nome próprio
 `provas_aferidas_n` no frontmatter é obrigatório: o validador barra superlativo sem
 ele, porque com uma prova só a conclusão não se sustenta (com 1 prova a aferição de
 Português concluiu "empate técnico"; com 3, inverteu).
+
+| Campo | Tipo | Observação |
+|---|---|---|
+| `questoes_aferidas`, `provas_aferidas_n` | int | a amostra; o validador confere a soma das contagens contra o primeiro |
+| `gabarito_fonte` | `preliminar` \| `definitivo` \| texto | `preliminar` põe a ressalva no documento e é o que o `comparar_gabaritos.py` usa |
+| `cargo_prova`, `tipo_caderno` | string | **Quadrix**: a seção do gabarito (`TDAS - AGENTE SOCIAL`, tipo `A` ou `unico`) — sem eles não dá para reconferir com o definitivo |
+| `area_prova` | string | **Quadrix**: a área de onde vieram as questões ("Conhecimentos Gerais") |
+| `questoes_anuladas` | int | anuladas ficam fora do denominador e dentro da amostra |
+
+### Mapa questão → matéria (Quadrix)
+
+Arquivo de trabalho entre as duas etapas da aferição Quadrix — fora do vault, criado por
+`build_afericao.py --area --mapa-out` e consumido por `--mapa`. Formato
+`concurso-afere/mapa-questoes@1`: cabeçalho com `prova`, `gabarito`, `cargo_prova`,
+`tipo`, `gabarito_fonte`, `area`, `faixa` e `candidatas` (`ESCOPO/materia_id`), e
+`questoes: {"N": {"gabarito": "C", "materia": "···"}}`. O agente troca cada `···` por uma
+candidata ou por `fora-do-vault`; o `gabarito` do mapa é conferido contra o PDF relido e
+**não** é fonte de nada.

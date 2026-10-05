@@ -24,6 +24,10 @@ from divergencia_niveis import medir                              # noqa: E402
 from extrair_questoes import bloco_da_materia                     # noqa: E402
 from gabarito import GabaritoErro, respostas                      # noqa: E402
 from prova_id import conferir_par, identificar                    # noqa: E402
+import mapa_questoes                                              # noqa: E402
+from casar_materias import MateriaVault, materias_do_vault        # noqa: E402
+from extrair_questoes import Faixa                                # noqa: E402
+from quadrix import banca_do_pdf, bloco_da_area, identificar_par  # noqa: E402
 
 TPL = Path(__file__).resolve().parents[1] / "assets/templates/afericao-materia.md.tpl"
 VAZIO = "···"          # marcador do que o agente precisa preencher
@@ -121,14 +125,20 @@ def montar(dados: list[dict], concurso_dir: Path, banca: str) -> str:
 
     cab = " | ".join(f"`{n}`" for n in niveis)
     sep = "|".join(["---:"] * len(niveis))
+    anuladas = set().union(*(d.get("anuladas", set()) for d in dados))
+    rotulos = ["Questões plenamente respondidas", "Respondidas em parte",
+               "Não respondidas", "**Sem material** (fora do denominador)"]
+    # A linha só existe quando há anulada: a saída da CESGRANRIO fica como sempre foi,
+    # e o validador lê a linha quando ela aparece.
+    if anuladas:
+        rotulos.append("**Anuladas** (fora do denominador)")
+    rotulos.append("**Nota**")
     tabela = (f"| | {cab} |\n|---|{sep}|\n"
               + "\n".join(f"| {rot} | " + " | ".join([VAZIO] * len(niveis)) + " |"
-                          for rot in ("Questões plenamente respondidas",
-                                      "Respondidas em parte", "Não respondidas",
-                                      "**Sem material** (fora do denominador)",
-                                      "**Nota**")))
+                          for rot in rotulos))
 
-    linhas = ["| Q | " + " | ".join(f"{d['versao'] or '?'}" for d in dados)
+    linhas = ["| Q | " + " | ".join(f"{d.get('rotulo') or d['versao'] or '?'}"
+                                    for d in dados)
               + " | Assunto cobrado | " + " | ".join(f"`{n}`" for n in niveis) + " |",
               "|:-:|" + "|".join([":-:"] * len(dados)) + "|---|"
               + "|".join([":-:"] * len(niveis)) + "|"]
@@ -145,8 +155,11 @@ def montar(dados: list[dict], concurso_dir: Path, banca: str) -> str:
     numeros = sorted(set().union(*(set(d["gabarito"]) for d in dados))) if dados else []
     for q in numeros:
         gab_cols = " | ".join(d["gabarito"].get(q, "?") for d in dados)
+        # Anulada não se julga: o veredicto já vem ⊘ e fica fora do denominador. O
+        # assunto continua por preencher — saber o que a questão cobrava ainda serve.
+        veredito = mapa_questoes.ANULADA if q in anuladas else VAZIO
         linhas.append(f"| {q} | {gab_cols} | {VAZIO} | "
-                      + " | ".join([VAZIO] * len(niveis)) + " |")
+                      + " | ".join([veredito] * len(niveis)) + " |")
 
     div = "_Só um nível aprofundado nesta matéria — nada a comparar._"
     if len(niveis) > 1:
@@ -162,19 +175,31 @@ def montar(dados: list[dict], concurso_dir: Path, banca: str) -> str:
                    f"{piores}\n")
 
     fontes = "\n".join(
-        f"- Prova **{d['versao']}** (caderno {d['caderno']}): `{d['prova'].name}` — "
-        f"gabarito: " + " ".join(f"{q}-{r}" for q, r in sorted(d["gabarito"].items()))
+        d.get("fonte_txt") or (
+            f"- Prova **{d['versao']}** (caderno {d['caderno']}): `{d['prova'].name}` — "
+            f"gabarito: " + " ".join(f"{q}-{r}" for q, r in sorted(d["gabarito"].items())))
         for d in dados)
+
+    fonte_gab = dados[0].get("gabarito_fonte")
+    ressalva_gab = ""
+    if fonte_gab == "preliminar":
+        ressalva_gab = (
+            "- **Gabarito PRELIMINAR.** Entre o preliminar e o definitivo a banca altera "
+            "e anula questões. Quando o definitivo sair, rode `comparar_gabaritos.py "
+            "--afericao` sobre este arquivo: ele lista só as questões a rejulgar.")
+    criterio_anulada = ("**ANULADA (⊘) também sai do denominador** — a banca a retirou "
+                        "da prova, e ela não mede nada.") if anuladas else ""
 
     ctx = {
         "DATA": date.today().isoformat(),
-        "MATERIA_NOME": dados[0]["faixa"].nome,
+        "MATERIA_NOME": dados[0].get("materia_nome") or dados[0]["faixa"].nome,
         "MATERIA_ID": m.materia_id,
         "CONCURSO": concurso_dir.name,
         "BANCA": banca,
         "PROVAS_AFERIDAS": ", ".join(
-            f"Prova {d['versao']} (caderno {d['caderno']})" for d in dados),
-        "GABARITO_FONTE": "gabaritos oficiais da banca",
+            d.get("descricao") or f"Prova {d['versao']} (caderno {d['caderno']})"
+            for d in dados),
+        "GABARITO_FONTE": fonte_gab or "gabaritos oficiais da banca",
         "N_QUESTOES": n_q,
         "N_PROVAS": len(dados),
         "RESSALVA_TAUTOLOGIA": ressalva_tautologia(concurso_dir),
@@ -191,17 +216,205 @@ def montar(dados: list[dict], concurso_dir: Path, banca: str) -> str:
         "ACOES": VAZIO,
         "FONTES": fontes,
         "TAREFAS_EXTRA": VAZIO,
+        "FRONTMATTER_EXTRA": "\n".join(dados[0].get("frontmatter_extra", [])),
+        "RESSALVA_GABARITO": ressalva_gab,
+        "CRITERIO_ANULADA": criterio_anulada,
     }
     txt = TPL.read_text(encoding="utf-8")
+    # Placeholder opcional vazio leva a LINHA inteira: deixar a linha em branco
+    # mudaria a saída da CESGRANRIO, que não usa nenhum dos três.
+    for k in ("FRONTMATTER_EXTRA", "RESSALVA_GABARITO", "CRITERIO_ANULADA"):
+        if not ctx[k]:
+            txt = txt.replace("{" + k + "}\n", "")
     for k, v in ctx.items():
         txt = txt.replace("{" + k + "}", str(v))
     return txt
 
 
+def gravar(destino: Path, doc: str, forcar: bool, dry_run: bool, alvo: str) -> bool:
+    """Grava a aferição SEM sobrescrever julgamento. Devolve `pulado`.
+
+    O que o arquivo guarda depois de preenchido é JULGAMENTO — veredicto por questão,
+    conceito decisivo, ações corretivas —, e o script só sabe montar o arcabouço com
+    `···`. Regravar por cima destrói o único trabalho que a skill declara não saber
+    fazer sozinha ("o agente julga"). Mesma proteção que o build_subject_md.py dá ao
+    resumo escrito à mão.
+
+    Vale também porque uma matéria tem legitimamente VÁRIAS aferições: a
+    concurso-publica publica todas (`00-AFERICAO-...-2-POS-CORRECAO.md`), e um nome fixo
+    colidiria com a segunda rodada.
+    """
+    pulado = destino.exists() and not forcar
+    if pulado:
+        sys.stderr.write(
+            f"AVISO ({alvo}): {destino} já existe — não regerado. Ela guarda o "
+            f"julgamento do agente. Use --out para uma segunda rodada, ou "
+            f"--forcar (com backup) para refazer esta.\n")
+    if not dry_run and not pulado:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        if destino.exists():
+            destino.with_suffix(".md.bak").write_text(
+                destino.read_text(encoding="utf-8"), encoding="utf-8")
+        destino.write_text(doc, encoding="utf-8")
+    return pulado
+
+
+# --------------------------------------------------------------------------- #
+# Quadrix — a prova divide por ÁREA, e a matéria de cada questão é julgamento
+# --------------------------------------------------------------------------- #
+def _slug(s: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "-", norm(s).upper()).strip("-")
+
+
+def nome_da_materia(mv: MateriaVault) -> str:
+    """O rótulo legível da matéria, lido do frontmatter de um assunto dela.
+
+    Na CESGRANRIO o título da aferição vinha da capa ("Língua Portuguesa"). Na Quadrix a
+    capa só tem a área, e titular a aferição de Português como "Conhecimentos Gerais"
+    seria errado — então o nome vem do próprio material medido.
+    """
+    for md in sorted(mv.dir.glob("assuntos/*/*/*.md")):
+        if md.name.startswith(("flashcards-", "_", "00-")):
+            continue
+        m = re.search(r'^materia:\s*"?([^"\n]+)"?\s*$', md.read_text(encoding="utf-8"),
+                      re.M)
+        if m:
+            return m.group(1).strip()
+    return mv.materia_id
+
+
+def _par_quadrix(prova: Path, gab: Path, cargo_prova: str | None):
+    par = identificar_par(prova, gab, cargo_prova)
+    if par.problemas:
+        raise SystemExit("ERRO: par caderno/gabarito Quadrix inconsistente — "
+                         + " · ".join(par.problemas))
+    return par
+
+
+def listar_quadrix(par, concurso_dir: Path, escopos: list[str] | None) -> None:
+    print(f"{par.descricao()}\n\nÁreas desta prova (escolha com --area):")
+    for f in par.faixas:
+        anul = sorted(q for q in par.secao.anuladas if f.primeira <= q <= f.ultima)
+        print(f"  {f.nome:<46} Q{f.primeira}–{f.ultima}"
+              + (f"  (anuladas: {anul})" if anul else ""))
+    print("\nMatérias do vault que podem receber questões (candidatas do mapa):")
+    for m in materias_do_vault(concurso_dir, escopos):
+        print(f"  {m.escopo}/{m.materia_id}  ({m.n_assuntos} assuntos · "
+              f"{', '.join(m.niveis)})")
+
+
+def etapa_mapa(par, area: str, concurso_dir: Path, escopos: list[str] | None,
+               mapa_out: Path, bloco_out: Path | None, dry_run: bool) -> dict:
+    """Etapa 1: o esqueleto do mapa questão → matéria, e o bloco da área."""
+    alvo = norm(area)
+    # Exato primeiro; parcial só se for único. "Conhecimentos Específicos" casa com as
+    # DUAS áreas de específicos do SEDES — ficar com a primeira aferiria a área errada
+    # sem aviso nenhum.
+    casadas = ([f for f in par.faixas if norm(f.nome) == alvo]
+               or [f for f in par.faixas if alvo in norm(f.nome)])
+    if not casadas:
+        raise SystemExit(f"ERRO: área '{area}' não está nesta prova. Áreas: "
+                         + ", ".join(f.nome for f in par.faixas))
+    if len(casadas) > 1:
+        raise SystemExit(f"ERRO: '{area}' casa com {len(casadas)} áreas ("
+                         + "; ".join(f.nome for f in casadas) + ") — diga qual")
+    faixa = casadas[0]
+    candidatas = [f"{m.escopo}/{m.materia_id}"
+                  for m in materias_do_vault(concurso_dir, escopos)]
+    if not candidatas:
+        raise SystemExit("ERRO: nenhuma matéria aprofundada no vault para receber as "
+                         "questões — nada a aferir")
+    mapa = mapa_questoes.esqueleto(
+        concurso_dir=concurso_dir, prova=par.prova, gabarito=par.gabarito,
+        cargo=par.cargo, tipo=par.tipo, fonte=par.fonte, area=faixa.nome,
+        primeira=faixa.primeira, ultima=faixa.ultima, respostas=par.secao.respostas,
+        anuladas=par.secao.anuladas, candidatas=candidatas)
+    bloco, avisos = bloco_da_area(par.prova, faixa)
+    if mapa_out.exists():
+        # O mapa preenchido é julgamento do agente, como a aferição: não se regrava.
+        raise SystemExit(f"ERRO: {mapa_out} já existe — ele guarda a atribuição feita "
+                         f"pelo agente. Apague-o de propósito ou use outro --mapa-out.")
+    if not dry_run:
+        mapa_out.write_text(json.dumps(mapa, ensure_ascii=False, indent=2) + "\n",
+                            encoding="utf-8")
+        if bloco_out:
+            gab_txt = " ".join(f"{q}-{v['gabarito']}" for q, v in mapa["questoes"].items())
+            bloco_out.write_text(
+                f"=========== {par.cargo} · tipo {par.tipo or '—'} · {faixa.nome} "
+                f"(Q{faixa.primeira}–{faixa.ultima}) — gabarito {par.fonte or '?'}: "
+                f"{gab_txt} ===========\n{bloco}", encoding="utf-8")
+    return {"etapa": "mapa", "dry_run": dry_run, "mapa": str(mapa_out),
+            "bloco": str(bloco_out) if bloco_out else None,
+            "area": faixa.nome, "faixa": [faixa.primeira, faixa.ultima],
+            "anuladas": sorted(q for q in par.secao.anuladas
+                               if faixa.primeira <= q <= faixa.ultima),
+            "candidatas": candidatas, "a_preencher": faixa.n, "avisos": avisos}
+
+
+def etapa_documentos(mapa_path: Path, concurso_dir: Path, banca: str,
+                     rotulo: str | None, forcar: bool, dry_run: bool) -> dict:
+    """Etapa 2: valida o mapa preenchido e gera uma aferição por matéria."""
+    mapa = mapa_questoes.ler(mapa_path)
+    par = _par_quadrix(Path(mapa["prova"]), Path(mapa["gabarito"]), mapa["cargo_prova"])
+    if par.tipo != mapa["tipo"]:
+        raise SystemExit(f"ERRO: o mapa diz tipo {mapa['tipo']}, o caderno é tipo "
+                         f"{par.tipo} — o mapa não é deste caderno")
+    vault = {f"{m.escopo}/{m.materia_id}": m for m in materias_do_vault(concurso_dir)}
+    erros = mapa_questoes.validar(mapa, set(vault), par.secao.respostas,
+                                  par.secao.anuladas)
+    if erros:
+        raise SystemExit("ERRO: mapa de questões incompleto ou incoerente:\n  - "
+                         + "\n  - ".join(erros))
+
+    grupos, fora = mapa_questoes.agrupar(mapa)
+    area, (a1, a2) = mapa["area"], mapa["faixa"]
+    sufixo = rotulo or f"{_slug(area)}--{_slug(par.cargo)}"
+    tipo_txt = f"tipo {par.tipo}" if par.tipo else "tipo único"
+    resumo = []
+    for chave, qs in grupos.items():
+        mv = vault[chave]
+        anul = {q for q in qs if q in par.secao.anuladas}
+        gab = {q: (mapa_questoes.ANULADA if q in anul else par.secao.respostas[q])
+               for q in qs}
+        dados = [{
+            "prova": par.prova, "versao": par.tipo, "caderno": None,
+            "rotulo": f"Tipo {par.tipo}" if par.tipo else "Gab.",
+            "faixa": Faixa(nome=area, primeira=a1, ultima=a2),
+            "materia": mv, "materia_nome": nome_da_materia(mv),
+            "gabarito": gab, "anuladas": anul, "bloco": "", "avisos": [],
+            "gabarito_fonte": par.fonte,
+            "descricao": f"{par.cargo} — {area}, {tipo_txt}",
+            "fonte_txt": (f"- Caderno **{par.cargo}**, {tipo_txt}, {area} "
+                          f"(questões {a1}–{a2}, das quais {len(qs)} atribuídas a esta "
+                          f"matéria): `{par.prova.name}` — gabarito "
+                          f"{par.fonte or 'oficial'} `{par.gabarito.name}`: "
+                          + " ".join(f"{q}-{r}" for q, r in sorted(gab.items()))),
+            "frontmatter_extra": [
+                f'cargo_prova: "{par.cargo}"',
+                f"tipo_caderno: {par.tipo or 'unico'}",
+                f'area_prova: "{area}"',
+                f"questoes_anuladas: {len(anul)}",
+            ],
+        }]
+        doc = montar(dados, concurso_dir, banca)
+        destino = mv.dir / f"00-AFERICAO-{mv.materia_id.upper()}--{sufixo}.md"
+        pulado = gravar(destino, doc, forcar, dry_run, chave)
+        resumo.append({"materia": mv.materia_id, "escopo": mv.escopo, "questoes": qs,
+                       "anuladas": sorted(anul), "niveis": mv.niveis,
+                       "compara_niveis": len(mv.niveis) > 1, "destino": str(destino),
+                       "a_preencher": doc.count(VAZIO), "pulado": pulado})
+    return {"etapa": "documentos", "dry_run": dry_run, "area": area,
+            "cargo_prova": par.cargo, "tipo": par.tipo, "gabarito_fonte": par.fonte,
+            # Questão de matéria que o vault nunca aprofundou: é achado de COBERTURA e
+            # não entra em nota nenhuma — mas precisa aparecer, ou some da conta.
+            "fora_do_vault": fora, "materias": len(resumo), "aferições": resumo}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--concurso-dir", type=Path, required=True)
-    ap.add_argument("--prova", type=Path, action="append", required=True)
+    ap.add_argument("--prova", type=Path, action="append",
+                    help="caderno da prova (repetível na CESGRANRIO; um só na Quadrix)")
     ap.add_argument("--gabarito", type=Path, action="append")
     ap.add_argument("--materia", action="append",
                     help="repetível. Sem isto e sem --cargo, lista as aferíveis e sai")
@@ -221,7 +434,35 @@ def main() -> int:
                          "sabe refazer. Para uma segunda rodada, prefira --out com\n"
                          "um nome próprio (ex.: ...-2-POS-CORRECAO.md), que é o que\n"
                          "a concurso-publica já espera encontrar.")
+    q = ap.add_argument_group("Quadrix (a prova divide por área; duas etapas)")
+    q.add_argument("--area", help="etapa 1: a área da prova a aferir")
+    q.add_argument("--mapa-out", type=Path,
+                   help="etapa 1: onde gravar o esqueleto do mapa questão → matéria")
+    q.add_argument("--mapa", type=Path,
+                   help="etapa 2: o mapa preenchido pelo agente; gera uma aferição por "
+                        "matéria")
+    q.add_argument("--cargo-prova",
+                   help='força o cargo do gabarito (ex.: "TDAS - AGENTE SOCIAL") quando '
+                        "o rodapé do caderno não basta")
+    q.add_argument("--rotulo",
+                   help="sufixo do nome das aferições da etapa 2 (padrão: área + cargo)")
     a = ap.parse_args()
+
+    banca = "—"
+    meta = a.concurso_dir / ".meta.json"
+    if meta.exists():
+        try:
+            banca = json.loads(meta.read_text(encoding="utf-8")).get("banca", "—")
+        except json.JSONDecodeError:
+            pass
+
+    if a.mapa:
+        print(json.dumps(etapa_documentos(a.mapa, a.concurso_dir, banca, a.rotulo,
+                                          a.forcar, a.dry_run),
+                         ensure_ascii=False, indent=2))
+        return 0
+    if not a.prova:
+        raise SystemExit("ERRO: informe --prova (ou --mapa, na etapa 2 da Quadrix)")
 
     gabs = a.gabarito or []
     if not gabs:
@@ -248,6 +489,34 @@ def main() -> int:
                 raise SystemExit(f"ERRO: --escopo {', '.join(fora)} não pertence ao "
                                  f"cargo {a.cargo} (escopos: {', '.join(escopos)})")
         escopos = list(a.escopo)
+
+    if banca_do_pdf(a.prova[0]) == "quadrix" or banca_do_pdf(gabs[0]) == "quadrix":
+        if len(a.prova) > 1:
+            # Na Quadrix os tipos A/B/C são as MESMAS questões em rodízio de blocos:
+            # aferir dois tipos contaria cada questão duas vezes e dobraria a amostra
+            # declarada. Cadernos de cargos diferentes são outra prova — outra execução.
+            raise SystemExit(
+                "ERRO: na Quadrix afere-se UM caderno por execução. Os tipos A/B/C são "
+                "as mesmas questões com os blocos em rodízio — dois tipos contariam cada "
+                "questão duas vezes. Para outro cargo, rode de novo com o caderno dele.")
+        if a.materia:
+            raise SystemExit("ERRO: a prova Quadrix divide por ÁREA, não por matéria — "
+                             "use --area (rode sem ela para listar as áreas)")
+        par = _par_quadrix(a.prova[0], gabs[0], a.cargo_prova)
+        if not a.area:
+            listar_quadrix(par, a.concurso_dir, escopos)
+            return 0
+        if not a.mapa_out:
+            raise SystemExit("ERRO: --area exige --mapa-out (o esqueleto que o agente "
+                             "vai preencher)")
+        print(json.dumps(etapa_mapa(par, a.area, a.concurso_dir, escopos, a.mapa_out,
+                                    a.bloco_out, a.dry_run),
+                         ensure_ascii=False, indent=2))
+        return 0
+    if a.area or a.mapa_out:
+        raise SystemExit("ERRO: --area/--mapa-out são do fluxo Quadrix; esta prova é "
+                         "dividida por matéria na capa — use --materia ou --cargo")
+
     casados = [c for c in casar(a.prova[0], a.concurso_dir, escopos) if c.materia]
 
     if not a.materia and not a.cargo:
@@ -266,14 +535,6 @@ def main() -> int:
     if a.cargo and not alvos:
         raise SystemExit(f"ERRO: nenhuma matéria aprofundada para o cargo {a.cargo}")
 
-    banca = "—"
-    meta = a.concurso_dir / ".meta.json"
-    if meta.exists():
-        try:
-            banca = json.loads(meta.read_text(encoding="utf-8")).get("banca", "—")
-        except json.JSONDecodeError:
-            pass
-
     resumo = []
     for alvo in alvos:
         dados = [coletar(p, g, a.concurso_dir, alvo, escopos)
@@ -287,30 +548,8 @@ def main() -> int:
         destino = (a.out if a.out and len(alvos) == 1
                    else m.dir / f"00-AFERICAO-{m.materia_id.upper()}.md")
 
-        # NÃO sobrescrever aferição já existente.
-        #
-        # O que este arquivo guarda depois de preenchido é JULGAMENTO — veredicto
-        # por questão, conceito decisivo, ações corretivas —, e o script só sabe
-        # montar o arcabouço com `···`. Regravar por cima destrói o único trabalho
-        # que a skill declara não saber fazer sozinha ("o agente julga"). Mesma
-        # proteção que o build_subject_md.py dá ao resumo escrito à mão.
-        #
-        # Vale também porque uma matéria tem legitimamente VÁRIAS aferições: a
-        # concurso-publica publica todas (`00-AFERICAO-...-2-POS-CORRECAO.md`),
-        # e o nome fixo daqui colidiria com a segunda rodada.
-        pulado = destino.exists() and not a.forcar
-        if pulado:
-            sys.stderr.write(
-                f"AVISO ({alvo}): {destino} já existe — não regerado. Ela guarda o "
-                f"julgamento do agente. Use --out para uma segunda rodada, ou "
-                f"--forcar (com backup) para refazer esta.\n")
-
-        if not a.dry_run and not pulado:
-            destino.parent.mkdir(parents=True, exist_ok=True)
-            if destino.exists():
-                destino.with_suffix(".md.bak").write_text(
-                    destino.read_text(encoding="utf-8"), encoding="utf-8")
-            destino.write_text(doc, encoding="utf-8")
+        # NÃO sobrescrever aferição já existente — ver gravar().
+        pulado = gravar(destino, doc, a.forcar, a.dry_run, alvo)
 
         # O bloco é derivado da PROVA, não do julgamento: é o determinístico que o
         # agente lê para julgar. Fica fora do `pulado` de propósito — quem reencontra

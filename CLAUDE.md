@@ -20,7 +20,7 @@ O fluxo tem três etapas encadeadas, mais uma camada opcional:
 2. **`concurso-aprofunda`** (Etapa 2) — consome a saída da Etapa 1 + um livro de referência denso. Localiza cada assunto no livro, gera um `.md` por assunto (resumo próprio + ponteiros de página + citações curtas), flashcards nativos e o pacote para gerar podcast/mapa mental/vídeo/report no NotebookLM.
 3. **`concurso-publica`** (Etapa 3) — transforma a pasta de um concurso em **site estático** que espelha a organização do vault (`{concurso}/{comum|cargo}/`) e publica **todo** o conteúdo abaixo do concurso: edital, cronograma, mapas de matéria, materiais e leis, histórico, sinergia, discursiva, títulos e o aprofundamento, com mídias embutidas, quiz de flashcards e uma página por assunto para o pacote NotebookLM. Cada matéria abre em duas visões — **Plano** (o mapa do edital) e **Estudo** (os assuntos aprofundados). Decisões travadas: gerador próprio em Python (sem Node), por concurso, uso local/rede doméstica, **site só leitura** (progresso lido do vault na geração; o vault é a única fonte de verdade), link NotebookLM apenas se `notebooklm_url:` preenchida (sem iframe do Google).
 4. **`concurso-notebooklm`** (camada opcional sobre a Etapa 2) — **executa** os pacotes que a `concurso-aprofunda` preparou: cria o notebook, sobe as fontes, gera as mídias e salva os arquivos com o nome que a `concurso-publica` detecta. Roda **sob demanda**, por assunto ou por matéria. A biblioteca usada (`notebooklm-py`) **não é oficial** e quebra sem aviso, então a automação é sempre **opcional** e o modo manual segue completo.
-5. **`concurso-afere`** (Etapa 5) — a única que **olha para trás**: com a prova real (caderno + gabarito oficial), mede quantas questões o material aprofundado responde, por nível `padrao`/`detalhado`, e aponta o que corrigir. Afere **uma matéria, várias (`--materia`) ou todas as de um cargo (`--cargo`)**. O script prepara o determinístico e **o agente julga** — nota inventada por script não vale nada.
+5. **`concurso-afere`** (Etapa 5) — a única que **olha para trás**: com a prova real (caderno + gabarito oficial), mede quantas questões o material aprofundado responde, por nível `padrao`/`detalhado`, e aponta o que corrigir. Afere **uma matéria, várias (`--materia`) ou todas as de um cargo (`--cargo`)**; na **Quadrix**, que divide a prova por área, afere **uma área por vez**, com o vínculo questão → matéria julgado pelo agente. O script prepara o determinístico e **o agente julga** — nota inventada por script não vale nada.
 
 O repositório é versionado no GitHub e instalado localmente no Claude Code do usuário.
 
@@ -177,6 +177,8 @@ mesmo nos dois lugares, então dá para saltar direto.
 - A conclusão não excede a amostra
 - Cobertura de tópico é tautológica quando o vault veio do mesmo edital da prova
 - O `detalhado` não é superconjunto do `padrao`
+- Na Quadrix, tipo não é prova
+- Anulada sai do denominador e entra na amostra
 
 **deploy** — [deploy/README.md](deploy/README.md#por-que-o-deploy-reconstrói-todos-os-concursos-e-não-só-o-que-você-pediu)
 

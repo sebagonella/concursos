@@ -3,13 +3,7 @@
 Mede o material aprofundado do vault contra a **prova real**: quantas questões o
 conteúdo escrito responde, onde falha e o que corrigir.
 
-Versão atual: **0.5.0** — empate no casamento de matéria deixa de ser resolvido em silêncio: o build recusa nomeando os candidatos, com `--escopo` como saída. O histórico completo está no [CHANGELOG.md](CHANGELOG.md).
-aprofundadas de um cargo (`--cargo`), com nota por nível `padrao` e `detalhado`, nota por
-prova e distribuição das questões por assunto; o script prepara o determinístico e **o
-agente julga**, com quatro vereditos em que `SEM MATERIAL` fica fora do denominador —
-falha de cobertura e falha de profundidade têm ações diferentes. Nesta versão, o check de
-formatação dupla passou a exigir **relação de arredondamento** em vez de proximidade
-absoluta: duas notas vizinhas de mesma precisão não são o mesmo número escrito duas vezes).
+Versão atual: **0.6.0** — afere prova da **Quadrix**: gabarito em grade, tipos A/B/C como as mesmas questões em rodízio, divisão por área com o vínculo questão → matéria julgado pelo agente, e questão anulada fora do denominador. O histórico completo está no [CHANGELOG.md](CHANGELOG.md).
 
 ## Por que existe
 
@@ -42,6 +36,37 @@ python3 $S/build_afericao.py --concurso-dir $V \
 python3 $S/validar_afericao.py --concurso-dir $V
 ```
 
+### Prova da Quadrix
+
+A Quadrix divide a prova por **área** ("Conhecimentos Gerais, 1 a 20"), não por matéria, e
+aplica cadernos TIPO A/B/C que são **as mesmas questões em rodízio de blocos**. Por isso o
+fluxo tem duas etapas, com um mapa questão → matéria no meio, preenchido pelo agente:
+
+```bash
+V=~/vault/30_AREAS/CARREIRA/CONCURSOS/SEDES_2026
+C=$V/_COMUM/05-HISTORICO-CONCURSO/provas-anteriores
+
+# 1. o par é confiável? (cargo pelo rodapé, tipo pela ordem dos blocos)
+python3 $S/prova_id.py $C/prova-sedes-2026-tdas-agente-social-tipo-a.pdf \
+        $C/gabarito-preliminar-sedes-2026.pdf
+
+# 2. áreas da prova e matérias candidatas do vault
+python3 $S/build_afericao.py --concurso-dir $V --prova <caderno> --gabarito <gabarito>
+
+# 3. esqueleto do mapa de UMA área (um caderno por execução)
+python3 $S/build_afericao.py --concurso-dir $V --prova <caderno> --gabarito <gabarito> \
+  --area "Conhecimentos Gerais" --mapa-out /tmp/mapa-cg.json --bloco-out /tmp/cg.txt
+
+# 4. o AGENTE lê /tmp/cg.txt e preenche a matéria de cada questão no mapa
+
+# 5. uma aferição por matéria, cada uma com as suas questões
+python3 $S/build_afericao.py --concurso-dir $V --mapa /tmp/mapa-cg.json
+
+# 6. quando sair o gabarito definitivo: o que rejulgar
+python3 $S/comparar_gabaritos.py --antes <preliminar> --depois <definitivo> \
+  --afericao $V/_COMUM/03-APROFUNDAMENTO/lingua-portuguesa/00-AFERICAO-*.md
+```
+
 ## Vereditos
 
 | | Peso | Significa |
@@ -50,11 +75,12 @@ python3 $S/validar_afericao.py --concurso-dir $V
 | ⚠️ PARCIAL | 0,5 | dá para chegar, sem o caso pronto |
 | ❌ NÃO RESPONDE | 0,2 | o assunto existe e não cobre — falha de **profundidade** |
 | ⬜ SEM MATERIAL | — | o tópico nunca foi aprofundado — falha de **cobertura** |
+| ⊘ ANULADA | — | a banca retirou a questão; vem preenchido do gabarito e sai do denominador |
 
 ## Testes
 
 ```bash
-python3 scripts/tests/test_smoke.py     # 35 testes, sem pytest
+python3 scripts/tests/test_smoke.py     # 52 testes, sem pytest
 ```
 
 Documentação do fluxo completo: [`SKILL.md`](SKILL.md) · histórico: [`CHANGELOG.md`](CHANGELOG.md)

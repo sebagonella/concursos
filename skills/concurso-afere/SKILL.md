@@ -1,6 +1,6 @@
 ---
 name: concurso-afere
-version: 0.5.0
+version: 0.6.0
 description: >
   Use quando o usuário tiver a PROVA REAL de um concurso (PDF do caderno + gabarito
   oficial) e quiser medir o material já aprofundado no vault contra ela — descobrindo
@@ -8,7 +8,9 @@ description: >
   UMA OU MAIS matérias específicas (`--materia`) ou TODAS as matérias aprofundadas de um
   cargo (`--cargo`), comparando os níveis `padrao` e `detalhado` quando os dois existem.
   Produz nota por nível, nota por prova, distribuição das questões por assunto e ações
-  corretivas, salvos no vault junto do material medido. Triggers - "aferir o material
+  corretivas, salvos no vault junto do material medido. Lê prova da CESGRANRIO (capa por
+  matéria, cadernos A/B/C diferentes) e da QUADRIX (prova por área, tipos A/B/C como as
+  mesmas questões em rodízio, gabarito em grade com anuladas). Triggers - "aferir o material
   contra a prova", "quantas questões o vault responde", "medir o aprofundamento com a
   prova real", "nota do material contra o gabarito", "analisar prova vs conteúdo",
   "comparar padrão e detalhado com a prova".
@@ -43,8 +45,21 @@ desenho de `build_subject_md.py`, que monta o esqueleto e deixa o resumo para o 
 | `gabarito` | não | irmão | Um por prova, na mesma ordem. Sem isso, procura `{prova}-gabarito.pdf` ao lado |
 | **`materia`** | não¹ | — | **Uma ou mais** matérias. Aceita o nome da capa ou o `materia_id` |
 | **`cargo`** | não¹ | — | **Todas** as matérias aprofundadas do cargo — as dele **mais** as do `_COMUM` |
+| `escopo` | não | — | Restringe a estes escopos (repetível). Saída para o empate entre matéria homônima do `_COMUM` e do cargo |
 | `bloco-out` | não | — | Grava o texto das questões, para o agente ler |
+| `out` | não | — | Nome próprio para a aferição (ex.: `…-2-POS-CORRECAO.md`, segunda rodada) |
+| `forcar` | não | false | Regera por cima de uma aferição existente, com backup `.md.bak` |
 | `dry-run` | não | false | Mostra o que faria, sem escrever no vault |
+
+**Só na Quadrix** (ver "Prova da Quadrix" abaixo):
+
+| Parâmetro | Descrição |
+|---|---|
+| `area` | Etapa 1: a área da prova a aferir ("Conhecimentos Gerais") |
+| `mapa-out` | Etapa 1: onde gravar o esqueleto do mapa questão → matéria |
+| `mapa` | Etapa 2: o mapa preenchido pelo agente; gera uma aferição por matéria |
+| `cargo-prova` | Força a seção do gabarito quando o rodapé do caderno não basta |
+| `rotulo` | Sufixo do nome das aferições da etapa 2 (padrão: área + cargo) |
 
 ¹ `materia` e `cargo` são mutuamente exclusivos. Sem nenhum dos dois, a skill **lista as
 matérias aferíveis e sai** — nunca assume "todas" por omissão.
@@ -89,6 +104,45 @@ matérias aferíveis e sai** — nunca assume "todas" por omissão.
      formatações, superlativo com uma prova só => falha
 ```
 
+## Prova da Quadrix
+
+Três premissas da CESGRANRIO não valem na Quadrix, e o fluxo muda por causa delas
+(detalhe e números em `scripts/quadrix.py`):
+
+- **Tipo não é prova.** Os cadernos TIPO A/B/C têm as **mesmas** questões com os blocos
+  em rodízio. A skill afere **um caderno por execução** e recusa dois.
+- **A prova divide por área, não por matéria.** A matéria de cada questão não está
+  impressa: o vínculo questão → matéria do vault é **julgamento do agente**.
+- **O gabarito é uma grade**, com uma seção por cargo e tipo, `X` na anulada e
+  PRELIMINAR/DEFINITIVO no cabeçalho.
+
+```
+1. Conferir o par                        scripts/prova_id.py caderno gabarito
+   - cargo pelo RODAPÉ do caderno, casado com as seções do gabarito
+   - tipo pela ORDEM DOS BLOCOS contra a tabela de divisão — o caderno não o imprime
+   - divergência => exit 2
+
+2. Listar áreas e candidatas              build_afericao.py --prova --gabarito (sem --area)
+
+3. Esqueleto do mapa de UMA área         build_afericao.py ... --area --mapa-out --bloco-out
+   - gabarito preenchido; matéria de cada questão em `···`
+
+4. ATRIBUIR  [tarefa do AGENTE]
+   Lendo o bloco, cada questão recebe `ESCOPO/materia_id` (das candidatas) ou
+   `fora-do-vault` — matéria que o vault não aprofundou em lugar nenhum. Anulada
+   também recebe matéria: entra no documento com ⊘, fora do denominador.
+
+5. Uma aferição por matéria              build_afericao.py --mapa
+   - recusa mapa incompleto, matéria inexistente e gabarito editado no mapa
+     (o gabarito é sempre relido do PDF)
+   - `fora_do_vault` sai no JSON: é achado de COBERTURA, e não pode sumir
+
+6. JULGAR e validar                      como no fluxo geral (passos 6 e 7)
+
+7. Gabarito definitivo                   scripts/comparar_gabaritos.py --afericao
+   - lista só as questões alteradas ou anuladas, para rejulgar. Não reescreve nada.
+```
+
 ## Saída no vault
 
 - **Por matéria**: `{concurso}/{escopo}/03-APROFUNDAMENTO/{materia}/00-AFERICAO-*.md` —
@@ -111,6 +165,8 @@ matérias aferíveis e sai** — nunca assume "todas" por omissão.
 - **Recorte cirúrgico por questão é precisão fingida.** Em PDF de duas colunas o texto
   de uma questão não é contíguo — entrega-se o bloco da matéria e o agente lê.
 - **Varrer e não achar nada falha alto.**
+- **Na Quadrix, tipo não é prova** — dois tipos contariam cada questão duas vezes.
+- **Anulada sai do denominador e entra na amostra.** Não mede nada, mas foi aferida.
 
 ## Scripts
 
@@ -121,7 +177,10 @@ matérias aferíveis e sai** — nunca assume "todas" por omissão.
 - `divergencia_niveis.py` — % dos conceitos do `padrao` ausentes no `detalhado`
 - `build_afericao.py` — arcabouço (não julga)
 - `validar_afericao.py` — recusa aferição incompleta ou incoerente
-- `tests/test_smoke.py` — 35 testes, standalone
+- `quadrix.py` — perfil Quadrix: grade do gabarito, tabela de divisão, cargo pelo rodapé, tipo pela ordem dos blocos
+- `mapa_questoes.py` — esqueleto, validação e agrupamento do mapa questão → matéria
+- `comparar_gabaritos.py` — preliminar × definitivo: as questões a rejulgar
+- `tests/test_smoke.py` — 52 testes, standalone; fixtures da Quadrix em `tests/fixtures/quadrix/` (saída real do `pdftotext`)
 
 **Reúso** (não reimplementar): `arquivo_principal()` da `concurso-aprofunda` —
 `glob("*.md")[0]` pega o `_fonte-notebooklm.md`, porque `_` ordena antes das letras.
