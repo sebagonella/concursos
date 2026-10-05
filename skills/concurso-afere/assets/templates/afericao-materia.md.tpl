@@ -10,6 +10,7 @@ provas_aferidas: "{PROVAS_AFERIDAS}"
 gabarito_fonte: "{GABARITO_FONTE}"
 questoes_aferidas: {N_QUESTOES}
 provas_aferidas_n: {N_PROVAS}
+{FRONTMATTER_EXTRA}
 tags: [area/carreira, concurso/aprofundamento, analise/afericao]
 ---
 
@@ -22,6 +23,7 @@ tags: [area/carreira, concurso/aprofundamento, analise/afericao]
 {RESSALVA_TAUTOLOGIA}
 - **Amostra: {N_QUESTOES} questões em {N_PROVAS} prova(s).** Diferença menor que 1 ponto
   entre níveis está dentro do ruído — não decida nada com base em empate técnico.
+{RESSALVA_GABARITO}
 - **O julgamento "responde / não responde" é do agente**, feito lendo o material contra
   cada questão. O gabarito é oficial; a atribuição de suficiência não é auditada por
   terceiro.
@@ -36,6 +38,7 @@ tags: [area/carreira, concurso/aprofundamento, analise/afericao]
 chute em 5 alternativas). **SEM MATERIAL sai do denominador** — o tópico nunca foi
 aprofundado, e isso é falha de **cobertura**, não de **profundidade**: as ações corretivas
 são diferentes (escrever o assunto × aprofundar o assunto).
+{CRITERIO_ANULADA}
 
 {NOTAS_POR_PROVA}
 
